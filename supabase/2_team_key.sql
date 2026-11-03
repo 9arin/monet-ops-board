@@ -12,8 +12,8 @@ create or replace function public.has_board_key()
 returns boolean language sql stable security definer set search_path = public, extensions as $$
   select exists (
     select 1 from public.board_secret
-    where key_hash = encode(extensions.digest(
-      coalesce(current_setting('request.headers', true)::json ->> 'x-board-key', ''), 'sha256'), 'hex')
+    -- 화면에서 비밀번호를 sha256으로 바꿔 x-board-key 헤더로 보내요 (한글 비밀번호도 가능)
+    where key_hash = lower(coalesce(current_setting('request.headers', true)::json ->> 'x-board-key', ''))
   );
 $$;
 
