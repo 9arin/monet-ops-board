@@ -79,6 +79,7 @@ nav.tabs .cnt{font-family:var(--f-num);font-size:11px;margin-left:6px;color:var(
 .plan.adding{cursor:crosshair}
 .mk{position:absolute;transform:translate(-50%,-50%);min-width:24px;height:24px;padding:0 5px;border-radius:12px;border:2px solid #fff;
   color:#fff;font:600 11px/20px var(--f-num);text-align:center;cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,.35);white-space:nowrap}
+.plan.locked .mk{cursor:pointer}
 .mk.sel{outline:3px solid var(--ink);outline-offset:1px;z-index:5}
 .mk.dragging{cursor:grabbing;z-index:6}
 .mk.dark-text{color:#1f2b29}
@@ -174,6 +175,12 @@ tr.cand-row>td>*{position:sticky;left:10px;max-width:min(960px,calc(100vw - 96px
 .cand img,.cand .noimg{width:100%;aspect-ratio:1;object-fit:contain;background:var(--soft);border-radius:6px;display:flex;align-items:center;justify-content:center}
 .cand .t{font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
 .slotedit td input{min-width:90px}
+.lockbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:10px 12px;margin:12px 0 4px;font-size:13px}
+.lockbar input{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel);min-width:0;width:150px}
+.drop.sdrop{padding:4px 8px;font-size:12px;white-space:nowrap}
+.task .t-sol{grid-column:3 / 6;min-height:0;field-sizing:content;border:1px dashed var(--line);border-radius:6px;padding:4px 8px;background:transparent;font-size:13px;resize:vertical}
+.task .t-sol:focus{border-style:solid;border-color:var(--accent);background:var(--bg)}
+@media (max-width:640px){.task .t-sol{grid-column:2}}
 /* PDF 저장 (인쇄): 네 탭을 한 문서로 */
 #printArea{display:none}
 .p-sec h2{margin:0 0 12px;font-size:18px}
@@ -271,7 +278,7 @@ const dbCol=c=>VCOL[c]?VCOL[c].col:c;
 const state = {markers:[],items:[],staff:[],tasks:[],quotes:[],files:[],settings:[]};
 const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,files:false,settings:false};
 const ui = {tab:"plan",floor:"4F",hidden:new Set(),addType:null,sel:null,labels:true,taskFilter:"open",confirmDel:null,
-  mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false};
+  mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null};
 try{const t=localStorage.getItem("mb-tab"); if(t) ui.tab=t; const f=localStorage.getItem("mb-floor"); if(f) ui.floor=f; if(localStorage.getItem("mb-map")==="0") ui.mapOpen=false;}catch(e){}
 let db=null, mode="loading";
 
@@ -531,6 +538,62 @@ async function fetchPreview(url){
   return {title:(meta("og:title","twitter:title")||doc.title||"").slice(0,120),image,price,site:meta("og:site_name")||new URL(url).hostname.replace(/^www\./,"")};
 }
 
+/* ---------- 잠금: 신분증·통장 사진 (잠금 비밀번호로 암호화해서 저장 · 팀 비밀번호만으론 못 봄) ---------- */
+const LOCK_ID="cfg-lock", LOCK_ITER=200000, LOCK_IDLE=10*60*1000;
+const unlocked=()=>!!ui.unlockKey;
+const lockCfg=()=>state.settings.find(x=>x.id===LOCK_ID);
+const b64e=buf=>{const a=new Uint8Array(buf); let s=""; for(let i=0;i<a.length;i+=8192) s+=String.fromCharCode.apply(null,a.subarray(i,i+8192)); return btoa(s);};
+const b64d=str=>Uint8Array.from(atob(str),c=>c.charCodeAt(0));
+async function lockKey(pw,salt){ const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:LOCK_ITER,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]); }
+async function seal(key,bytes){ const iv=crypto.getRandomValues(new Uint8Array(12)); return {iv:b64e(iv),ct:b64e(await crypto.subtle.encrypt({name:"AES-GCM",iv},key,bytes))}; }
+const unseal=(key,iv,ct)=>crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(iv)},key,b64d(ct));
+let idleTimer=null;
+function setUnlocked(key){ ui.unlockKey=key; clearTimeout(idleTimer); if(key) idleTimer=setTimeout(()=>{ui.unlockKey=null;toast("10분이 지나 다시 잠갔어요");render();},LOCK_IDLE); render(); }
+async function unlockWith(pw){
+  const c=lockCfg(); if(!c) return false;
+  const key=await lockKey(pw,b64d(c.salt));
+  try{ await unseal(key,c.check.iv,c.check.ct); setUnlocked(key); return true; }catch(e){ return false; }
+}
+async function createLock(pw){
+  const salt=crypto.getRandomValues(new Uint8Array(16)), key=await lockKey(pw,salt);
+  save("settings",{id:LOCK_ID,salt:b64e(salt),check:await seal(key,new TextEncoder().encode("monet-ok"))}); setUnlocked(key);
+}
+async function storeSecret(file){
+  if(!unlocked()) return null;
+  let blob=file; if(/^image\//.test(file.type)) blob=await shrinkImage(file,1600,.85);
+  if(blob.size>MAX_FILE){ toast("파일이 너무 커요. 4MB까지 올릴 수 있어요."); return null; }
+  const {iv,ct}=await seal(ui.unlockKey,await blob.arrayBuffer());
+  const id=uid("f"), meta={name:"locked",type:blob.type||"application/octet-stream",size:blob.size,enc:true,iv}; // 파일 이름은 남기지 않아요
+  state.files.push({id,...meta});
+  if(!db){ localFiles[id]=ct; return id; }
+  const {error}=await db.from(TABLE).upsert({col:"items",id,data:{meta,b64:ct},updated_at:new Date().toISOString()});
+  if(error){ handleErr(error); return null; }
+  return id;
+}
+async function openSecret(id){
+  const meta=state.files.find(f=>f.id===id); if(!meta||!unlocked()){ toast("파일을 찾지 못했어요."); return; }
+  const w=window.open("","_blank");
+  let ct=localFiles[id];
+  if(!ct&&db){ const {data,error}=await db.from(TABLE).select("b64:data->>b64").eq("col","items").eq("id",id).single(); if(!error) ct=data.b64; }
+  try{ const buf=await unseal(ui.unlockKey,meta.iv,ct); const u=URL.createObjectURL(new Blob([buf],{type:meta.type}));
+    if(w) w.location=u; else location.href=u; }
+  catch(e){ if(w) w.close(); toast("파일을 열지 못했어요."); }
+}
+function lockBar(){
+  if(unlocked()) return `<div class="lockbar noprint"><span>🔓 신분증·통장 사진 칸이 열려 있어요. 새로고침하거나 10분이 지나면 다시 잠겨요.</span><button class="btn small" id="relock" type="button">다시 잠그기</button></div>`;
+  if(!lockCfg()) return `<form class="lockbar noprint" id="lockForm"><span>🔒 신분증·통장 사진 칸은 잠겨 있어요. 처음이니 잠금 비밀번호를 정해 주세요. <b>잊어버리면 사진을 다시 볼 수 없어요.</b></span>
+    <span class="row"><input type="password" id="lockPw" placeholder="새 잠금 비밀번호" autocomplete="new-password" minlength="4" required><input type="password" id="lockPw2" placeholder="한 번 더" autocomplete="new-password" required><button class="btn primary" type="submit">정하고 열기</button></span></form>`;
+  return `<form class="lockbar noprint" id="unlockForm"><span>🔒 신분증·통장 사진 칸은 잠겨 있어요.</span>
+    <span class="row"><input type="password" id="unlockPw" placeholder="잠금 비밀번호" autocomplete="off" required><button class="btn primary" type="submit">잠금 풀기</button></span></form>`;
+}
+function bindLock(){
+  const r=$("#relock"); if(r) r.onclick=()=>{setUnlocked(null);toast("잠갔어요");};
+  const u=$("#unlockForm"); if(u) u.onsubmit=async e=>{e.preventDefault(); const pw=$("#unlockPw").value; $("#unlockPw").value=""; if(!(await unlockWith(pw))) toast("잠금 비밀번호가 맞지 않아요.");};
+  const l=$("#lockForm"); if(l) l.onsubmit=async e=>{e.preventDefault(); const a=$("#lockPw").value, b=$("#lockPw2").value;
+    if(a!==b){ toast("두 비밀번호가 달라요."); return; } await createLock(a); toast("잠금 비밀번호를 정했어요"); };
+}
+
 /* ---------- coverage ---------- */
 function coverage(){
   // returns {slotId:[{who, kind}] x7}, extras per day
@@ -638,23 +701,24 @@ function planHTML(){
       <label class="f">메모<textarea id="e-note" placeholder="규격, 담당, 확인할 점">${esc(sel.note||"")}</textarea></label>
       <div class="row" style="justify-content:space-between">
         <button class="btn" id="e-close">닫기</button>
-        <button class="btn danger" id="e-del">${ui.confirmDel===sel.id?"한 번 더 누르면 삭제":"삭제"}</button>
+        ${ui.planEdit?`<button class="btn danger" id="e-del">${ui.confirmDel===sel.id?"한 번 더 누르면 삭제":"삭제"}</button>`:""}
       </div></div></div>` : `
     <div class="panel"><h3>${ui.floor==="4F"?"4층":"3층"} 배치 수량</h3>
       <div class="legend">${Object.entries(TYPES).map(([k,t])=>`<div class="li"><span><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</span><span class="num">${cf[k]||0}<span class="muted small"> / 전체 ${ca[k]||0}</span></span></div>`).join("")}</div>
-      <p class="small muted noprint" style="margin:12px 0 0">점을 끌어서 옮기고, 눌러서 이름·수량을 고쳐요. 수량이 2 이상이면 점 안에 숫자로 보여요.</p></div>`;
+      <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"점을 끌어서 옮기고, 아래 '추가'에서 새 항목을 찍어요. 다 했으면 '편집 끝내기'를 눌러 주세요.":"점을 누르면 이름·수량을 볼 수 있어요. 위치를 옮기려면 '위치 편집'을 눌러요."} 수량이 2 이상이면 점 안에 숫자로 보여요.</p></div>`;
   return `
   <div class="row noprint" style="justify-content:space-between;margin-bottom:12px">
     <div class="seg" role="group" aria-label="층 선택"><button data-floor="4F" aria-pressed="${ui.floor==="4F"}">4층</button><button data-floor="3F" aria-pressed="${ui.floor==="3F"}">3층</button></div>
-    <label class="row small muted"><input type="checkbox" id="lblToggle" ${ui.labels?"checked":""}> 이름 표시</label>
+    <div class="row"><label class="row small muted"><input type="checkbox" id="lblToggle" ${ui.labels?"checked":""}> 이름 표시</label>
+      <button class="btn ${ui.planEdit?"primary":""}" id="planEditBtn">${ui.planEdit?"편집 끝내기":"위치 편집"}</button></div>
   </div>
   <div class="plan-grid">
     <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
       <div class="row small noprint"><span class="muted" style="margin-right:4px">보기</span>${chips}</div>
-      <div class="plan-scroll"><div class="plan ${ui.addType?"adding":""} ${ui.labels?"":"nolabels"}" id="plan">
+      <div class="plan-scroll"><div class="plan ${ui.planEdit?"editing":"locked"} ${ui.planEdit&&ui.addType?"adding":""} ${ui.labels?"":"nolabels"}" id="plan">
         <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${marks}</div></div>
-      <div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}${ui.addType?`<span class="muted">도면을 누르면 <b>${TYPES[ui.addType].name}</b>이 추가돼요.</span>`:""}</div>
-      ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted">이 층에는 아직 표시한 항목이 없어요. 아래 '추가'에서 종류를 고른 뒤 도면을 눌러 보세요.</div>`)}
+      ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}${ui.addType?`<span class="muted">도면을 누르면 <b>${TYPES[ui.addType].name}</b>이 추가돼요.</span>`:""}</div>`:""}
+      ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted noprint">이 층에는 아직 표시한 항목이 없어요. '위치 편집'을 누른 뒤 '추가'에서 종류를 고르고 도면을 눌러 보세요.</div>`)}
     </div>
     <aside class="side">${editor}</aside>
   </div>`;
@@ -664,18 +728,20 @@ function bindPlan(){
   document.querySelectorAll("[data-vis]").forEach(b=>b.onclick=()=>{const k=b.dataset.vis;ui.hidden.has(k)?ui.hidden.delete(k):ui.hidden.add(k);render();});
   document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{ui.addType=ui.addType===b.dataset.add?null:b.dataset.add;render();});
   $("#lblToggle").onchange=e=>{ui.labels=e.target.checked;render();};
+  $("#planEditBtn").onclick=()=>{ui.planEdit=!ui.planEdit; ui.addType=null; ui.confirmDel=null; if(!ui.planEdit) toast("위치를 잠갔어요"); render();};
   const plan=$("#plan");
   plan.addEventListener("pointerdown",e=>{
     const mk=e.target.closest(".mk"); const r=plan.getBoundingClientRect();
     if(!mk){
-      if(!ui.addType){ if(ui.sel){ui.sel=null;render();} return; }
+      if(!ui.planEdit||!ui.addType){ if(ui.sel){ui.sel=null;render();} return; }
       const x=+((e.clientX-r.left)/r.width*100).toFixed(2), y=+((e.clientY-r.top)/r.height*100).toFixed(2);
       const m={id:uid("m"),floor:ui.floor,type:ui.addType,x,y,label:TYPES[ui.addType].name,qty:1,note:""};
       if(ui.addType==="sticker") m.glyph="→";
       ui.sel=m.id; save("markers",m); return;
     }
-    e.preventDefault(); mk.setPointerCapture(e.pointerId);
     const m=state.markers.find(z=>z.id===mk.dataset.id); if(!m) return;
+    if(!ui.planEdit){ ui.sel=ui.sel===m.id?null:m.id; ui.confirmDel=null; render(); return; } // 잠금 중엔 누르기만 (못 옮김)
+    e.preventDefault(); mk.setPointerCapture(e.pointerId);
     const sx=e.clientX, sy=e.clientY; let moved=false, nx=m.x, ny=m.y;
     const mv=ev=>{ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>4) moved=true; if(!moved) return;
       mk.classList.add("dragging");
@@ -694,7 +760,7 @@ function bindPlan(){
   $("#e-note").onchange=e=>upd({note:e.target.value});
   if($("#e-glyph")) $("#e-glyph").onchange=e=>upd({glyph:e.target.value});
   $("#e-close").onclick=()=>{ui.sel=null;render();};
-  $("#e-del").onclick=()=>{ if(ui.confirmDel===sel.id){ui.confirmDel=null;ui.sel=null;remove("markers",sel.id);} else {ui.confirmDel=sel.id;render();} };
+  if($("#e-del")) $("#e-del").onclick=()=>{ if(ui.confirmDel===sel.id){ui.confirmDel=null;ui.sel=null;remove("markers",sel.id);} else {ui.confirmDel=sel.id;render();} };
 }
 
 /* ----- shared mini map ----- */
@@ -746,13 +812,15 @@ function staffHTML(){
   const byG=GROUPS.map(g=>{
     const gp=ppl.filter(p=>p.group===g.id).sort((a,b)=>(a.order||0)-(b.order||0));
     return `<div class="group-h"><h4>${g.name} <span class="muted small">${g.floor} · ${gp.length}명</span></h4></div>
-    ${gp.length?`<div class="tbl-wrap"><table><thead><tr><th>코드</th><th>이름 (눌러서 바꾸기)</th><th>맡는 일</th><th>근무시간</th><th>휴게</th><th>휴무 (누르면 전환)</th><th class="r">주 근무</th><th>상태</th><th></th></tr></thead><tbody>
+    ${gp.length?`<div class="tbl-wrap"><table><thead><tr><th>코드</th><th>이름 (눌러서 바꾸기)</th><th>맡는 일</th><th>근무시간</th><th>휴게</th><th>휴무 (누르면 전환)</th><th class="r">주 근무</th><th>상태</th><th>특이사항</th>${unlocked()?"<th>신분증</th><th>통장</th>":""}<th></th></tr></thead><tbody>
     ${gp.map(p=>{const s=SLOT[p.slot]; const wd=7-(p.off||[]).length;
       const role=p.kind==="담당"?(s?s.name:p.role):`대타 (${g.slots.map(x=>x.name.split(" ").slice(-1)[0]).join("·")})`;
       return `<tr data-id="${p.id}"><td class="num">${esc(p.code)}</td><td style="min-width:110px"><input data-f="name" value="${esc(p.name||"")}" placeholder="이름 넣기"></td><td>${esc(role)}</td><td class="num">${esc(p.kind==="담당"&&s?s.time:(p.time||"근무표 따름"))}</td><td class="num">${esc(p.kind==="담당"&&s?s.brk:"맡은 자리 따름")}</td>
       <td><div class="days">${DAYS.map((d,i)=>`<button data-off="${i}" aria-pressed="${(p.off||[]).includes(i)}" aria-label="${d}요일 휴무">${d}</button>`).join("")}</div></td>
       <td class="r num" style="color:${wd>WORK_DAYS?"var(--bad)":wd<WORK_DAYS?"var(--warn)":"inherit"}">${wd}일 · ${wd*8}h</td>
       <td><select data-f="status">${STAFF_STATUS.map(x=>`<option ${p.status===x?"selected":""}>${x}</option>`).join("")}</select></td>
+      <td style="min-width:180px"><input data-f="memo" value="${esc(p.memo||"")}" placeholder="예: 주말 선호, 교육 필요"></td>
+      ${unlocked()?["idFile","bankFile"].map(k=>`<td class="noprint">${p[k]?`<span class="row" style="flex-wrap:nowrap"><button class="linkbtn small" data-sview="${k}">보기</button><button class="x" data-sdel="${k}" aria-label="삭제">×</button></span>`:`<div class="drop sdrop" data-sdrop="${k}">+ 사진</div>`}</td>`).join(""):""}
       <td><button class="x" data-del aria-label="삭제">${ui.confirmDel===p.id?"삭제?":"×"}</button></td></tr>`;}).join("")}
     </tbody></table></div>`:`<p class="small muted" style="margin:0">아직 없어요.</p>`}`;}).join("");
   const n4=floorSlots("4층").length, n3=floorSlots("3층").length;
@@ -777,6 +845,7 @@ function staffHTML(){
   return `${staffMap(res,extra)}<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">주간 자리 채움</h3><button class="btn small noprint" id="slotEditBtn">${ui.slotEdit?"자리 고치기 닫기":"자리 이름·시간 바꾸기"}</button></div>${slotEdit}${plan}${grid}</div><div class="panel" style="margin-top:16px"><h3>인원 명단</h3>
   <div class="group-h"><h4>운영매니저 <span class="muted small">매일 근무 · 1명</span></h4></div>
   <label class="f" style="max-width:240px">이름<input id="mgrName" value="${esc(mgr?mgr.name:"")}" placeholder="운영매니저 이름"></label>
+  ${lockBar()}
   ${byG}
   <form class="addform three" id="addStaff"><label class="f">맡는 자리<select id="ns-role">${roles}</select></label>
     <label class="f">이름<input id="ns-name" placeholder="비워 둬도 돼요"></label>
@@ -791,7 +860,12 @@ function bindStaff(){
     tr.querySelectorAll("[data-off]").forEach(b=>b.onclick=()=>{const i=+b.dataset.off; const o=new Set(p().off||[]); o.has(i)?o.delete(i):o.add(i); save("staff",{...p(),off:[...o].sort()});});
     tr.querySelectorAll("[data-f]").forEach(el=>el.onchange=()=>save("staff",{...p(),[el.dataset.f]:el.value.trim()}));
     tr.querySelector("[data-del]").onclick=()=>{ if(ui.confirmDel===p().id){ui.confirmDel=null;remove("staff",p().id);} else {ui.confirmDel=p().id;render();} };
+    tr.querySelectorAll("[data-sdrop]").forEach(z=>dropZone(z,{accept:"image/*,application/pdf",onFiles:async fs=>{ const k=z.dataset.sdrop;
+      toast("잠가서 저장하는 중…"); const fid=await storeSecret(fs[0]); if(fid){ save("staff",{...p(),[k]:fid}); toast("잠가서 저장했어요"); } }}));
+    tr.querySelectorAll("[data-sview]").forEach(b=>b.onclick=()=>openSecret(p()[b.dataset.sview]));
+    tr.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=()=>{ const k=b.dataset.sdel; if(!confirm("이 사진을 지울까요?")) return; remove("files",p()[k]); save("staff",{...p(),[k]:""}); });
   });
+  bindLock();
   $("#slotEditBtn").onclick=()=>{ui.slotEdit=!ui.slotEdit;render();};
   document.querySelectorAll("tr[data-slot]").forEach(tr=>tr.querySelectorAll("[data-sk]").forEach(el=>el.onchange=()=>{
     const cfg=state.settings.find(x=>x.id==="cfg-slots")||{id:"cfg-slots",slots:{}}; const id=tr.dataset.slot, k=el.dataset.sk;
@@ -982,7 +1056,8 @@ function tasksHTML(){
       <input type="text" class="t-title" data-f="title" value="${esc(t.title)}">
       <input type="date" class="t-due" data-f="due" value="${esc(t.due||"")}" aria-label="마감일">
       <input type="text" class="t-owner" data-f="owner" value="${esc(t.owner||"")}" placeholder="담당">
-      <button class="x" data-del aria-label="삭제">${ui.confirmDel===t.id?"삭제?":"×"}</button></div>`).join("")}`).join("") : `<div class="empty">${ui.taskFilter==="done"?"아직 끝낸 일이 없어요.":"남은 할 일이 없어요."}</div>`)
+      <button class="x" data-del aria-label="삭제">${ui.confirmDel===t.id?"삭제?":"×"}</button>
+      <textarea class="t-sol" data-f="solution" rows="1" placeholder="어떻게 해결했는지 적어 주세요">${esc(t.solution||"")}</textarea></div>`).join("")}`).join("") : `<div class="empty">${ui.taskFilter==="done"?"아직 끝낸 일이 없어요.":"남은 할 일이 없어요."}</div>`)
     : loadingOrEmpty("tasks","아직 등록한 할 일이 없어요. 아래에서 추가해 보세요.");
   return `${map}<div class="panel"><div class="row" style="justify-content:space-between"><h3 style="margin:0">할 일</h3>
     <div class="seg" role="group" aria-label="보기">${[["open","남은 일"],["all","전체"],["done","완료"]].map(([k,n])=>`<button data-tf="${k}" aria-pressed="${ui.taskFilter===k}">${n}</button>`).join("")}</div></div>
