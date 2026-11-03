@@ -269,7 +269,7 @@ async function loadAll(){
   else setNotice("");
   scheduleRender();
 }
-const KEY_LS="mb-teamkey";
+const KEY_LS="mb-teamkey-h"; // 비밀번호 해시
 const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
 let pollTimer=null;
@@ -277,6 +277,7 @@ function makeClient(key){
   return window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_KEY,
     key?{global:{headers:{"x-board-key":key}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:"mb-key-client"}}:{});
 }
+async function sha256hex(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
 async function checkKey(key){ const c=makeClient(key); const {data,error}=await c.rpc("can_board"); return (!error&&data===true)?c:null; }
 function startKeyMode(c){
   db=c; mode="db"; showLogin(false);
@@ -312,7 +313,7 @@ async function onSession(session){
     setNotice("config.js에 Supabase 주소가 없어서 저장되지 않는 미리보기 모드예요."); render(); return; }
   authClient=makeClient(null); db=authClient;
   $("#keyForm").addEventListener("submit",async e=>{ e.preventDefault();
-    const key=$("#keyInput").value; $("#keyMsg").textContent="확인 중…";
+    const key=await sha256hex($("#keyInput").value); $("#keyMsg").textContent="확인 중…"; // 비밀번호 원문 대신 해시만 보내고 저장
     const c=await checkKey(key);
     if(!c){ $("#keyMsg").textContent="비밀번호가 맞지 않아요."; return; }
     lsSet(KEY_LS,key); $("#keyInput").value=""; $("#keyMsg").textContent=""; stopAll(); startKeyMode(c); });

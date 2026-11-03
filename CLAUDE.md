@@ -7,7 +7,7 @@ Static single-page app served by GitHub Pages from a PUBLIC repo (no build step)
   - `TYPES` (marker types, colors match whiteboard pens), `GROUPS` (staff slots: rec-am, rec-pm, s2, s3, s4, s5, s8, s6a, s6b), `DAYS`.
   - `state` = {markers, items, staff, tasks}; `ui` = view state (some persisted in localStorage `mb-*`).
   - `save(col,obj)` / `remove(col,id)`: optimistic local update, then Supabase upsert/delete.
-  - Boot section "boot (Supabase)": two ways in — team password (sent as `x-board-key` header, stored in localStorage `mb-teamkey`, 10s polling) or admin magic-link (realtime channel). `can_board()` RPC checks access.
+  - Boot section "boot (Supabase)": two ways in — team password (sent as `x-board-key` header, sha256 of the password sent as header, hash stored in localStorage `mb-teamkey-h`, 10s polling) or admin magic-link (realtime channel). `can_board()` RPC checks access.
   - `coverage()` computes per-day slot coverage (main / cover / ②③ merge / gap).
   - `render()` dispatches per tab; `mapCard()` draws mini floor plans; marker x/y are % of the plan image.
 - `config.js`: `window.BOARD_CONFIG = {SUPABASE_URL, SUPABASE_KEY}` (publishable key only — never a secret/service_role key).
