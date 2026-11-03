@@ -23,4 +23,5 @@ One row per document: `col` ∈ markers | items | staff | tasks, `id` (e.g. `m-�
 - Keep light/dark theme tokens on `:root` (both dark blocks) — no literal colors in components.
 - Must work at phone width (~400px).
 - Test locally: `python3 -m http.server 8000`.
-- Commit with a short Korean message; push to `main` only when the user asks.
+- After each finished, tested change: commit with a short Korean message and push to `main` right away (user asked for automatic publishing; no need to ask). Never push staff names or DB contents.
+- User doesn't code: do changes yourself end to end; never hand them SQL or manual steps.
