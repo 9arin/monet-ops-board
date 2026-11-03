@@ -287,8 +287,17 @@ async function loadAll(){
   data.forEach(applyRow);
   const {data:ok}=await db.rpc("can_board");
   if(ok===false) setNotice("들어올 권한이 없어요. 팀 비밀번호가 바뀌었을 수 있어요. 로그아웃 후 다시 들어와 주세요.");
-  else setNotice("");
+  else { setNotice(""); popOnStickers(); }
   scheduleRender();
+}
+// 한 번만: 4층 바닥 스티커마다 신세계 POP를 바로 위에 하나씩 (처리한 스티커엔 popDone 표시, 이후 새 스티커엔 안 함)
+function popOnStickers(){
+  const st=state.markers.filter(m=>m.floor==="4F"&&m.type==="sticker");
+  if(!st.length||st.some(m=>m.popDone)) return;
+  st.forEach(m=>{
+    if(!state.markers.some(x=>x.id==="m-pop-"+m.id)) save("markers",{id:"m-pop-"+m.id,floor:"4F",type:"pop",x:m.x,y:Math.max(1,+(m.y-3).toFixed(2)),label:"신세계 POP",qty:1,note:"바닥 스티커 위"});
+    save("markers",{...m,popDone:true});
+  });
 }
 const KEY_LS="mb-teamkey-h"; // 비밀번호 해시
 const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
