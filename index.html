@@ -303,23 +303,35 @@ const uid=p=>p+"-"+Date.now().toString(36)+Math.random().toString(36).slice(2,6)
 const tcolor=t=>`var(${(TYPES[t]||TYPES.note).c})`;
 function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2200);}
 const pending={}, inflight={};
+const unsaved={}, unremoved={}; // 서버에 아직 안 들어간 저장·삭제 (10초 새로고침이 덮어쓰지 않게)
+const typing=()=>{const a=document.activeElement; return !!a&&$("#view").contains(a)&&(a.tagName==="TEXTAREA"||(a.tagName==="INPUT"&&!/^(checkbox|radio|file|button|submit)$/.test(a.type)));};
+const busy=()=>Object.keys(unsaved).length+Object.keys(unremoved).length>0;
 async function save(col,obj,quiet){ // quiet: 입력 중이면 화면 새로 그리기를 미룸 (자동 입력 결과 등)
   const i=state[col].findIndex(x=>x.id===obj.id);
   if(i>=0) state[col][i]=obj; else state[col].push(obj);
-  quiet?scheduleRender():render();
+  (quiet||typing())?scheduleRender():render(); // 글자 치는 중엔 화면을 다시 그리지 않아요 (커서 유지)
   if(!db) return;
   const key=col+"/"+obj.id; const {id,...data}=obj;
-  pending[key]=data; if(inflight[key]) return;
+  unsaved[key]={col,obj}; pending[key]=data; if(inflight[key]) return;
   inflight[key]=true;
   while(pending[key]){const d=pending[key]; delete pending[key];
     const {error}=await db.from(TABLE).upsert({col:dbCol(col),id,data:d,updated_at:new Date().toISOString()});
     if(error){handleErr(error);break;}}
-  inflight[key]=false;
+  inflight[key]=false; delete unsaved[key];
 }
 async function remove(col,id){
   state[col]=state[col].filter(x=>x.id!==id); render();
-  if(db){const {error}=await db.from(TABLE).delete().eq("col",dbCol(col)).eq("id",id); if(error) handleErr(error);}
+  if(db){ const key=col+"/"+id; unremoved[key]={col,id}; delete unsaved[key];
+    const {error}=await db.from(TABLE).delete().eq("col",dbCol(col)).eq("id",id); delete unremoved[key]; if(error) handleErr(error);}
 }
+// 글자를 치면 잠깐 뒤 자동 저장 (칸을 벗어나지 않고 새로고침해도 안 사라지게)
+let typeTimer=null;
+document.addEventListener("input",e=>{ const el=e.target; if(!$("#view").contains(el)||typeof el.onchange!=="function"||!/^(INPUT|TEXTAREA)$/.test(el.tagName)||/^(checkbox|radio|file)$/.test(el.type)) return;
+  clearTimeout(typeTimer); typeTimer=setTimeout(()=>{ if(document.contains(el)) el.onchange({target:el}); },700); });
+// 저장이 끝나기 전에 닫거나 새로고침하면 한 번 물어봐요
+window.addEventListener("beforeunload",e=>{ const a=document.activeElement;
+  if(typeTimer&&a&&typeof a.onchange==="function"){ clearTimeout(typeTimer); typeTimer=null; a.onchange({target:a}); }
+  if(busy()){ e.preventDefault(); e.returnValue=""; } });
 function handleErr(e){
   console.error(e);
   if(e&&(e.code==="42501"||/row-level security/i.test(e.message||""))){setNotice("권한이 없어서 저장하지 못했어요. 팀 비밀번호가 바뀌었을 수 있어요. 로그아웃 후 다시 들어와 주세요.");}
@@ -344,9 +356,11 @@ async function loadAll(){
   if(error){ setNotice("데이터를 불러오지 못했어요. 새로고침해 주세요."); console.error(error); return; }
   ALLC.forEach(c=>{state[c]=[];loaded[c]=true;});
   r1.data.forEach(applyRow); (r2.data||[]).forEach(r=>applyRow({col:r.col,id:r.id,data:{meta:r.meta}}));
+  Object.values(unsaved).forEach(({col,obj})=>{ const i=state[col].findIndex(x=>x.id===obj.id); if(i>=0) state[col][i]=obj; else state[col].push(obj); }); // 방금 고친 건 내 것으로
+  Object.values(unremoved).forEach(({col,id})=>{ state[col]=state[col].filter(x=>x.id!==id); });
   const {data:ok}=await db.rpc("can_board");
   if(ok===false) setNotice("들어올 권한이 없어요. 팀 비밀번호가 바뀌었을 수 있어요. 로그아웃 후 다시 들어와 주세요.");
-  else { setNotice(""); popOnStickers(); syncRoster(); seedGraphics(); }
+  else { setNotice(""); [popOnStickers,syncRoster,seedGraphics].forEach(f=>{ try{ f(); }catch(e){ console.error(f.name,e); } }); } // 하나가 실패해도 보드는 열리게
   scheduleRender();
 }
 // 배치도 자리 수가 바뀌면(처음 포함): 구역마다 고정 + 대체 인원을 채우고, 매일 자리가 다 차도록 휴무(연속 2일)를 짜요.
@@ -453,8 +467,21 @@ async function onSession(session){
   let last; // undefined = 아직 확인 전
   authClient.auth.onAuthStateChange((_ev,session)=>{ const k=session?session.user.id:null; if(k===last) return; last=k; onSession(session); });
   const {data:{session}}=await authClient.auth.getSession(); if((session?session.user.id:null)!==last){ last=session?session.user.id:null; onSession(session); }
-  document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&mode==="db") loadAll(); });
+  document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&mode==="db") loadAll(); if(!document.hidden) checkUpdate(); });
+  setInterval(checkUpdate,60000); setTimeout(checkUpdate,5000);
 })();
+
+// 새 버전이 올라오면 오래 열어 둔 화면(현장 모니터 등)도 알아서 새로고침 → 옛 버전이 데이터를 건드리지 않게
+let pageSig=null, updateWaiting=false;
+async function checkUpdate(){
+  try{ const t=await (await fetch(location.pathname+"?u="+Date.now(),{cache:"no-store"})).text();
+    let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0;
+    if(pageSig===null){ pageSig=h; return; }
+    if(h===pageSig) return;
+    if(typing()||busy()){ if(!updateWaiting){ updateWaiting=true; setNotice("새 버전이 올라왔어요. 지금 입력이 끝나면 자동으로 새로고침돼요."); } setTimeout(checkUpdate,3000); return; }
+    location.reload();
+  }catch(e){}
+}
 
 let renderQueued=false;
 function scheduleRender(){
@@ -684,6 +711,10 @@ const alba=()=>state.staff.filter(p=>!isMgr(p));
 
 /* ---------- render ---------- */
 function render(){
+  try{ renderInner(); }
+  catch(e){ console.error(e); $("#view").innerHTML=`<div class="empty">이 화면을 그리다 문제가 생겼어요. 다른 탭을 눌렀다 돌아오거나 새로고침해 주세요.<br><span class="small">${esc(e.message)}</span></div>`; }
+}
+function renderInner(){
   applySlotCfg(); renderStats(); renderTabs();
   const v=$("#view");
   if(ui.tab==="plan") v.innerHTML=planHTML(), bindPlan();
