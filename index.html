@@ -174,6 +174,14 @@ tr.cand-row>td>*{position:sticky;left:10px;max-width:min(960px,calc(100vw - 96px
 .cand{border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px;background:var(--panel);min-width:0}
 .cand.chosen{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .cand img,.cand .noimg{width:100%;aspect-ratio:1;object-fit:contain;background:var(--soft);border-radius:6px;display:flex;align-items:center;justify-content:center}
+.candadd{flex-wrap:nowrap}
+.candadd [data-cin]{flex:2;min-width:0}
+.candadd [data-cnote]{flex:1;min-width:0}
+@media (max-width:640px){.candadd{flex-wrap:wrap}.candadd [data-cin],.candadd [data-cnote]{flex:1 1 100%}}
+.drop.cimg{padding:0;border-width:1px;position:relative;overflow:hidden}
+.drop.cimg img{display:block}
+.cimg-hint{position:absolute;left:0;right:0;bottom:0;background:var(--ink);color:var(--bg);font-size:11px;text-align:center;opacity:0;transition:opacity .15s}
+.drop.cimg:hover .cimg-hint{opacity:.85}
 .cand .t{font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
 .slotedit td input{min-width:90px}
 .kindseg{flex-wrap:wrap}
@@ -1364,14 +1372,15 @@ function quotesHTML(sum){
 }
 function candsHTML(i){
   const cs=i.cands||[];
-  return `<div class="drop" data-cdrop="${i.id}"><div class="row" style="flex-wrap:nowrap"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요" style="flex:1;min-width:0"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
+  return `<div class="drop" data-cdrop="${i.id}"><div class="row candadd"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요"><input class="cand-in" data-cnote placeholder="메모 (선택)"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
     ${cs.length?`<div class="cands">${cs.map(c=>`<div class="cand ${i.chosen===c.id?"chosen":""}" data-c="${c.id}">
-      ${c.image?`<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="noimg small muted">${c.loading?"불러오는 중…":"사진 없음"}</div>`}
+      <div class="drop cimg" data-cimg title="사진을 끌어다 놓거나 눌러서 고르기">${c.image?`<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="cimg-hint">사진 바꾸기</span>`:`<div class="noimg small muted">${c.loading?"불러오는 중…":"사진 없음<br>끌어다 놓거나 눌러서 넣기"}</div>`}</div>
       <div class="t">${esc(c.title||c.url)}</div>
       <div class="small muted">${esc(c.site||"")}</div>
       <label class="qrow">가격<input class="num" data-cprice value="${esc(c.price||"")}" inputmode="numeric" placeholder="${c.loading?"…":"직접 입력"}"></label>
+      <label class="qrow">메모<input data-cmemo value="${esc(c.memo||"")}" placeholder="예: 색상 화이트, 배송 3일"></label>
       <div class="row" style="justify-content:space-between"><a class="small" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">열기</a>
-        <span class="row"><button class="x" data-cdel aria-label="후보 삭제">×</button><button class="btn ${i.chosen===c.id?"":"primary"}" data-cpick type="button">${i.chosen===c.id?"선택됨":"이걸로 선택"}</button></span></div>
+        <span class="row"><button class="x" data-cdel aria-label="후보 삭제">×</button>${i.chosen===c.id?`<button class="btn" data-cunpick type="button">선택 해제</button>`:`<button class="btn primary" data-cpick type="button">이걸로 선택</button>`}</span></div>
     </div>`).join("")}</div>`:`<p class="small muted" style="margin:8px 0 0">쇼핑몰 링크를 넣으면 사진과 가격을 불러와요. 여러 개를 넣고 비교한 뒤 '이걸로 선택'을 누르면 물품 표에 사진·가격·업체가 들어가요. 가격을 못 읽는 쇼핑몰은 직접 적어 주세요.</p>`}`;
 }
 function itemsHTML(){
@@ -1427,11 +1436,11 @@ function itemsHTML(){
 }
 const curItem=id=>state.items.find(x=>x.id===id);
 function updCand(itemId,cid,patch,quiet){ const it=curItem(itemId); if(!it) return; save("items",{...it,cands:(it.cands||[]).map(c=>c.id===cid?{...c,...patch}:c)},quiet); }
-async function addCand(itemId,raw){
+async function addCand(itemId,raw,memo){
   let url=String(raw||"").trim(); if(!url) return; if(!/^https?:\/\//i.test(url)) url="https://"+url;
   let host; try{ host=new URL(url).hostname.replace(/^www\./,""); }catch(e){ toast("링크 모양이 아니에요."); return; }
   const it=curItem(itemId); if(!it) return;
-  const c={id:uid("c"),url,title:"",image:"",price:"",site:host,loading:true};
+  const c={id:uid("c"),url,title:"",image:"",price:"",site:host,memo:String(memo||"").trim(),loading:true};
   save("items",{...it,cands:[...(it.cands||[]),c]});
   try{ const p=await fetchPreview(url); updCand(itemId,c.id,{...p,price:p.price,loading:false},true);
     if(!p.price) toast("가격을 못 읽었어요. 가격 칸에 직접 적어 주세요."); }
@@ -1491,16 +1500,23 @@ function bindItems(){
   });
   document.querySelectorAll("tr.cand-row").forEach(tr=>{
     const id=tr.dataset.id, inp=tr.querySelector("[data-cin]");
-    const go=()=>{ const v=inp.value; inp.value=""; addCand(id,v); };
+    const note=tr.querySelector("[data-cnote]");
+    const go=()=>{ const v=inp.value; if(!v.trim()){ toast("링크를 넣어 주세요"); return; } const m=note.value; inp.value=""; note.value=""; addCand(id,v,m); };
     tr.querySelector("[data-cadd]").onclick=go;
-    inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); go(); } };
-    inp.onpaste=()=>setTimeout(()=>{ if(/^\s*(https?:\/\/|www\.)/i.test(inp.value)) go(); },0); // 붙여넣으면 바로 불러오기
-    dropZone(tr.querySelector("[data-cdrop]"),{onText:t=>addCand(id,t)});
+    [inp,note].forEach(el=>el.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); go(); } });
+    dropZone(tr.querySelector("[data-cdrop]"),{onText:t=>{ inp.value=t; note.focus(); }}); // 끌어온 링크는 칸에 넣고 메모로
     tr.querySelectorAll(".cand").forEach(card=>{ const cid=card.dataset.c;
       card.querySelector("[data-cprice]").onchange=e=>updCand(id,cid,{price:e.target.value.replace(/[^\d]/g,"")});
+      card.querySelector("[data-cmemo]").onchange=e=>updCand(id,cid,{memo:e.target.value.trim()});
+      dropZone(card.querySelector("[data-cimg]"),{accept:"image/*",onFiles:async fs=>{ if(!/^image\//.test(fs[0].type)){ toast("사진 파일만 넣을 수 있어요."); return; }
+        const img=await readURL(await shrinkImage(fs[0],400,.8)); const cur=curItem(id); updCand(id,cid,{image:img}); if(cur&&cur.chosen===cid) save("items",{...curItem(id),image:img}); },
+        onText:t=>{ if(/^https?:\/\//.test(t)) updCand(id,cid,{image:t}); }}); // 사진이 안 뜨면 직접
       card.querySelector("[data-cdel]").onclick=()=>{ const cur=curItem(id); save("items",{...cur,cands:cur.cands.filter(c=>c.id!==cid),chosen:cur.chosen===cid?"":cur.chosen}); };
-      card.querySelector("[data-cpick]").onclick=()=>{ const cur=curItem(id), c=cur.cands.find(x=>x.id===cid);
-        save("items",{...cur,chosen:cid,price:c.price||cur.price,image:c.image||cur.image,url:c.url,vendor:cur.vendor||c.site}); toast("메인 표에 반영했어요"); };
+      const pk=card.querySelector("[data-cpick]"); if(pk) pk.onclick=()=>{ const cur=curItem(id), c=cur.cands.find(x=>x.id===cid);
+        const before=cur.chosen&&cur.beforePick?cur.beforePick:{price:cur.price||"",image:cur.image||"",url:cur.url||"",vendor:cur.vendor||""}; // 해제하면 되돌릴 값
+        save("items",{...cur,chosen:cid,beforePick:before,price:c.price||cur.price,image:c.image||cur.image,url:c.url,vendor:cur.vendor||c.site}); toast("메인 표에 반영했어요"); };
+      const up=card.querySelector("[data-cunpick]"); if(up) up.onclick=()=>{ const cur=curItem(id), b=cur.beforePick||{price:"",image:"",url:"",vendor:""};
+        const {beforePick,...rest}=cur; save("items",{...rest,chosen:"",...b}); toast("선택을 해제했어요"); };
     });
   });
   $("#addItem").onsubmit=e=>{e.preventDefault(); const n=$("#ni-name").value.trim(); if(!n) return;
