@@ -16,7 +16,7 @@ Static single-page app served by GitHub Pages from a PUBLIC repo (no build step)
 - `supabase/2_team_key.sql`: `board_secret` (sha256 of team password), `has_board_key()`, `can_board()`, policies for anon+authenticated. Already applied.
 
 ## Data model
-One row per document: `col` ∈ markers | items | staff | tasks, `id` (e.g. `m-…`, `i-…`, `p-R1`, `t-…`), `data` jsonb with the fields the UI uses. Adding a field needs no SQL change. Adding a new collection: add to `COLS` and to the `check` constraint (give the user the `alter table` statement to run in Supabase SQL Editor).
+One row per document: `col` ∈ markers | items | staff | tasks, `id` (e.g. `m-…`, `i-…`, `p-R1`, `t-…`), `data` jsonb with the fields the UI uses. Adding a field needs no SQL change. Virtual collections by id prefix (no SQL): `q-` quotes / `f-` files (base64, encrypted when `meta.enc`) in items, `cfg-` settings in staff, `g-` graphics (wall lines) in markers — see `VCOL`. Staffing: daily positions = staff markers on the plan (capped at `DAILY_ALBA`=11, plus the manager); `syncRoster()` sizes each zone and writes exact off-days. Adding a new collection: add to `COLS` and to the `check` constraint (give the user the `alter table` statement to run in Supabase SQL Editor).
 
 ## Rules
 - Repo is public: never commit staff names, emails, pay data, or the database contents.
