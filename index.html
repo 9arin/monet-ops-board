@@ -185,7 +185,10 @@ tr.cand-row>td>*{position:sticky;left:10px;max-width:min(960px,calc(100vw - 96px
 .ghandle.start{border-radius:50%;border-color:var(--accent);pointer-events:none}
 .drop.gimg{min-height:70px;display:flex;align-items:center;justify-content:center;font-size:12px}
 .drop.gimg img{max-width:100%;max-height:200px;border-radius:6px}
-.gthumb{width:48px;height:36px;object-fit:cover;border-radius:4px;display:block}
+.gthumb{width:48px;height:36px;object-fit:cover;border-radius:4px;display:block;background:var(--soft)}
+.gfiles{display:flex;flex-direction:column;gap:4px}
+.gfile{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:6px;align-items:center;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:4px 6px}
+.gfile .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr[data-grow]{cursor:pointer}
 tr.rowsel td{background:var(--warnbg)}
 .lockbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:10px 12px;margin:12px 0 4px;font-size:13px}
@@ -520,9 +523,9 @@ function shrinkImage(file,max,q){ // 사진을 줄여 JPEG로
     c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(img.src); c.toBlob(b=>b?ok(b):no(new Error("이미지")),"image/jpeg",q);};
     img.onerror=no; img.src=URL.createObjectURL(file);});
 }
-async function storeFile(file){
+async function storeFile(file,raw){ // raw: 원본 그대로 (디자인 파일)
   let blob=file;
-  if(/^image\//.test(file.type)&&file.size>800*1024) blob=await shrinkImage(file,2000,.85);
+  if(!raw&&/^image\//.test(file.type)&&file.size>800*1024) blob=await shrinkImage(file,2000,.85);
   if(blob.size>MAX_FILE){ toast("파일이 너무 커요. 4MB까지 올릴 수 있어요."); return null; }
   const id=uid("f"), meta={name:file.name,type:blob.type||file.type,size:blob.size}, b64=await readURL(blob);
   state.files.push({id,...meta});
@@ -531,6 +534,27 @@ async function storeFile(file){
   if(error){ handleErr(error); return null; }
   return id;
 }
+async function fileB64(id){
+  let b64=localFiles[id];
+  if(!b64&&db){ const {data,error}=await db.from(TABLE).select("b64:data->>b64").eq("col","items").eq("id",id).single(); if(!error) b64=data.b64; }
+  return b64;
+}
+async function downloadFile(id,name){
+  toast("내려받는 중…"); const b64=await fileB64(id); if(!b64){ toast("파일을 받지 못했어요."); return; }
+  const u=URL.createObjectURL(await (await fetch(b64)).blob()), a=document.createElement("a");
+  a.href=u; a.download=name||"file"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),5000);
+}
+async function pdfThumb(file,max){ // PDF 첫 장 → 미리보기 사진
+  await loadScript(PDFJS); pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER;
+  const pg=await (await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise).getPage(1);
+  const v0=pg.getViewport({scale:1}), vp=pg.getViewport({scale:max/Math.max(v0.width,v0.height)}), c=document.createElement("canvas");
+  c.width=Math.round(vp.width); c.height=Math.round(vp.height); const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height);
+  await pg.render({canvasContext:g,viewport:vp}).promise; return c.toDataURL("image/jpeg",.82);
+}
+const isPdf=f=>f.type==="application/pdf"||/\.pdf$/i.test(f.name);
+async function makeThumb(f){ if(isPdf(f)) return pdfThumb(f,700); if(/^image\//.test(f.type)) return readURL(await shrinkImage(f,700,.82)); return null; }
+const vname=(name,v)=>{ const m=String(name).match(/^(.*?)(\.[^.]+)?$/); return `${m[1].replace(/[_\s-]*V\d+$/i,"")}_V${v}${m[2]||""}`; }; // 시안.pdf → 시안_V1.pdf
+const fsize=n=>n>1048576?(n/1048576).toFixed(1)+"MB":Math.max(1,Math.round(n/1024))+"KB";
 async function openFile(id){
   const w=window.open("","_blank"); // 팝업 차단을 피하려고 먼저 열어 둠
   let b64=localFiles[id];
@@ -1163,7 +1187,9 @@ function gfxHTML(){
     <label class="f">들어갈 내용<textarea id="g-content" placeholder="예: 전시 타이틀 + 모네 대표작 이미지">${esc(sel.content||"")}</textarea></label>
     <div class="row" style="flex-wrap:nowrap"><label class="f" style="flex:1">크기<input id="g-size" value="${esc(sel.size||"")}" placeholder="예: 3000×2400"></label>
       <label class="f" style="flex:1">상태<select id="g-status">${GSTATUS.map(s=>`<option ${sel.status===s?"selected":""}>${s}</option>`).join("")}</select></label></div>
-    <label class="f">시안<div class="drop gimg" id="g-img">${sel.image?`<img src="${esc(sel.image)}" alt="시안">`:"시안 이미지를 끌어다 놓거나 눌러서 고르기"}</div></label>
+    <label class="f">시안 파일 (PDF·이미지)<div class="drop gimg" id="g-img">${sel.image?`<img src="${esc(sel.image)}" alt="시안 미리보기">`:"PDF나 이미지를 끌어다 놓거나 눌러서 고르기"}</div></label>
+    <span class="small muted">올릴 때마다 V1, V2…로 버전이 쌓여요 (파일당 ${MAX_FILE/1048576}MB까지)</span>
+    ${(sel.files||[]).length?`<div class="gfiles">${sel.files.slice().reverse().map(f=>`<div class="gfile"><b class="num">V${f.v}</b><span class="fname" title="${esc(f.name)}">${esc(f.name)}</span><span class="small muted">${fsize(f.size||0)} · ${esc(f.at||"")}</span><button class="btn small" data-gdl="${f.fileId}" type="button">다운로드</button>${ui.planEdit?`<button class="x" data-gfdel="${f.fileId}" aria-label="이 버전 삭제">×</button>`:""}</div>`).join("")}</div>`:""}
     <label class="f">메모<input id="g-note" value="${esc(sel.note||"")}" placeholder="업체, 확인할 점"></label>
     <div class="row" style="justify-content:space-between"><button class="btn" id="g-close">닫기</button>
       ${ui.planEdit?`<button class="btn danger" id="g-del">${ui.confirmDel===sel.id?"한 번 더 누르면 삭제":"삭제"}</button>`:""}</div></div></div>`
@@ -1175,7 +1201,7 @@ function gfxHTML(){
     ${all.map(g=>`<tr data-grow="${g.id}" class="${ui.gSel===g.id?"rowsel":""}"><td>${g.floor==="4F"?"4층":"3층"}</td><td class="num">${num[g.id]}</td><td><span class="dot" style="display:inline-block;vertical-align:middle;background:${gcolor(g.type)}"></span> ${esc((GTYPES[g.type]||{}).name)}</td>
       <td>${esc(g.label||"")}</td><td style="min-width:180px">${esc(g.content||"")||'<span class="muted">미정</span>'}</td><td class="num">${esc(g.size||"")}</td>
       <td><span class="pill ${g.status==="설치 완료"?"s-done":g.status&&g.status!=="내용 정리"?"s-mid":"s-need"}">${esc(g.status||"내용 정리")}</span></td>
-      <td>${g.image?`<img class="gthumb" src="${esc(g.image)}" alt="">`:""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">아직 그래픽이 없어요. '위치 편집'을 누르고 도면에 선을 그어 보세요.</div>`;
+      <td>${g.image?`<img class="gthumb" src="${esc(g.image)}" alt="">`:""}${(g.files||[]).length?(f=>`<button class="linkbtn small" data-gdl-row="${g.id}" title="${esc(f.name)}">V${f.v} 받기</button>`)(g.files[g.files.length-1]):""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">아직 그래픽이 없어요. '위치 편집'을 누르고 도면에 선을 그어 보세요.</div>`;
   return `<div class="row noprint" style="justify-content:space-between;margin-bottom:12px">${floorSeg()}
     <div class="row"><label class="row small muted"><input type="checkbox" id="lblToggle" ${ui.labels?"checked":""}> 이름 표시</label>
       <button class="btn ${ui.planEdit?"primary":""}" id="planEditBtn">${ui.planEdit?"편집 끝내기":"위치 편집"}</button></div></div>
@@ -1193,6 +1219,7 @@ function bindGfx(){
   document.querySelectorAll("[data-gadd]").forEach(b=>b.onclick=()=>{ui.gAdd=ui.gAdd===b.dataset.gadd?null:b.dataset.gadd;ui.gStart=null;render();});
   $("#lblToggle").onchange=e=>{ui.labels=e.target.checked;render();};
   $("#planEditBtn").onclick=()=>{ui.planEdit=!ui.planEdit;ui.gAdd=null;ui.gStart=null;ui.confirmDel=null;if(!ui.planEdit) toast("위치를 잠갔어요");render();};
+  document.querySelectorAll("[data-gdl-row]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const g=state.graphics.find(x=>x.id===b.dataset.gdlRow), f=g.files[g.files.length-1]; downloadFile(f.fileId,f.name); });
   document.querySelectorAll("[data-grow]").forEach(tr=>tr.onclick=()=>{const g=state.graphics.find(x=>x.id===tr.dataset.grow); if(!g) return; ui.gSel=g.id; ui.floor=g.floor; render(); window.scrollTo({top:0,behavior:"smooth"});});
   const plan=$("#gplan");
   const pt=e=>{const r=plan.getBoundingClientRect(); return {x:+Math.min(99.5,Math.max(.5,(e.clientX-r.left)/r.width*100)).toFixed(2),y:+Math.min(99.5,Math.max(.5,(e.clientY-r.top)/r.height*100)).toFixed(2)};};
@@ -1220,7 +1247,19 @@ function bindGfx(){
   $("#g-type").onchange=e=>upd({type:e.target.value});
   ["label","content","size","note"].forEach(k=>$("#g-"+k).onchange=e=>upd({[k]:e.target.value.trim()}));
   $("#g-status").onchange=e=>upd({status:e.target.value});
-  dropZone($("#g-img"),{accept:"image/*",onFiles:async fs=>{ if(!/^image\//.test(fs[0].type)){toast("사진 파일만 넣을 수 있어요.");return;} upd({image:await readURL(await shrinkImage(fs[0],600,.8))}); },onText:t=>{ if(/^https?:\/\//.test(t)) upd({image:t}); }});
+  dropZone($("#g-img"),{accept:"application/pdf,image/*",onFiles:async fs=>{ const f=fs[0], id=sel.id;
+      if(!isPdf(f)&&!/^image\//.test(f.type)){ toast("PDF나 이미지 파일만 올릴 수 있어요."); return; }
+      if(f.size>MAX_FILE){ toast(`파일이 너무 커요. ${MAX_FILE/1048576}MB까지 올릴 수 있어요.`); return; }
+      toast("올리는 중…");
+      const [thumb,fid]=await Promise.all([makeThumb(f).catch(e=>{console.error(e);return null;}),storeFile(f,true)]); if(!fid) return;
+      const g=state.graphics.find(x=>x.id===id); if(!g) return;
+      const v=Math.max(0,...(g.files||[]).map(x=>x.v||0))+1, name=vname(f.name,v);
+      save("graphics",{...g,files:[...(g.files||[]),{v,fileId:fid,name,type:f.type,size:f.size,at:new Date().toISOString().slice(0,10)}],image:thumb||g.image},true);
+      toast(`${name}(으)로 올렸어요`); },
+    onText:t=>{ if(/^https?:\/\//.test(t)) upd({image:t}); }});
+  document.querySelectorAll("[data-gdl]").forEach(b=>b.onclick=()=>{ const f=(sel.files||[]).find(x=>x.fileId===b.dataset.gdl); downloadFile(f.fileId,f.name); });
+  document.querySelectorAll("[data-gfdel]").forEach(b=>b.onclick=()=>{ const f=(sel.files||[]).find(x=>x.fileId===b.dataset.gfdel); if(!confirm(`${f.name}을(를) 지울까요?`)) return;
+    remove("files",f.fileId); upd({files:sel.files.filter(x=>x.fileId!==f.fileId)}); });
   $("#g-close").onclick=()=>{ui.gSel=null;render();};
   if($("#g-del")) $("#g-del").onclick=()=>{ if(ui.confirmDel===sel.id){ui.confirmDel=null;ui.gSel=null;remove("graphics",sel.id);} else {ui.confirmDel=sel.id;render();} };
 }
