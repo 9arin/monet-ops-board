@@ -1174,6 +1174,27 @@ function nightOptions(date,crew,L,pos){ // 야간에 넣을 수 있는 사람 �
       const why=mustDates(p).includes(date)||mustDow(p).includes(d)?"필수 휴무":day?"그날 주간 근무":n>=NIGHT_MAX?`이번 주 야간 ${n}번`:h+NIGHT_H>MAX_H?"40시간 넘음":"";
       return {p,ok:!why,h,label:why||`주간 ${dayDays(p)}일 · ${+h.toFixed(1)}h`}; })
     .sort((a,b)=>(a.ok?0:1)-(b.ok?0:1)||(dayDays(a.p)<WORK_DAYS?0:1)-(dayDays(b.p)<WORK_DAYS?0:1)||a.h-b.h||(a.p.order||0)-(b.p.order||0)); }
+// 인건비 예산: 월급은 주 5일(40시간) 기준, 근무일 비례 (야간 2번 = 1일)
+const payCfg=()=>({monthly:2300000,nightsPerWeek:1,...(state.settings.find(x=>x.id==="cfg-pay")||{})});
+function budgetHTML(){
+  const pc=payCfg(), unit=(+pc.monthly||0)/WORK_DAYS, n=Math.min(NIGHT_MAX,Math.max(0,+pc.nightsPerWeek||0)), nc=nightCfg(), ppl=alba();
+  const nightPeople=new Set(ppl.filter(p=>dayDays(p)<WORK_DAYS).sort((a,b)=>dayDays(b)-dayDays(a)||(a.order||0)-(b.order||0)).slice(0,n?+nc.alba:0).map(p=>p.id));
+  const units=p=>dayDays(p)+(nightPeople.has(p.id)?NIGHT_W*n:0);
+  const groups={}; ppl.forEach(p=>{ const u=units(p), k=`${dayDays(p)}|${nightPeople.has(p.id)?1:0}`; (groups[k]=groups[k]||{d:dayDays(p),night:nightPeople.has(p.id),u,c:0}).c++; });
+  const rows=Object.values(groups).sort((a,b)=>b.u-a.u), month=rows.reduce((s,g)=>s+g.c*g.u*unit,0);
+  const days=(new Date(OPEN_TO+"T00:00")-new Date(OPEN_FROM+"T00:00"))/864e5+1, period=month*days/(365/12);
+  const W=v=>Math.round(v).toLocaleString("ko-KR");
+  return `<div class="panel" style="margin-top:16px"><h3>인건비 예산 <span class="small muted">알바만 · 운영매니저 제외</span></h3>
+    <div class="row" style="gap:12px;margin-bottom:10px"><label class="f">월급 (주 ${WORK_DAYS}일·${MAX_H}시간 기준, 원)<input type="number" id="payMonthly" value="${pc.monthly}" step="10000" min="0"></label>
+      <label class="f">야간 (주 몇 회)<input type="number" id="payNights" value="${n}" min="0" max="${NIGHT_MAX}"></label></div>
+    <div class="tbl-wrap"><table><thead><tr><th>근무</th><th class="r">인원</th><th class="r">주 근무</th><th class="r">1인 월급</th><th class="r">월 합계</th></tr></thead><tbody>
+      ${rows.map(g=>`<tr><td>주간 ${g.d}일${g.night?` + 야간 ${n}회`:""}</td><td class="r num">${g.c}명</td><td class="r num">${+g.u.toFixed(1)}일 · ${+(g.d*8+(g.night?n*NIGHT_H:0)).toFixed(1)}h</td><td class="r num">${W(g.u*unit)}</td><td class="r num">${W(g.c*g.u*unit)}</td></tr>`).join("")}
+      <tr><td><b>한 달</b></td><td class="r num"><b>${ppl.length}명</b></td><td></td><td></td><td class="r num"><b>${W(month)}원</b></td></tr>
+      <tr><td><b>3개월</b></td><td></td><td></td><td></td><td class="r num"><b>${W(month*3)}원</b></td></tr>
+      <tr><td>전시 기간 (${+OPEN_FROM.slice(5,7)}/${+OPEN_FROM.slice(8)}~${+OPEN_TO.slice(5,7)}/${+OPEN_TO.slice(8)}, ${days}일)</td><td></td><td></td><td></td><td class="r num">${W(period)}원</td></tr>
+    </tbody></table></div>
+    <p class="small muted" style="margin:8px 0 0">4대보험 회사 부담분(약 10%)은 들어 있지 않아요.</p></div>`;
+}
 // 사람별 필수 휴무 날짜 달력
 function mustCal(p){
   const months=["2026-12","2027-01","2027-02"], mon=ui.mustMon||(mustDates(p)[0]||OPEN_FROM).slice(0,7), [y,m]=mon.split("-").map(Number), sel=new Set(mustDates(p));
@@ -1272,7 +1293,7 @@ function staffHTML(){
   const slotEdit=ui.slotEdit?`<div class="tbl-wrap slotedit" style="margin-top:12px"><table><thead><tr><th>자리</th><th>근무시간</th></tr></thead><tbody>
     ${pos.map(x=>`<tr data-ptime="${x.id}"><td>${esc(x.label)}</td><td><input value="${esc(posTime(x))}" placeholder="11:00~20:00"></td></tr>`).join("")}
     </tbody></table></div>`:"";
-  return `${staffMap(res,extra)}<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">근무표</h3><button class="btn small noprint" id="slotEditBtn">${ui.slotEdit?"닫기":"자리 시간 바꾸기"}</button></div>${slotEdit}${grid}</div>${nightHTML()}<div class="panel" style="margin-top:16px"><h3>필요 인원</h3>${plan}</div><div class="panel" style="margin-top:16px"><h3>인원 명단</h3>
+  return `${staffMap(res,extra)}<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">근무표</h3><button class="btn small noprint" id="slotEditBtn">${ui.slotEdit?"닫기":"자리 시간 바꾸기"}</button></div>${slotEdit}${grid}</div>${nightHTML()}<div class="panel" style="margin-top:16px"><h3>필요 인원</h3>${plan}</div>${budgetHTML()}<div class="panel" style="margin-top:16px"><h3>인원 명단</h3>
   <div class="group-h"><h4>운영매니저 <span class="muted small">매일 근무 · 1명</span></h4></div>
   <label class="f" style="max-width:240px">이름<input id="mgrName" value="${esc(mgr?mgr.name:"")}" placeholder="운영매니저 이름"></label>
   ${lockBar()}
@@ -1303,6 +1324,7 @@ function bindStaff(){
     tr.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=()=>{ const k=b.dataset.sdel; if(!confirm("이 사진을 지울까요?")) return; remove("files",p()[k]); save("staff",{...p(),[k]:""}); });
   });
   bindLock(); bindRota();
+  [["payMonthly","monthly"],["payNights","nightsPerWeek"]].forEach(([id,k])=>{ const el=$("#"+id); if(el) el.onchange=()=>save("settings",{...payCfg(),id:"cfg-pay",[k]:+el.value||0}); });
   document.querySelectorAll("tr[data-mfor]").forEach(tr=>{ const p=()=>state.staff.find(x=>x.id===tr.dataset.mfor);
     tr.querySelectorAll("[data-mday]").forEach(b=>b.onclick=()=>{ const d=b.dataset.mday, ds=mustDates(p()); ui.mustMon=d.slice(0,7); save("staff",{...p(),mustDates:(ds.includes(d)?ds.filter(x=>x!==d):[...ds,d]).sort()}); });
     tr.querySelectorAll("[data-mnav]").forEach(b=>b.onclick=()=>{ const ms=["2026-12","2027-01","2027-02"], cur=ui.mustMon||(mustDates(p())[0]||OPEN_FROM).slice(0,7); ui.mustMon=ms[Math.max(0,Math.min(2,ms.indexOf(cur)+(+b.dataset.mnav)))]; render(); }); });
