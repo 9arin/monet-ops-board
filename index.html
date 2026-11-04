@@ -177,6 +177,23 @@ tr.cand-row>td>*{position:sticky;left:10px;max-width:min(960px,calc(100vw - 96px
 .cand .t{font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
 .slotedit td input{min-width:90px}
 .kindseg{flex-wrap:wrap}
+table.rota{border-collapse:collapse;min-width:640px}
+table.rota th,table.rota td{border:1px solid var(--line);padding:5px 4px;text-align:center;font-size:12.5px;vertical-align:middle}
+table.rota th{background:var(--soft);color:var(--ink);font-size:13px}
+table.rota th.we{color:var(--accent)}
+table.rota .rl{text-align:left;font-weight:600;white-space:nowrap;min-width:120px;background:var(--panel)}
+table.rota tr.sec th{text-align:left;background:var(--brand);color:var(--panel);font-size:12.5px;padding:4px 8px}
+table.rota tr.sec th .small{opacity:.8;font-weight:400}
+table.rota tr.sec select{font-size:12px;padding:0 2px;border-radius:4px;border:0}
+table.rota .brk{display:block;font-weight:400;font-size:11px;color:var(--muted)}
+table.rota td.cov{background:var(--warnbg)}
+table.rota td.gap{background:var(--badbg);color:var(--bad);font-weight:700}
+table.rota td.nt{background:var(--okbg);line-height:1.5}
+table.rota tr.offrow td{color:var(--muted);line-height:1.5;vertical-align:top}
+table.rota tr.sum td.ok{color:var(--ok);font-weight:600}
+table.rota tr.sum td.bad{color:var(--bad);font-weight:600}
+.printonly{display:none}
+@media print{.printonly{display:inline}}
 table.week td{vertical-align:middle}
 .wkname{min-width:120px}
 .wkname input{display:block;margin-bottom:2px}
@@ -404,51 +421,73 @@ async function loadAll(){
 }
 // 배치도 자리 수가 바뀌면(처음 포함): 구역마다 고정 + 대체 인원을 채우고, 매일 자리가 다 차도록 휴무(연속 2일)를 짜요.
 // 있는 사람의 이름 등은 그대로. 휴무표가 이미 맞으면 건드리지 않아요. 같은 자리 구성에선 한 번만 돌아요.
+// 야간: 매주 하루 19:30~22:30, 알바 NIGHT_ALBA명 + 운영매니저. 휴게 없음. 야간도 근무 1일로 쳐요.
+const NIGHT_TIME="19:30~22:30";
+const nightCfg=()=>({dow:4,alba:4,...(state.settings.find(x=>x.id==="cfg-night")||{})});
+const dayDays=p=>7-(p.off||[]).length;
+const weekCount=p=>dayDays(p)+(p.night?1:0);
+function needTargets(pos){ // 층마다 필요 인원 (야간 인원까지 주5일 안에서 채우도록)
+  const nc=nightCfg(), need={}, target={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
+  const zones=ALLG.filter(g=>need[g.id]); zones.forEach(g=>target[g.id]=needFor(need[g.id]));
+  const slack=()=>zones.reduce((s,g)=>s+WORK_DAYS*target[g.id]-7*need[g.id],0);
+  while(zones.length&&slack()<+nc.alba){ const g=zones.slice().sort((a,b)=>need[b.id]-need[a.id])[0]; target[g.id]++; }
+  return {need,target};
+}
 let rosterChecked=false;
 function syncRoster(){
   if(!loaded.settings||!loaded.staff||!loaded.markers) return;
   const pos=positions(); if(!pos.some(x=>x.marker)) return;
-  const need={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
-  const sig=Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|");
+  const nc=nightCfg(), need={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
+  const sig=Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+`|night:${nc.dow}:${nc.alba}`;
   const cfg=state.settings.find(x=>x.id==="cfg-roster3");
-  // 자리 구성이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 알바가 딱 맞지 않으면 다시 짜요
-  const exact=()=>{ const {res,extra}=coverage(); return DAYS.every((_,d)=>!extra[d].length&&pos.every(x=>res[x.id][d].who)); };
+  const nightOk=list=>{ const crew=list.filter(p=>p.night); return crew.length===+nc.alba&&crew.every(p=>(p.off||[]).includes(+nc.dow)&&weekCount(p)<=WORK_DAYS); };
+  // 자리 구성·야간이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 딱 맞지 않으면 다시 짜요
+  const exact=()=>{ const {res,extra}=coverage(); return DAYS.every((_,d)=>!extra[d].length&&pos.every(x=>res[x.id][d].who))&&nightOk(alba()); };
   const recheck=!rosterChecked; rosterChecked=true;
   if(cfg&&cfg.sig===sig&&!(recheck&&!exact())) return;
   const ppl=alba().slice().sort((a,b)=>(a.order||0)-(b.order||0)), changed=new Map();
   const floorOf=p=>(ALLG.find(g=>g.id===pgroup(p))||{}).floor;
-  const spare=ppl.filter(p=>!need[pgroup(p)]); // 자리 없는 구역·예전 로테이션 사람
-  const zones=ALLG.filter(g=>need[g.id]), mem={};
+  const spare=ppl.filter(p=>!need[pgroup(p)]);
+  const zones=ALLG.filter(g=>need[g.id]), mem={}, target={};
+  // 필요 인원: 층마다 (자리×7÷5 올림), 남는 근무일이 야간 인원보다 적으면 자리가 많은 층에 한 명씩 더
+  Object.assign(target,needTargets(pos).target);
   let n=Math.max(0,...ppl.map(p=>parseInt(String(p.code||"").replace(/\D/g,""))||0)), ord=Math.max(0,...ppl.map(p=>p.order||0));
   const move=(p,g)=>{ const q={...p,group:g.id,slot:"",pos:""}; changed.set(q.id,true); return q; };
-  zones.forEach(g=>{ const N=needFor(need[g.id]); mem[g.id]=ppl.filter(p=>pgroup(p)===g.id);
-    while(mem[g.id].length<N){ const si=spare.findIndex(p=>floorOf(p)===g.floor);
+  zones.forEach(g=>{ mem[g.id]=ppl.filter(p=>pgroup(p)===g.id);
+    while(mem[g.id].length<target[g.id]){ const si=spare.findIndex(p=>floorOf(p)===g.floor);
       let id=`p-auto-${g.id}-${mem[g.id].length+1}`; if(state.staff.some(x=>x.id===id)) id=uid("p");
       const q=si>=0?move(spare.splice(si,1)[0],g):{id,code:"R"+(++n),order:++ord,name:"",status:"모집 중",memo:"",group:g.id,slot:"",off:[]};
       changed.set(q.id,true); mem[g.id].push(q); } });
-  spare.splice(0).forEach(p=>{ // 남는 사람도 구역에 넣어서 하루 인원이 늘지 않게 (쉬는 날이 늘어남)
-    const g=zones.filter(z=>z.floor===floorOf(p)).concat(zones).sort((a,b)=>(mem[a.id].length/need[a.id])-(mem[b.id].length/need[b.id]))[0];
-    mem[g.id].push(move(p,g)); });
-  const drop=[];
-  zones.forEach(g=>{ const N=needFor(need[g.id]); // 필요보다 많으면, 이름 없는 '모집 중' 빈 칸부터 정리
-    const blank=p=>!p.name&&!p.memo&&(p.status||"모집 중")==="모집 중"&&!p.idFile&&!p.bankFile;
-    mem[g.id].slice().sort((a,b)=>(b.order||0)-(a.order||0)).forEach(p=>{ if(mem[g.id].length>N&&blank(p)){ mem[g.id]=mem[g.id].filter(x=>x!==p); drop.push(p.id); changed.delete(p.id); } }); });
+  spare.splice(0).forEach(p=>{ const g=zones.filter(z=>z.floor===floorOf(p)).concat(zones).sort((a,b)=>(mem[a.id].length/need[a.id])-(mem[b.id].length/need[b.id]))[0]; mem[g.id].push(move(p,g)); });
+  const drop=[], blank=p=>!p.name&&!p.memo&&(p.status||"모집 중")==="모집 중"&&!p.idFile&&!p.bankFile;
+  zones.forEach(g=>{ mem[g.id].slice().sort((a,b)=>(b.order||0)-(a.order||0)).forEach(p=>{ if(mem[g.id].length>target[g.id]&&blank(p)){ mem[g.id]=mem[g.id].filter(x=>x!==p); drop.push(p.id); changed.delete(p.id); } }); });
+  // 고정·대체, 고정 자리
   zones.forEach(g=>{ const P=need[g.id]; let m=mem[g.id];
     m.sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0));
     m=m.map((p,i)=>{const kind=i<P?"담당":"대타"; if(p.kind!==kind){changed.set(p.id,true); return {...p,kind};} return p;});
-    // 고정 인원은 자리 하나씩 (원래 자리 우선), 대체 인력은 자리 없음
     const gpos=pos.filter(x=>x.group===g.id), taken=new Set();
     const pick=p=>{ let x=gpos.find(y=>y.id===p.pos&&!taken.has(y.id))||gpos.find(y=>!taken.has(y.id)&&y.slot&&p.slot&&y.slot.id===p.slot)||gpos.find(y=>!taken.has(y.id)); if(x) taken.add(x.id); return x?x.id:""; };
-    m=m.map((p,i)=>{ const want=i<P?pick(p):""; if((p.pos||"")!==want){ changed.set(p.id,true); return {...p,pos:want}; } return p; });
-    // 매일 딱 P명: 쉬는 날 합계 = 7×(사람 수 − P)를 고르게 나눠요 (주5일, 사람이 많으면 주4일 등)
-    const ok=m.every(p=>(p.off||[]).length>=7-WORK_DAYS)&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length===P);
-    if(!ok){ const total=7*(m.length-P), base=Math.floor(total/m.length), more=total%m.length; let at=0;
-      m=m.map((p,i)=>{ const k=base+(i>=m.length-more?1:0); // 이어지는 날로 쉬기 → 요일마다 쉬는 사람 수가 똑같음
-        const off=Array.from({length:k},(_,j)=>(at+j)%7).sort((x,y)=>x-y); at+=k; changed.set(p.id,true); return {...p,off}; }); }
-    m.forEach(p=>{ if(changed.has(p.id)) changed.set(p.id,p); }); });
+    mem[g.id]=m.map((p,i)=>{ const want=i<P?pick(p):""; if((p.pos||"")!==want){ changed.set(p.id,true); return {...p,pos:want}; } return p; }); });
+  // 휴무: 층마다 매일 딱 P명. 쉬는 날 합계 7×(사람−P)를 이어지는 날로 고르게 나누고,
+  // 하루 더 쉬는 사람(주4일)이 야간 요일에 쉬도록 시작 요일을 골라요 → 그 사람이 야간에 들어가면 주5일
+  const dow=+nc.dow, plan=(m,P,r)=>{ const total=7*(m.length-P), base=Math.floor(total/m.length), more=total%m.length; let at=r;
+    return m.map((p,i)=>{ const k=base+(i>=m.length-more?1:0), off=Array.from({length:k},(_,j)=>(at+j)%7).sort((x,y)=>x-y); at+=k; return off; }); };
+  const allOk=zones.every(g=>{ const P=need[g.id], m=mem[g.id]; return m.every(p=>(p.off||[]).length>=7-WORK_DAYS)&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length===P); })&&nightOk(zones.flatMap(g=>mem[g.id]));
+  if(!allOk){
+    zones.forEach(g=>{ const P=need[g.id], m=mem[g.id];
+      const score=r=>plan(m,P,r).filter(o=>o.includes(dow)&&7-o.length<WORK_DAYS).length*10-plan(m,P,r).flat().filter(d=>d>=5).length/100;
+      const r=[0,1,2,3,4,5,6].reduce((a,b)=>score(b)>score(a)?b:a,0), offs=plan(m,P,r);
+      mem[g.id]=m.map((p,i)=>{ changed.set(p.id,true); return {...p,off:offs[i]}; }); });
+    // 야간 인원: 야간 요일에 주간을 쉬는 사람 중, 주간 근무일이 적은 사람부터 (야간 포함해도 주5일 넘지 않게)
+    const everyone=zones.flatMap(g=>mem[g.id]);
+    const crew=everyone.filter(p=>p.off.includes(dow)&&dayDays(p)<WORK_DAYS).sort((a,b)=>dayDays(a)-dayDays(b)||(a.kind==="대타"?0:1)-(b.kind==="대타"?0:1)||(a.order||0)-(b.order||0)).slice(0,+nc.alba).map(p=>p.id);
+    zones.forEach(g=>{ mem[g.id]=mem[g.id].map(p=>{ const v=crew.includes(p.id); if(!!p.night!==v){ changed.set(p.id,true); return {...p,night:v}; } return p; }); });
+    if(crew.length<+nc.alba) toast(`야간에 넣을 사람이 ${+nc.alba-crew.length}명 모자라요`);
+  }
+  zones.forEach(g=>mem[g.id].forEach(p=>{ if(changed.has(p.id)) changed.set(p.id,p); }));
   changed.forEach(p=>save("staff",p,true)); drop.forEach(id=>remove("staff",id));
   save("settings",{id:"cfg-roster3",sig,at:new Date().toISOString()},true);
-  if(changed.size||drop.length) toast(`매일 알바 ${DAILY_ALBA}명이 되도록 휴무표를 다시 맞췄어요`);
+  if(changed.size||drop.length) toast(`근무표를 다시 맞췄어요 (매일 알바 ${DAILY_ALBA}명, 야간 주1회 ${nc.alba}명)`);
 }
 // 한 번만: 4층 바닥 스티커마다 신세계 POP를 바로 위에 하나씩 (처리한 스티커엔 popDone 표시, 이후 새 스티커엔 안 함)
 function popOnStickers(){
@@ -979,97 +1018,34 @@ const slotForLabel=label=>{ const l=String(label||""); // 바꾼 이름·원래 
   let best=null,len=0; Object.values(SLOT).forEach(s=>[s.name,SLOT_ORIG[s.id].name].forEach(n=>{ if(l.startsWith(n)&&n.length>len){best=s;len=n.length;} })); return best; };
 
 /* ----- staff ----- */
-/* ----- 야간 (날짜별 추가 근무) ----- */
-const NIGHT_TIME="19:30~22:30";
 const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const dowOf=date=>(new Date(date+"T00:00").getDay()+6)%7;
-const weekOf=date=>{ const d=new Date(date+"T00:00"); d.setDate(d.getDate()-dowOf(date)); return ymd(d); };
-const onDay=(p,d)=>!(p.off||[]).includes(d);
-// 그 주(월~일)에 실제로 나오는 날 수 = 주간 근무 요일 + 쉬는 날에 들어간 야간
-const weekDays=(p,wk)=>{ const s=new Set(DAYS.map((_,d)=>d).filter(d=>onDay(p,d)));
-  state.nights.forEach(n=>{ if(n.date&&weekOf(n.date)===wk&&(n.people||[]).includes(p.id)) s.add(dowOf(n.date)); }); return s.size; };
-function nightCands(n){ const wk=weekOf(n.date), d=dowOf(n.date);
-  return alba().filter(p=>!(n.people||[]).includes(p.id)).map(p=>({p,days:weekDays(p,wk),day:onDay(p,d)}))
-    .sort((a,b)=>(a.day?1:0)-(b.day?1:0)||(a.days>=WORK_DAYS?1:0)-(b.days>=WORK_DAYS?1:0)||a.days-b.days||(a.p.order||0)-(b.p.order||0)); }
-function autoNight(n){ // 그날 쉬는 사람 중 그 주 5일이 안 되는 사람부터. 인원을 비워 두면 가능한 사람 모두
-  const people=[...(n.people||[])];
-  for(;;){ if(n.need&&people.length>=+n.need) break;
-    const c=nightCands({...n,people}).find(x=>!x.day&&x.days<WORK_DAYS); if(!c) break; people.push(c.p.id); }
-  if(people.length===(n.people||[]).length){ toast("더 넣을 수 있는 사람이 없어요 (그날 쉬면서 그 주 5일이 안 되는 사람)."); return; }
-  save("nights",{...n,people});
-}
-function nightsHTML(){
-  const ns=state.nights.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
-  const nm=id=>{const p=state.staff.find(x=>x.id===id); return p?pname(p):"(삭제됨)";};
-  const rows=ns.map(n=>{ const wk=n.date?weekOf(n.date):"", d=n.date?dowOf(n.date):0;
-    const chips=(n.people||[]).map(id=>{const p=state.staff.find(x=>x.id===id); const k=p?weekDays(p,wk):0, clash=p&&onDay(p,d);
-      return `<span class="chip nchip" style="${clash||k>WORK_DAYS?"border-color:var(--bad)":""}">${esc(nm(id))} <span class="num muted">주${k}일${clash?" · 주간도 근무":""}</span><button class="x" data-nrm="${id}" aria-label="빼기">×</button></span>`;}).join("");
-    const opts=n.date?nightCands(n).map(x=>`<option value="${x.p.id}">${esc(pname(x.p))} · 주${x.days}일${x.day?" · 주간 근무":""}</option>`).join(""):"";
-    return `<tr data-night="${n.id}"><td style="min-width:150px"><input type="date" data-nf="date" value="${esc(n.date||"")}" min="2026-12-03" max="2027-02-28"> <span class="small muted">${n.date?DAYS[d]:""}</span></td>
-      <td style="width:80px"><input type="number" min="0" data-nf="need" value="${esc(n.need||"")}" placeholder="미정"></td>
-      <td><div class="row" style="gap:4px">${chips}${n.date?`<select class="nadd"><option value="">+ 사람</option>${opts}</select>`:""}</div></td>
-      <td><button class="btn small" data-nauto ${n.date?"":"disabled"}>자동 배정</button></td><td><button class="x" data-ndel aria-label="삭제">${ui.confirmDel===n.id?"삭제?":"×"}</button></td></tr>`; }).join("");
-  const four=alba().filter(p=>7-(p.off||[]).length<WORK_DAYS).length;
-  return `<div class="panel" style="margin-top:16px"><h3>야간 ${NIGHT_TIME}</h3>
-    <p class="small muted" style="margin:0 0 8px">주${WORK_DAYS}일이 안 되는 사람 ${four}명</p>
-    ${ns.length?`<div class="tbl-wrap"><table><thead><tr><th>날짜</th><th>인원</th><th>배정</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`:""}
-    <form class="addform three" id="addNight"><label class="f">날짜<input type="date" id="nn-date" min="2026-12-03" max="2027-02-28"></label>
-      <label class="f">인원<input type="number" id="nn-need" min="0" placeholder="미정"></label><button class="btn primary" type="submit">야간 추가</button></form></div>`;
-}
-function bindNights(){
-  document.querySelectorAll("tr[data-night]").forEach(tr=>{ const n=()=>state.nights.find(x=>x.id===tr.dataset.night);
-    tr.querySelectorAll("[data-nf]").forEach(el=>el.onchange=()=>save("nights",{...n(),[el.dataset.nf]:el.value.trim()}));
-    tr.querySelectorAll("[data-nrm]").forEach(b=>b.onclick=()=>save("nights",{...n(),people:(n().people||[]).filter(x=>x!==b.dataset.nrm)}));
-    const sel=tr.querySelector(".nadd"); if(sel) sel.onchange=()=>{ if(sel.value) save("nights",{...n(),people:[...(n().people||[]),sel.value]}); };
-    tr.querySelector("[data-nauto]").onclick=()=>autoNight(n());
-    tr.querySelector("[data-ndel]").onclick=()=>{ if(ui.confirmDel===n().id){ui.confirmDel=null;remove("nights",n().id);} else {ui.confirmDel=n().id;render();} };
-  });
-  $("#addNight").onsubmit=e=>{e.preventDefault(); const date=$("#nn-date").value; if(!date){toast("날짜를 골라 주세요");return;}
-    const n={id:uid("n"),date,need:$("#nn-need").value,people:[],time:NIGHT_TIME}; save("nights",n); autoNight(n); };
-}
-/* ----- 주간 근무표 (사람별 근무·휴게 시간, 슬라이더로 조절) ----- */
-const T0=8*60, T1=23*60;
-const hm=m=>`${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`;
 const toMin=t=>{const m=String(t||"").match(/(\d{1,2}):(\d{2})/); return m?(+m[1])*60+(+m[2]):null;};
-function shiftOf(p,pos){ // 사람 시간이 없으면 맡은 자리 시간에서 가져와요
-  const x=(pos||positions()).find(y=>y.id===p.pos), sl=(x&&x.slot)||SLOT[p.slot];
-  const [a,b]=String(sl?sl.time:"11:00~20:00").split("~").map(toMin), br=String(sl?sl.brk:"").split("~").map(toMin);
-  const start=p.tStart??a??660, end=p.tEnd??b??1200, bl=p.bLen??(br[0]!=null&&br[1]!=null?br[1]-br[0]:60);
-  const bs=Math.min(Math.max(p.bStart??br[0]??Math.round((start+end)/60)*30,start),Math.max(start,end-bl));
-  return {start,end,bs,bl,net:Math.max(0,end-start-bl)};
+
+/* ----- 근무표 (요일 × 근무 시간대, 이름) ----- */
+const posCfg=()=>(state.settings.find(x=>x.id==="cfg-pos")||{}).pos||{};
+const posTime=x=>(posCfg()[x.id]||{}).time||(x.slot&&x.slot.time)||"11:00~20:00";
+const posBrk=x=>{ const b=(posCfg()[x.id]||{}).brk||(x.slot&&x.slot.brk)||""; return /\d:\d\d/.test(b)?b.split("~")[0]:""; };
+function rotaHTML(pos,res){
+  const nc=nightCfg(), dow=+nc.dow, mgr=state.staff.find(isMgr), ppl=alba();
+  const secs={}; pos.forEach(x=>(secs[posTime(x)]=secs[posTime(x)]||[]).push(x));
+  const keys=Object.keys(secs).sort((a,b)=>toMin(a)-toMin(b));
+  const head=`<tr><th class="rl">근무</th>${DAYS.map((d,i)=>`<th class="${i>=5?"we":""}">${d}</th>`).join("")}</tr>`;
+  const sec=(title,sub)=>`<tr class="sec"><th colspan="8">${title}${sub?` <span class="small">${sub}</span>`:""}</th></tr>`;
+  const net=t=>{ const [a,b]=t.split("~").map(toMin); return a!=null&&b!=null?(b-a-60)/60:null; };
+  let body=keys.map(t=>sec(t,`휴게 1시간 · 하루 ${net(t)}시간`)+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${esc(x.label)}${posBrk(x)?`<span class="brk">☕ ${posBrk(x)}</span>`:""}</td>${DAYS.map((_,d)=>{ const c=res[x.id][d];
+      if(c.kind==="gap") return `<td class="gap">빈자리</td>`;
+      return `<td class="${c.kind==="cover"?"cov":""}">${esc(pname(c.who))}</td>`; }).join("")}</tr>`).join("")).join("");
+  const crew=ppl.filter(p=>p.night);
+  body+=sec(`야간 ${NIGHT_TIME}`,`휴게 없음 · 매주 <select id="nightDow" class="noprint">${DAYS.map((d,i)=>`<option value="${i}" ${i===dow?"selected":""}>${d}</option>`).join("")}</select><span class="printonly">${DAYS[dow]}</span>요일 · 알바 ${nc.alba}명 + 운영매니저`)
+    +`<tr class="night"><td class="rl">야간</td>${DAYS.map((_,d)=>d===dow?`<td class="nt">${[mgr?`<b>${esc(pname(mgr)||"매니저")}</b>`:"",...crew.map(p=>esc(pname(p)))].filter(Boolean).join("<br>")}</td>`:`<td></td>`).join("")}</tr>`;
+  body+=sec("운영매니저","매일")+`<tr><td class="rl">매니저</td>${DAYS.map(()=>`<td>${esc(mgr?pname(mgr)||"매니저":"매니저")}</td>`).join("")}</tr>`;
+  body+=sec("휴무","")+`<tr class="offrow"><td class="rl">휴무</td>${DAYS.map((_,d)=>`<td>${ppl.filter(p=>(p.off||[]).includes(d)&&!(p.night&&d===dow)).map(p=>esc(pname(p))).join("<br>")}</td>`).join("")}</tr>`;
+  body+=`<tr class="sum"><td class="rl">인원</td>${DAYS.map((_,d)=>{ const t=pos.filter(x=>res[x.id][d].who).length; return `<td class="${t===DAILY_ALBA?"ok":"bad"}">알바 ${t}${d===dow?`<br>+야간 ${crew.length}`:""}</td>`; }).join("")}</tr>`;
+  return `<div class="tbl-wrap"><table class="rota">${head}${body}</table></div>`;
 }
-const pct=m=>((m-T0)/(T1-T0)*100).toFixed(2);
-const tline=t=>`<div class="tline"><span class="tw" style="left:${pct(t.start)}%;width:${(pct(t.end)-pct(t.start)).toFixed(2)}%"></span>${t.bl?`<span class="tb" style="left:${pct(t.bs)}%;width:${(pct(t.bs+t.bl)-pct(t.bs)).toFixed(2)}%"></span>`:""}</div>`;
-function weekHTML(pos){
-  const ppl=alba().sort((a,b)=>(pgroup(a)>pgroup(b)?1:pgroup(a)<pgroup(b)?-1:0)||(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0));
-  const rows=ppl.map(p=>{ const t=shiftOf(p,pos), wd=7-(p.off||[]).length, h=wd*t.net/60;
-    return `<tr data-wk="${p.id}"><td class="wkname"><input data-wf="name" value="${esc(p.name||"")}" placeholder="${esc(p.code||"이름")}"><span class="small muted">${(ALLG.find(g=>g.id===pgroup(p))||{}).name||""} · ${p.kind==="대타"?"대체":"고정"}</span></td>
-      <td class="trange">${tline(t)}
-        <label class="rr">시작 <b class="num" data-lbl="start">${hm(t.start)}</b><input type="range" min="${T0}" max="${T1}" step="30" value="${t.start}" data-t="tStart"></label>
-        <label class="rr">끝 <b class="num" data-lbl="end">${hm(t.end)}</b><input type="range" min="${T0}" max="${T1}" step="30" value="${t.end}" data-t="tEnd"></label></td>
-      <td class="trange"><label class="rr wide">휴게 <b class="num" data-lbl="brk">${t.bl?hm(t.bs)+"~"+hm(t.bs+t.bl):"없음"}</b><input type="range" min="${T0}" max="${T1}" step="30" value="${t.bs}" data-t="bStart"></label>
-        <select data-t="bLen">${[0,30,60,90].map(n=>`<option value="${n}" ${t.bl===n?"selected":""}>${n?n+"분":"없음"}</option>`).join("")}</select></td>
-      ${DAYS.map((d,i)=>{const on=!(p.off||[]).includes(i); return `<td class="wkd"><button class="wkcell ${on?"on":""}" data-woff="${i}" aria-pressed="${!on}" aria-label="${d}요일 ${on?"근무":"휴무"}">${on?`<span class="num" data-lbl="day">${hm(t.start)}<br>${hm(t.end)}</span>`:"휴무"}</button></td>`;}).join("")}
-      <td class="r num" data-lbl="week" style="color:${h>40?"var(--bad)":"inherit"}">${wd}일<br>${+h.toFixed(1)}h</td></tr>`; }).join("");
-  return `<div class="panel" style="margin-top:16px"><h3>주간 근무표</h3>
-    <div class="tbl-wrap"><table class="week"><thead><tr><th>이름</th><th>근무시간</th><th>휴게</th>${DAYS.map(d=>`<th class="wkd">${d}</th>`).join("")}<th class="r">주 근무<br><span class="small">(휴게 뺌)</span></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
-}
-function bindWeek(){
-  document.querySelectorAll("tr[data-wk]").forEach(tr=>{ const p=()=>state.staff.find(x=>x.id===tr.dataset.wk);
-    const read=()=>{ const v=k=>+tr.querySelector(`[data-t="${k}"]`).value; let start=v("tStart"), end=v("tEnd"), bl=v("bLen"), bs=v("bStart");
-      if(end<start+60) end=Math.min(T1,start+60), start=Math.min(start,end-60);
-      bs=Math.min(Math.max(bs,start),Math.max(start,end-bl)); return {start,end,bs,bl,net:Math.max(0,end-start-bl)}; };
-    const paint=()=>{ const t=read(), wd=7-(p().off||[]).length, h=wd*t.net/60;
-      tr.querySelector(".tline").outerHTML=tline(t);
-      tr.querySelector('[data-lbl="start"]').textContent=hm(t.start); tr.querySelector('[data-lbl="end"]').textContent=hm(t.end);
-      tr.querySelector('[data-lbl="brk"]').textContent=t.bl?hm(t.bs)+"~"+hm(t.bs+t.bl):"없음";
-      tr.querySelectorAll('[data-lbl="day"]').forEach(el=>el.innerHTML=`${hm(t.start)}<br>${hm(t.end)}`);
-      const w=tr.querySelector('[data-lbl="week"]'); w.innerHTML=`${wd}일<br>${+h.toFixed(1)}h`; w.style.color=h>40?"var(--bad)":"inherit"; return t; };
-    const commit=()=>{ const t=paint(); save("staff",{...p(),tStart:t.start,tEnd:t.end,bStart:t.bs,bLen:t.bl},true); };
-    tr.querySelectorAll("[data-t]").forEach(el=>{ el.oninput=paint; el.onchange=commit; });
-    tr.querySelector('[data-wf="name"]').onchange=e=>save("staff",{...p(),name:e.target.value.trim()});
-    tr.querySelectorAll("[data-woff]").forEach(b=>b.onclick=()=>{const i=+b.dataset.woff; const o=new Set(p().off||[]); o.has(i)?o.delete(i):o.add(i); save("staff",{...p(),off:[...o].sort()});});
-  });
+function bindRota(){
+  const nd=$("#nightDow"); if(nd) nd.onchange=()=>{ save("settings",{...nightCfg(),id:"cfg-night",dow:+nd.value}); syncRoster(); };
 }
 function staffMap(res,extra){
   const d=ui.staffDay;
@@ -1087,14 +1063,15 @@ function staffHTML(){
   if(!loaded.staff) return loadingOrEmpty("staff","");
   const {res,extra,pos}=coverage();
   const ppl=alba(), mgr=state.staff.find(isMgr);
-  const P=g=>pos.filter(x=>x.group===g.id).length, N=g=>needFor(P(g)), M=g=>ppl.filter(p=>pgroup(p)===g.id).length;
+  const tg=needTargets(pos).target, nc=nightCfg();
+  const P=g=>pos.filter(x=>x.group===g.id).length, N=g=>tg[g.id]||0, M=g=>ppl.filter(p=>pgroup(p)===g.id).length;
   const shown=ALLG.filter(g=>P(g)||M(g));
   const loose=ppl.filter(p=>!ALLG.some(g=>g.id===pgroup(p)));
   const T=pos.length, NT=shown.reduce((s,g)=>s+N(g),0);
   const row=(p,s)=>{const wd=7-(p.off||[]).length;
     return `<tr data-id="${p.id}"><td class="num">${esc(p.code)}</td><td style="min-width:110px"><input data-f="name" value="${esc(p.name||"")}" placeholder="이름 넣기"></td><td>${p.kind==="대타"?"대체":`고정${(x=>x?" · "+esc(x.label):"")(pos.find(x=>x.id===p.pos))}`}</td>
       <td><div class="days">${DAYS.map((d,i)=>`<button data-off="${i}" aria-pressed="${(p.off||[]).includes(i)}" aria-label="${d}요일 휴무">${d}</button>`).join("")}</div></td>
-      <td class="r num" style="color:${wd>WORK_DAYS?"var(--bad)":wd<WORK_DAYS-1?"var(--warn)":"inherit"}">${wd}일 · ${+(wd*shiftOf(p,pos).net/60).toFixed(1)}h${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(state.nights.filter(n=>(n.people||[]).includes(p.id)).length)}</td>
+      <td class="r num" style="color:${weekCount(p)>WORK_DAYS?"var(--bad)":weekCount(p)<WORK_DAYS-1?"var(--warn)":"inherit"}">${weekCount(p)}일${p.night?`<br><span class="small muted">야간 포함</span>`:""}</td>
       <td><select data-f="status">${STAFF_STATUS.map(x=>`<option ${p.status===x?"selected":""}>${x}</option>`).join("")}</select></td>
       <td style="min-width:180px"><input data-f="memo" value="${esc(p.memo||"")}" placeholder="예: 주말 선호, 교육 필요"></td>
       ${unlocked()?["idFile","bankFile"].map(k=>`<td class="noprint">${p[k]?`<span class="row" style="flex-wrap:nowrap"><button class="linkbtn small" data-sview="${k}">보기</button><button class="x" data-sdel="${k}" aria-label="삭제">×</button></span>`:`<div class="drop sdrop" data-sdrop="${k}">+ 사진</div>`}</td>`).join(""):""}
@@ -1104,26 +1081,19 @@ function staffHTML(){
   const byG=shown.map(g=>{ const gpos=pos.filter(x=>x.group===g.id), s=(gpos.find(x=>x.slot)||{}).slot;
     return `<div class="group-h"><h4>${g.name} <span class="muted small">자리 ${P(g)}개 · 필요 ${N(g)}명 · 지금 ${M(g)}명</span></h4></div>${table(ppl.filter(p=>pgroup(p)===g.id),s)}`;}).join("")
     +(loose.length?`<div class="group-h"><h4>배치 없음 <span class="muted small">${loose.length}명 · 자리가 정해지지 않은 사람</span></h4></div>${table(loose,null)}`:"");
-  const summary=`<div class="tbl-wrap"><table><thead><tr><th>구역</th><th class="r">하루 자리</th><th class="r">고정</th><th class="r">대체 인력</th><th class="r">필요 인원</th><th class="r">지금</th></tr></thead><tbody>
-    ${shown.filter(g=>P(g)).map(g=>`<tr><td><b>${g.name}</b></td><td class="r num">${P(g)}</td><td class="r num">${P(g)}</td><td class="r num">${N(g)-P(g)}</td><td class="r num"><b>${N(g)}</b></td><td class="r num" style="color:${M(g)<N(g)?"var(--bad)":"inherit"}">${M(g)}</td></tr>`).join("")}
-    <tr><td><b>합계</b></td><td class="r num"><b>${T}</b></td><td class="r num">${T}</td><td class="r num">${NT-T}</td><td class="r num"><b>${NT}</b></td><td class="r num">${ppl.length}</td></tr></tbody></table></div>`;
-  const spare=positions.spare||[];
-  const plan=`<p style="margin:0 0 8px">하루 알바 <b>${DAILY_ALBA}명</b> + 운영매니저 1명 · 필요 <b>${NT}명</b> · 지금 <b style="color:${ppl.length<NT?"var(--bad)":"inherit"}">${ppl.length}명</b> <span class="small muted">(주${WORK_DAYS}일 ${ppl.filter(p=>7-(p.off||[]).length>=WORK_DAYS).length}명 · 그보다 적게 ${ppl.filter(p=>7-(p.off||[]).length<WORK_DAYS).length}명)</span>
+  const summary=`<div class="tbl-wrap"><table><thead><tr><th>층</th><th class="r">하루 자리</th><th class="r">필요 인원</th><th class="r">지금</th></tr></thead><tbody>
+    ${shown.filter(g=>P(g)).map(g=>`<tr><td><b>${g.name}</b></td><td class="r num">${P(g)}</td><td class="r num"><b>${N(g)}</b></td><td class="r num" style="color:${M(g)<N(g)?"var(--bad)":"inherit"}">${M(g)}</td></tr>`).join("")}
+    <tr><td><b>합계</b></td><td class="r num"><b>${T}</b></td><td class="r num"><b>${NT}</b></td><td class="r num">${ppl.length}</td></tr></tbody></table></div>`;
+  const spare=positions.spare||[], five=ppl.filter(p=>weekCount(p)>=WORK_DAYS).length;
+  const plan=`<p style="margin:0 0 8px">매일 알바 <b>${DAILY_ALBA}명</b> + 운영매니저 · 야간 주1회 알바 <b>${nc.alba}명</b> + 운영매니저 · 필요 <b>${NT}명</b> · 지금 <b style="color:${ppl.length<NT?"var(--bad)":"inherit"}">${ppl.length}명</b> <span class="small muted">(주${WORK_DAYS}일 ${five}명 · 그보다 적게 ${ppl.length-five}명)</span>
     ${T!==DAILY_ALBA?`<br><b style="color:var(--bad)">배치도 알바 자리 ${T}개 (${DAILY_ALBA}개여야 해요)</b>`:""}
     ${spare.length?`<br><span class="small muted">예비 자리: ${spare.map(x=>esc(x.label)).join(", ")}</span>`:""}</p>${summary}`;
-  const grid=`<div class="tbl-wrap"><table class="cov"><thead><tr><th>자리</th>${DAYS.map(d=>`<th style="text-align:center">${d}</th>`).join("")}</tr></thead><tbody>
-    ${pos.map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="slot">${esc(x.label)}</td>${DAYS.map((_,d)=>{const c=res[x.id][d];
-      if(c.kind==="gap") return `<td class="c-gap">빈자리</td>`;
-      return `<td class="${c.kind==="cover"?"c-cover":"c-main"}">${esc(pname(c.who))}${c.kind==="cover"?" (대체)":""}</td>`;}).join("")}</tr>`).join("")}
-    ${extra.some(e=>e.length)?`<tr data-pos="extra" class="${ui.hiPos==="extra"?"rowsel":""}"><td class="slot">남는 인원</td>${DAYS.map((_,d)=>`<td class="${extra[d].length?"c-gap":""}">${extra[d].map(pname).map(esc).join(", ")}</td>`).join("")}</tr>`:""}
-    <tr><td class="slot">하루 알바</td>${DAYS.map((_,d)=>{const t=pos.filter(x=>res[x.id][d].who).length;
-      const all=t+extra[d].length; return `<td class="num ${t===DAILY_ALBA&&!extra[d].length?"c-extra":"c-gap"}">알바 ${all}명<br>+ 매니저 = ${all+1}명</td>`;}).join("")}</tr>
-    </tbody></table></div>`;
+  const grid=rotaHTML(pos,res);
   const roles=ALLG.map(g=>`<option value="${g.id}:담당">${g.name} · 고정</option><option value="${g.id}:대타">${g.name} · 대체</option>`).join("");
-  const slotEdit=ui.slotEdit?`<div class="tbl-wrap slotedit" style="margin-top:12px"><table><thead><tr><th>자리 이름</th><th>근무시간</th><th>휴게</th></tr></thead><tbody>
-    ${GROUPS.map(g=>g.slots.map(s=>`<tr data-slot="${s.id}"><td><input data-sk="name" value="${esc(s.name)}"></td><td><input data-sk="time" value="${esc(s.time)}"></td><td><input data-sk="brk" value="${esc(s.brk)}"></td></tr>`).join("")).join("")}
+  const slotEdit=ui.slotEdit?`<div class="tbl-wrap slotedit" style="margin-top:12px"><table><thead><tr><th>자리</th><th>근무시간</th></tr></thead><tbody>
+    ${pos.map(x=>`<tr data-ptime="${x.id}"><td>${esc(x.label)}</td><td><input value="${esc(posTime(x))}" placeholder="11:00~20:00"></td></tr>`).join("")}
     </tbody></table></div>`:"";
-  return `${staffMap(res,extra)}<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">필요 인원 · 주간 자리 채움</h3><button class="btn small noprint" id="slotEditBtn">${ui.slotEdit?"자리 고치기 닫기":"자리 이름·시간 바꾸기"}</button></div>${slotEdit}${plan}${grid}</div>${weekHTML(pos)}${nightsHTML()}<div class="panel" style="margin-top:16px"><h3>인원 명단</h3>
+  return `${staffMap(res,extra)}<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">근무표</h3><button class="btn small noprint" id="slotEditBtn">${ui.slotEdit?"닫기":"자리 시간 바꾸기"}</button></div>${slotEdit}${grid}</div><div class="panel" style="margin-top:16px"><h3>필요 인원</h3>${plan}</div><div class="panel" style="margin-top:16px"><h3>인원 명단</h3>
   <div class="group-h"><h4>운영매니저 <span class="muted small">매일 근무 · 1명</span></h4></div>
   <label class="f" style="max-width:240px">이름<input id="mgrName" value="${esc(mgr?mgr.name:"")}" placeholder="운영매니저 이름"></label>
   ${lockBar()}
@@ -1151,7 +1121,10 @@ function bindStaff(){
     tr.querySelectorAll("[data-sview]").forEach(b=>b.onclick=()=>openSecret(p()[b.dataset.sview]));
     tr.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=()=>{ const k=b.dataset.sdel; if(!confirm("이 사진을 지울까요?")) return; remove("files",p()[k]); save("staff",{...p(),[k]:""}); });
   });
-  bindLock(); bindNights(); bindWeek();
+  bindLock(); bindRota();
+  document.querySelectorAll("tr[data-ptime] input").forEach(el=>el.onchange=()=>{ const id=el.closest("tr").dataset.ptime, v=el.value.trim();
+    if(v&&!/^\d{1,2}:\d{2}\s*~\s*\d{1,2}:\d{2}$/.test(v)){ toast("예: 11:00~20:00 처럼 적어 주세요"); return; }
+    const c=state.settings.find(x=>x.id==="cfg-pos")||{id:"cfg-pos",pos:{}}; save("settings",{...c,pos:{...c.pos,[id]:{...(c.pos||{})[id],time:v.replace(/\s/g,"")}}}); });
   $("#slotEditBtn").onclick=()=>{ui.slotEdit=!ui.slotEdit;render();};
   document.querySelectorAll("tr[data-slot]").forEach(tr=>tr.querySelectorAll("[data-sk]").forEach(el=>el.onchange=()=>{
     const cfg=state.settings.find(x=>x.id==="cfg-slots")||{id:"cfg-slots",slots:{}}; const id=tr.dataset.slot, k=el.dataset.sk;
