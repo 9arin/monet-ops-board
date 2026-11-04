@@ -476,8 +476,10 @@ function nightCrews(){
   const baseH={}; ppl.forEach(p=>baseH[p.id]=dayDays(p)*personNet(p,pos));
   nc.dates.forEach(d=>(weeks[weekKey(d)]=weeks[weekKey(d)]||[]).push(d));
   Object.values(weeks).forEach(ds=>{ const add={}, todo=ds.slice();
-    const load=p=>dayDays(p)+NIGHT_W*(add[p.id]||0), hrs=p=>baseH[p.id]+NIGHT_H*(add[p.id]||0);
-    const cands=date=>ppl.filter(p=>(p.off||[]).includes(dowOf(date))&&!mustDates(p).includes(date)&&(add[p.id]||0)<NIGHT_MAX&&load(p)+NIGHT_W<=WORK_DAYS&&hrs(p)+NIGHT_H<=MAX_H)
+    // 야간을 하면 40시간이 넘는 사람은 그 주 주간 하루를 빼요 (지원 근무가 있는 날에서)
+    const hrs=p=>{ const n=add[p.id]||0, h=baseH[p.id]+NIGHT_H*n; return h>MAX_H?h-personNet(p,pos):h; };
+    const after=p=>{ const n=(add[p.id]||0)+1, h=baseH[p.id]+NIGHT_H*n; return h>MAX_H?h-personNet(p,pos):h; };
+    const cands=date=>ppl.filter(p=>(p.off||[]).includes(dowOf(date))&&!mustDates(p).includes(date)&&(add[p.id]||0)<NIGHT_MAX&&after(p)<=MAX_H)
       .sort((a,b)=>hrs(a)-hrs(b)||(total[a.id]||0)-(total[b.id]||0)||(a.order||0)-(b.order||0));
     const man=nc.crew||{}; // 직접 고른 날은 그대로
     const isMan=d=>Array.isArray(man[d])&&man[d].length; // 비워 둔 날은 자동
@@ -498,17 +500,13 @@ function poolPlan(P,D,k){
   for(let i=0;i<k;i++){ sizes.push(nOff); if(i<k-1) for(let j=0;j<f;j++) sizes.push(fOff); }
   return {sizes,m:sizes.length,five:sizes.filter(x=>x===fOff).length};
 }
-function needTargets(pos){ // 층마다 필요 인원과 휴무 칸 (주 40시간 안, 야간 인원 포함, 주5일 근무자 최대)
+function needTargets(pos){ // 층마다 필요 인원: 모두 주 D일(40시간) 계약 기준. 야간 주에는 야간 담당이 하루씩 빠지니 그만큼 여유를 둬요
   const nc=nightCfg(), need={}, target={}, plan={}, D={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
-  const zones=ALLG.filter(g=>need[g.id]); zones.forEach(g=>D[g.id]=poolDays(g.id,pos));
-  const N=+nc.alba*Math.ceil(nightStats().perWeek/NIGHT_MAX); // 야간 담당 수 (한 사람 주 2번까지)
-  let best=null; const split=(i,left,acc)=>{ if(i===zones.length-1){ const all=[...acc,left], ps=zones.map((g,j)=>poolPlan(need[g.id],D[g.id],all[j]));
-      if(ps.some(x=>!x)) return; const tot=ps.reduce((s,x)=>s+x.m,0), five=ps.reduce((s,x)=>s+x.five,0);
-      if(!best||tot<best.tot||(tot===best.tot&&five>best.five)) best={tot,five,ps}; return; }
-    for(let k=0;k<=left;k++) split(i+1,left-k,[...acc,k]); };
-  if(zones.length) split(0,N,[]);
-  zones.forEach((g,j)=>{ const pl=best?best.ps[j]:null; plan[g.id]=pl?pl.sizes:null; target[g.id]=pl?pl.m:Math.ceil(7*need[g.id]/D[g.id]); });
-  if(zones.length&&nightExtra()){ const g=zones.slice().sort((a,b)=>need[b.id]-need[a.id])[0]; target[g.id]+=nightExtra(); } // 그래도 야간이 모자라면 대기 인원
+  const zones=ALLG.filter(g=>need[g.id]); zones.forEach(g=>{ D[g.id]=poolDays(g.id,pos); target[g.id]=Math.ceil(7*need[g.id]/D[g.id]); });
+  const drops=nc.dates.length?+nc.alba:0; // 야간이 있는 주에 빠지는 근무일
+  const spare=()=>zones.reduce((s,g)=>s+D[g.id]*target[g.id]-7*need[g.id],0);
+  while(zones.length&&spare()<drops){ const g=zones.slice().sort((a,b)=>need[b.id]-need[a.id])[0]; target[g.id]++; }
+  zones.forEach(g=>plan[g.id]=Array(target[g.id]).fill(7-D[g.id]));
   return {need,target,plan};
 }
 let rosterChecked=false;
@@ -518,10 +516,10 @@ function syncRoster(){
   const nc=nightCfg(), need={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
   const ns=nightStats(), nightSig=`night:${nightBase()}+${nightExtra()}`;
   const mustSig="must:"+alba().map(p=>mustDow(p).length?p.id+mustDow(p).join(""):"").filter(Boolean).sort().join(",");
-  const sig="plan3|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig;
+  const sig="all5|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig;
   const cfg=state.settings.find(x=>x.id==="cfg-roster3");
   // 자리 구성·야간이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 딱 맞지 않으면 다시 짜요
-  const exact=()=>{ const {res,extra}=coverage(); return DAYS.every((_,d)=>!extra[d].length&&pos.every(x=>res[x.id][d].who)); };
+  const exact=()=>{ const {res}=coverage(); return DAYS.every((_,d)=>pos.every(x=>res[x.id][d].who)); }; // 남는 사람은 지원 근무
   const recheck=!rosterChecked; rosterChecked=true;
   if(cfg&&cfg.sig===sig&&!(recheck&&!exact())) return;
   const ppl=alba().slice().sort((a,b)=>(a.order||0)-(b.order||0)), changed=new Map();
@@ -568,13 +566,13 @@ function syncRoster(){
       res[i].sort((a,b)=>a-b); });
     return {res,miss}; };
   const allOk=zones.every(g=>{ const P=need[g.id], m=mem[g.id], D=poolDays(g.id,pos), sz=sizesFor(m.length,P,D,g.id);
-    return m.every(p=>(p.off||[]).length>=7-D&&fits(p,p.off||[]))&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length===P)
+    return m.every(p=>(p.off||[]).length>=7-D&&fits(p,p.off||[]))&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length>=P)
       &&(!sz||m.map(p=>(p.off||[]).length).sort().join()===sz.slice().sort().join()); }); // 계획한 근무일 구성인지
   const missed=new Set();
   if(!allOk||!cfg||!String(cfg.sig).endsWith(mustSig+"|"+nightSig)){ // 필수 휴무·야간 날짜 구성이 바뀌어도 다시 짜요
     zones.forEach(g=>{ const P=need[g.id], m=mem[g.id], D=poolDays(g.id,pos);
       const w=ns.byDow.some(x=>x)?ns.byDow:DAYS.map((_,i)=>i===4?1:0);
-      const score=r=>blocks(m.length,P,r,D,g.id).reduce((s,o)=>s+(o.length===8-D?o.reduce((t,d)=>t+w[d],0):0),0)*10-blocks(m.length,P,r,D,g.id).flat().filter(d=>d>=5).length/100;
+      const score=r=>-blocks(m.length,P,r,D,g.id).flat().filter(d=>d>=4).length; // 금·토·일에 쉬는 사람이 적게 (지원 인원이 주말에)
       let offs=null; for(const r of [0,1,2,3,4,5,6].sort((a,b)=>score(b)-score(a))){ offs=match(m,blocks(m.length,P,r,D,g.id)); if(offs) break; }
       if(!offs){ const gr=greedy(m,P,D,g.id); offs=gr.res; gr.miss.forEach(d=>missed.add(DAYS[d])); }
       mem[g.id]=m.map((p,i)=>{ changed.set(p.id,true); return {...p,off:offs[i]}; }); });
@@ -586,7 +584,7 @@ function syncRoster(){
   save("settings",{id:"cfg-roster3",sig,at:new Date().toISOString()},true);
   if(changed.size||drop.length) toast(`근무표를 다시 맞췄어요 (매일 알바 ${DAILY_ALBA}명)`);
   // 야간 인원이 모자라는 날이 있으면 한 명 더 두고 다시 짜요 (최대 3명)
-  if(Object.values(nightCrews().crews).some(c=>c.length<+nc.alba)&&nightExtra()<3){
+  if(false&&nightExtra()<3){
     save("settings",{...nightCfg(),id:"cfg-night",extra:nightExtra()+1,extraFor:"v2:"+nightBase()},true); rosterChecked=false; syncRoster(); }
 }
 // 한 번만: 4층 바닥 스티커마다 신세계 POP를 바로 위에 하나씩 (처리한 스티커엔 popDone 표시, 이후 새 스티커엔 안 함)
@@ -1130,26 +1128,46 @@ const posBrk=x=>{ const b=(posCfg()[x.id]||{}).brk||(x.slot&&x.slot.brk)||""; re
 const ovrAll=()=>(state.settings.find(x=>x.id==="cfg-ovr")||{}).days||{};
 const weekDates=mon=>DAYS.map((_,i)=>{ const d=new Date(mon+"T00:00"); d.setDate(d.getDate()+i); return ymd(d); });
 const curWeek=()=>{ const lo=weekKey(OPEN_FROM), hi=weekKey(OPEN_TO), t=weekKey(ymd(new Date())); const w=ui.rotaWeek||(t<lo?lo:t>hi?hi:t); return w<lo?lo:w>hi?hi:w; };
-function dayPlan(pos,res,date,crewsArg){ // 그날 자리별 사람 (바꾼 사람 반영), 야간, 휴무
-  const d=dowOf(date), ov=ovrAll()[date]||{}, ppl=alba(), byId=id=>ppl.find(p=>p.id===id);
-  const crew=((crewsArg||nightCrews().crews)[date])||[];
+// 날짜별 계산에 필요한 것 한 번에: 주간표, 남는 사람(지원), 야간 인원, 야간 주에 빼는 날
+function planCtx(){ const {res,extra,pos}=coverage(), crews=nightCrews().crews; return {res,extra,pos,crews,drops:nightDrops(pos,extra,crews)}; }
+function nightDrops(pos,extra,crews){ // 야간을 해서 40시간이 넘는 사람은 그 주에 지원 인원이 있는 날 하루를 쉬어요
+  const drops={}, weeks={};
+  Object.entries(crews).forEach(([d,cs])=>cs.forEach(p=>{ const w=weekKey(d), m=(weeks[w]=weeks[w]||{}); (m[p.id]=m[p.id]||{p,dates:[]}).dates.push(d); }));
+  Object.entries(weeks).forEach(([w,map])=>{ const used={};
+    Object.values(map).forEach(({p,dates})=>{ if(dayDays(p)*personNet(p,pos)+NIGHT_H*dates.length<=MAX_H) return;
+      const sur=dt=>extra[dowOf(dt)].filter(q=>q.id!==p.id).length-(used[dt]||0); // 그날 지원 인원 (다른 층도 가능)
+      const pick=weekDates(w).filter(dt=>dt>=OPEN_FROM&&dt<=OPEN_TO&&!dates.includes(dt)&&!(p.off||[]).includes(dowOf(dt))&&(extra[dowOf(dt)].includes(p)||sur(dt)>0)) // 그날 지원이면 그냥 빠지면 돼요
+        .sort((a,b)=>(extra[dowOf(b)].includes(p)?1:0)-(extra[dowOf(a)].includes(p)?1:0)||sur(b)-sur(a)||a.localeCompare(b))[0];
+      if(pick){ (drops[pick]=drops[pick]||new Set()).add(p.id); used[pick]=(used[pick]||0)+1; /* 지원 인원 한 명을 쓴 셈 */ } }); });
+  return drops;
+}
+function dayPlan(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 반영), 지원, 야간, 휴무
+  const {pos,res}=ctx, d=dowOf(date), ov=ovrAll()[date]||{}, ppl=alba(), byId=id=>ppl.find(p=>p.id===id);
+  const crew=ctx.crews[date]||[], dropped=ctx.drops[date]||new Set();
   const cells={}; pos.forEach(x=>{ const base=res[x.id][d]; const o=ov[x.id]&&byId(ov[x.id]);
     cells[x.id]=o?{who:o,kind:"swap",base:base.who}:{who:base.who,kind:base.kind}; });
-  // 필수 휴무 날짜인 사람은 그날 빼고, 같은 층에서 그날 쉬는 사람으로 자동 대체
-  const busy=new Set(Object.values(cells).map(c=>c.who&&c.who.id).filter(Boolean)); crew.forEach(p=>busy.add(p.id));
+  const inCell=()=>new Set(Object.values(cells).map(c=>c.who&&c.who.id).filter(Boolean));
+  let extras=ctx.extra[d].filter(p=>!dropped.has(p.id)&&!mustDates(p).includes(date)&&!inCell().has(p.id));
+  const fill=(x,base,why)=>{ let i=extras.findIndex(q=>pgroup(q)===x.group); if(i<0) i=extras.findIndex(()=>true); /* 같은 층 먼저, 없으면 다른 층 */ if(i>=0){ cells[x.id]={who:extras[i],kind:"auto",base,why}; extras.splice(i,1); return true; } return false; };
+  // 야간 주에 빠지는 사람 → 같은 층 지원 인원이 그 자리로
+  pos.forEach(x=>{ const c=cells[x.id]; if(c.kind!=="swap"&&c.who&&dropped.has(c.who.id)) fill(x,c.who,"야간 주 휴무"); });
+  // 필수 휴무 날짜인 사람 → 지원 인원 먼저, 없으면 그날 쉬는 사람 (40시간 안 넘는 사람 먼저)
   pos.forEach(x=>{ const c=cells[x.id]; if(c.kind==="swap"||!c.who||!mustDates(c.who).includes(date)) return;
-    const sub=ppl.filter(p=>!busy.has(p.id)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)).sort((a,b)=>(dayDays(a)>=WORK_DAYS?1:0)-(dayDays(b)>=WORK_DAYS?1:0)||(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||dayDays(a)-dayDays(b)||(a.order||0)-(b.order||0))[0]; // 40시간 안 넘는 사람 먼저
-    busy.delete(c.who.id); cells[x.id]=sub?{who:sub,kind:"auto",base:c.who}:{who:null,kind:"gap",base:c.who}; if(sub) busy.add(sub.id); });
-  const working=new Set(Object.values(cells).map(c=>c.who&&c.who.id).filter(Boolean));
+    if(fill(x,c.who,"필수 휴무")) return;
+    const busy=new Set([...inCell(),...crew.map(p=>p.id),...extras.map(p=>p.id)]);
+    const sub=ppl.filter(p=>!busy.has(p.id)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)).sort((a,b)=>(dayDays(a)>=WORK_DAYS?1:0)-(dayDays(b)>=WORK_DAYS?1:0)||(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||(a.order||0)-(b.order||0))[0];
+    cells[x.id]=sub?{who:sub,kind:"auto",base:c.who,why:"필수 휴무"}:{who:null,kind:"gap",base:c.who}; });
+  extras=extras.filter(p=>!inCell().has(p.id));
+  const working=new Set([...inCell(),...extras.map(p=>p.id)]);
   const off=ppl.filter(p=>!working.has(p.id)&&!crew.some(c=>c.id===p.id));
-  return {cells,crew,off,working};
+  return {cells,crew,off,working,extras};
 }
 function rotaHTML(pos,res){
   const mgr=state.staff.find(isMgr), mon=curWeek(), dates=weekDates(mon), open=dt=>dt>=OPEN_FROM&&dt<=OPEN_TO;
-  const plans=dates.map(dt=>dayPlan(pos,res,dt));
+  const ctx=planCtx(), plans=dates.map(dt=>dayPlan(ctx,dt));
   // 그 주 근무일 (주간+야간) → 5일 넘으면 빨간 테두리
   // 그 주 근무시간 (주간: 자리 시간에서 휴게 1시간 뺌, 야간 3시간) → 40시간 넘으면 빨간 테두리
-  const wk={}; plans.forEach((pl,i)=>{ if(!open(dates[i])) return; pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) wk[c.who.id]=(wk[c.who.id]||0)+netH(posTime(x)); }); pl.crew.forEach(p=>wk[p.id]=(wk[p.id]||0)+NIGHT_H); });
+  const wk={}; plans.forEach((pl,i)=>{ if(!open(dates[i])) return; pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) wk[c.who.id]=(wk[c.who.id]||0)+netH(posTime(x)); }); pl.extras.forEach(p=>wk[p.id]=(wk[p.id]||0)+personNet(p,pos)); pl.crew.forEach(p=>wk[p.id]=(wk[p.id]||0)+NIGHT_H); });
   const over=p=>p&&(wk[p.id]||0)>MAX_H;
   const secs={}; pos.forEach(x=>(secs[posTime(x)]=secs[posTime(x)]||[]).push(x));
   const keys=Object.keys(secs).sort((a,b)=>toMin(a)-toMin(b));
@@ -1165,13 +1183,14 @@ function rotaHTML(pos,res){
       if(ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>!pl.working.has(p.id)||p.id===(c.who&&c.who.id)).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 덜 일한 사람 먼저
         return `<td class="editing"><select data-swap="${key}"><option value="">${c.kind==="swap"?"원래대로":"그대로"}</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select></td>`; }
       const cls=c.kind==="gap"?"gap":c.kind==="swap"||c.kind==="auto"?"swp":c.kind==="cover"?"cov":"";
-      return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="${c.kind==="auto"?esc(pname(c.base))+" 필수 휴무 → 자동 대체":"이날만 사람 바꾸기"}">${c.who?esc(pname(c.who)):"빈자리"}</button></td>`; }).join("")}</tr>`).join("")).join("");
+      return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="${c.kind==="auto"?esc(pname(c.base))+" "+(c.why||"")+" → 자동 대체":"이날만 사람 바꾸기"}">${c.who?esc(pname(c.who)):"빈자리"}</button></td>`; }).join("")}</tr>`).join("")).join("");
+  if(plans.some((pl,i)=>open(dates[i])&&pl.extras.length)) body+=sec("지원 (추가 근무)","모두 주 5일을 채우고 남는 인원 · 바쁜 곳 지원")+`<tr class="sup"><td class="rl">지원</td>${dates.map((dt,i)=>open(dt)?`<td>${plans[i].extras.map(p=>`<span class="${over(p)?"overtxt":""}">${esc(pname(p))}</span>`).join("<br>")}</td>`:closed).join("")}</tr>`;
   const anyNight=plans.some((pl,i)=>open(dates[i])&&nightCfg().dates.includes(dates[i]));
   if(anyNight) body+=sec(`야간 ${NIGHT_TIME}`,"휴게 없음")+`<tr class="night"><td class="rl">야간</td>${dates.map((dt,i)=>nightCfg().dates.includes(dt)?`<td class="nt">${[mgr?`<b>${esc(pname(mgr)||"매니저")}</b>`:"",...plans[i].crew.map(p=>`<span class="${over(p)?"overtxt":""}">${esc(pname(p))}</span>`)].filter(Boolean).join("<br>")}</td>`:`<td></td>`).join("")}</tr>`;
   body+=sec("운영매니저","매일")+`<tr><td class="rl">매니저</td>${dates.map(dt=>open(dt)?`<td>${esc(mgr?pname(mgr)||"매니저":"매니저")}</td>`:closed).join("")}</tr>`;
   body+=sec("휴무","")+`<tr class="offrow"><td class="rl">휴무</td>${dates.map((dt,i)=>open(dt)?`<td>${plans[i].off.map(p=>esc(pname(p))).join("<br>")}</td>`:closed).join("")}</tr>`;
   body+=`<tr class="sum"><td class="rl">인원</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed; const t=Object.values(plans[i].cells).filter(c=>c.who).length, n=plans[i].crew.length;
-    return `<td class="${t===DAILY_ALBA?"ok":"bad"}">알바 ${t}${nightCfg().dates.includes(dt)?`<br>+야간 ${n}`:""}</td>`; }).join("")}</tr>`;
+    return `<td class="${t===DAILY_ALBA?"ok":"bad"}">알바 ${t}${plans[i].extras.length?`<br>+지원 ${plans[i].extras.length}`:""}${nightCfg().dates.includes(dt)?`<br>+야간 ${n}`:""}</td>`; }).join("")}</tr>`;
   return `${nav}<div class="tbl-wrap"><table class="rota">${head}${body}</table></div>`;
 }
 // 그 주 사람별 근무시간 (주간 + 야간) — 야간 고르는 목록에 써요
@@ -1179,32 +1198,37 @@ function nightLoad(crews,pos){ const L={}; alba().forEach(p=>L[p.id]={}); Object
 function nightOptions(date,crew,L,pos){ // 야간에 넣을 수 있는 사람 먼저 (주간 5일 안 되는 사람, 그날 주간 쉬는 사람, 40시간 안)
   const d=dowOf(date), wk=weekKey(date);
   return alba().filter(p=>!crew.some(c=>c.id===p.id)).map(p=>{ const n=(L[p.id]||{})[wk]||0, h=dayDays(p)*personNet(p,pos)+NIGHT_H*n, day=!(p.off||[]).includes(d);
-      const why=mustDates(p).includes(date)||mustDow(p).includes(d)?"필수 휴무":day?"그날 주간 근무":n>=NIGHT_MAX?`이번 주 야간 ${n}번`:h+NIGHT_H>MAX_H?"40시간 넘음":"";
-      return {p,ok:!why,h,label:why||`주간 ${dayDays(p)}일 · ${+h.toFixed(1)}h`}; })
+      const why=mustDates(p).includes(date)||mustDow(p).includes(d)?"필수 휴무":day?"그날 주간 근무":n>=NIGHT_MAX?`이번 주 야간 ${n}번`:(h+NIGHT_H>MAX_H&&h+NIGHT_H-personNet(p,pos)>MAX_H)?"40시간 넘음":"";
+      const drop=!why&&h+NIGHT_H>MAX_H; // 그 주 주간 하루 쉬고 야간
+      return {p,ok:!why,h,label:why||`주간 ${dayDays(p)}일 · ${+h.toFixed(1)}h${drop?" (그 주 하루 쉼)":""}`}; })
     .sort((a,b)=>(a.ok?0:1)-(b.ok?0:1)||(dayDays(a.p)<WORK_DAYS?0:1)-(dayDays(b.p)<WORK_DAYS?0:1)||a.h-b.h||(a.p.order||0)-(b.p.order||0)); }
-// 인건비: 월급(주 5일·40시간 기준)을 하루 단가로 바꿔서, 전시 기간 날짜마다 실제 근무(바꾼 사람·필수 휴무 대체 포함)와 야간(2번=1일)을 더해요
+// 급여: 계약 월급(주 5일·40시간)을 기본으로, 실제 근무(근무표·바꾼 사람·대체·지원·야간 2번=1일)에 맞춰 달마다 계산
+// 그 달 급여 = 월급 × (그 달 실제 근무일 ÷ 그 달 기준 근무일), 기준 근무일 = 전시 날짜 수 × 5/7
 const payCfg=()=>({monthly:2300000,...(state.settings.find(x=>x.id==="cfg-pay")||{})});
-const dayRate=()=>(+payCfg().monthly||0)*12/52/WORK_DAYS; // 주5일 × 52주 ÷ 12개월
 function payLedger(){
-  const {res,pos}=coverage(), crews=nightCrews().crews, rate=dayRate(), per={}, months={};
-  const P=id=>per[id]=per[id]||{days:0,nights:0}, M=k=>months[k]=months[k]||{days:0,nights:0,from:null,to:null};
-  for(let d=OPEN_FROM;d<=OPEN_TO;d=addDay(d,1)){ const pl=dayPlan(pos,res,d,crews), m=M(d.slice(0,7)); m.from=m.from||d; m.to=d;
-    pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who){ P(c.who.id).days++; m.days++; } });
-    pl.crew.forEach(p=>{ P(p.id).nights++; m.nights++; }); }
-  const amt=o=>(o.days+NIGHT_W*o.nights)*rate;
-  return {per,months,rate,amt};
+  const ctx=planCtx(), monthly=+payCfg().monthly||0, per={}, months={};
+  const P=id=>per[id]=per[id]||{days:0,nights:0,m:{}}, M=k=>months[k]=months[k]||{days:0,nights:0,open:0,from:null,to:null};
+  for(let d=OPEN_FROM;d<=OPEN_TO;d=addDay(d,1)){ const pl=dayPlan(ctx,d), k=d.slice(0,7), m=M(k); m.open++; m.from=m.from||d; m.to=d;
+    const add=(id,u,night)=>{ const o=P(id); o.m[k]=(o.m[k]||0)+u; if(night){ o.nights++; m.nights++; } else { o.days++; m.days++; } };
+    ctx.pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) add(c.who.id,1); });
+    pl.extras.forEach(p=>add(p.id,1)); pl.crew.forEach(p=>add(p.id,NIGHT_W,true)); }
+  const std=k=>months[k].open*WORK_DAYS/7, dim=k=>new Date(+k.slice(0,4),+k.slice(5),0).getDate();
+  const pay=(o,k)=>monthly*(((o.m||{})[k]||0)/std(k));
+  const total=o=>Object.keys(months).reduce((s,k)=>s+pay(o,k),0);
+  const base=k=>monthly*months[k].open/dim(k); // 계약 기준 1인 (그 달 전시 날짜만큼)
+  return {per,months,monthly,pay,total,base,std};
 }
 function budgetHTML(L){
-  const pc=payCfg(), W=v=>Math.round(v).toLocaleString("ko-KR"), ms=Object.entries(L.months).sort();
-  const total=ms.reduce((s,[,m])=>s+L.amt(m),0), nights=ms.reduce((s,[,m])=>s+m.nights,0);
-  return `<div class="panel" style="margin-top:16px"><h3>인건비 예산 <span class="small muted">알바만 · 운영매니저 제외 · 지금 근무표와 야간 날짜 기준</span></h3>
-    <div class="row" style="gap:12px;margin-bottom:10px"><label class="f">월급 (주 ${WORK_DAYS}일·${MAX_H}시간 기준, 원)<input type="number" id="payMonthly" value="${pc.monthly}" step="10000" min="0"></label>
-      <span class="small muted">하루 ${W(L.rate)}원 · 야간 1번 ${W(L.rate*NIGHT_W)}원 (2번 = 1일)</span></div>
-    <div class="tbl-wrap"><table><thead><tr><th>기간</th><th class="r">주간 근무 (연인원)</th><th class="r">야간 (연인원)</th><th class="r">금액</th></tr></thead><tbody>
-      ${ms.map(([k,m])=>`<tr><td>${+k.slice(5)}월 <span class="small muted">${+m.from.slice(5,7)}/${+m.from.slice(8)}~${+m.to.slice(5,7)}/${+m.to.slice(8)}</span></td><td class="r num">${m.days}일</td><td class="r num">${m.nights}회</td><td class="r num">${W(L.amt(m))}원</td></tr>`).join("")}
-      <tr><td><b>전시 기간 합계</b></td><td class="r num"><b>${ms.reduce((s,[,m])=>s+m.days,0)}일</b></td><td class="r num"><b>${nights}회</b></td><td class="r num"><b>${W(total)}원</b></td></tr>
-      <tr><td>4대보험 회사 부담 포함 (약 10%)</td><td></td><td></td><td class="r num">${W(total*1.1)}원</td></tr>
-    </tbody></table></div></div>`;
+  const pc=payCfg(), W=v=>Math.round(v).toLocaleString("ko-KR"), ks=Object.keys(L.months).sort(), ppl=alba(), N=ppl.length;
+  const act=k=>ppl.reduce((s,p)=>s+L.pay(L.per[p.id]||{m:{}},k),0), sum=f=>ks.reduce((s,k)=>s+f(k),0);
+  return `<div class="panel" style="margin-top:16px"><h3>인건비 예산 <span class="small muted">알바 ${N}명 · 운영매니저 제외</span></h3>
+    <div class="row" style="gap:12px;margin-bottom:10px"><label class="f">계약 월급 (주 ${WORK_DAYS}일·${MAX_H}시간, 원)<input type="number" id="payMonthly" value="${pc.monthly}" step="10000" min="0"></label></div>
+    <div class="tbl-wrap"><table><thead><tr><th>기간</th><th class="r">계약 기준 (${N}명)</th><th class="r">실제 근무 기준</th><th class="r">주간 · 야간</th></tr></thead><tbody>
+      ${ks.map(k=>{const m=L.months[k]; return `<tr><td>${+k.slice(5)}월 <span class="small muted">${+m.from.slice(5,7)}/${+m.from.slice(8)}~${+m.to.slice(5,7)}/${+m.to.slice(8)}</span></td><td class="r num">${W(L.base(k)*N)}원</td><td class="r num">${W(act(k))}원</td><td class="r num small">${m.days}일 · ${m.nights}회</td></tr>`;}).join("")}
+      <tr><td><b>3개월 합계</b></td><td class="r num"><b>${W(sum(k=>L.base(k)*N))}원</b></td><td class="r num"><b>${W(sum(act))}원</b></td><td></td></tr>
+      <tr><td>4대보험 회사 부담 포함 (약 10%)</td><td class="r num">${W(sum(k=>L.base(k)*N)*1.1)}원</td><td class="r num">${W(sum(act)*1.1)}원</td><td></td></tr>
+    </tbody></table></div>
+    <p class="small muted" style="margin:8px 0 0">12월은 12/3부터라 그만큼만 들어가요. 근무표에서 사람을 바꾸거나 야간 날짜를 바꾸면 실제 근무 기준이 바로 바뀌어요.</p></div>`;
 }
 // 사람별 필수 휴무 날짜 달력
 function mustCal(p){
@@ -1282,13 +1306,13 @@ function staffHTML(){
       <td style="min-width:190px"><div class="days" title="매주 쉬어야 하는 요일">${DAYS.map((d,i)=>`<button data-must="${i}" aria-pressed="${mustDow(p).includes(i)}" aria-label="매주 ${d}요일 필수 휴무">${d}</button>`).join("")}</div>
         <div class="row" style="gap:4px;margin-top:4px">${mustDates(p).map(d=>`<span class="chip mchip">${+d.slice(5,7)}/${+d.slice(8)}<button class="x" data-mrm="${d}" aria-label="빼기">×</button></span>`).join("")}<button class="linkbtn small noprint" data-mcal>${ui.mustOpen===p.id?"달력 닫기":"+ 날짜"}</button></div></td>
       <td class="r num" style="color:${dayDays(p)*personNet(p,pos)>MAX_H?"var(--bad)":"inherit"}">${dayDays(p)}일 · ${+(dayDays(p)*personNet(p,pos)).toFixed(1)}h${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(nightCrews().total[p.id]||0)}</td>
-      <td class="r num" style="white-space:nowrap">${(o=>`${W(L.amt(o))}원<br><span class="small muted">주간 ${o.days}일 · 야간 ${o.nights}회</span>`)(L.per[p.id]||{days:0,nights:0})}</td>
+      <td class="r num" style="white-space:nowrap">${(o=>`${Object.keys(L.months).sort().map(k=>`<span class="small muted">${+k.slice(5)}월</span> ${W(L.pay(o,k))}`).join("<br>")}<br><b>합계 ${W(L.total(o))}원</b><br><span class="small muted">주간 ${o.days}일 · 야간 ${o.nights}회</span>`)(L.per[p.id]||{days:0,nights:0,m:{}})}</td>
       <td><select data-f="status">${STAFF_STATUS.map(x=>`<option ${p.status===x?"selected":""}>${x}</option>`).join("")}</select></td>
       <td style="min-width:180px"><input data-f="memo" value="${esc(p.memo||"")}" placeholder="예: 주말 선호, 교육 필요"></td>
       ${unlocked()?["idFile","bankFile"].map(k=>`<td class="noprint">${p[k]?`<span class="row" style="flex-wrap:nowrap"><button class="linkbtn small" data-sview="${k}">보기</button><button class="x" data-sdel="${k}" aria-label="삭제">×</button></span>`:`<div class="drop sdrop" data-sdrop="${k}">+ 사진</div>`}</td>`).join(""):""}
       <td><button class="x" data-del aria-label="삭제">${ui.confirmDel===p.id?"삭제?":"×"}</button></td></tr>
       ${ui.mustOpen===p.id?`<tr class="mustrow noprint" data-mfor="${p.id}"><td colspan="${unlocked()?11:9}">${mustCal(p)}</td></tr>`:""}`;};
-  const table=(gp,s)=>gp.length?`<div class="tbl-wrap"><table><thead><tr><th>코드</th><th>이름 (눌러서 바꾸기)</th><th>구분</th><th>필수 휴무 <span class="small">(매주 요일 · 날짜)</span></th><th class="r">주 근무</th><th class="r">인건비 <span class="small">(전시 기간)</span></th><th>상태</th><th>특이사항</th>${unlocked()?"<th>신분증</th><th>통장</th>":""}<th></th></tr></thead><tbody>
+  const table=(gp,s)=>gp.length?`<div class="tbl-wrap"><table><thead><tr><th>코드</th><th>이름 (눌러서 바꾸기)</th><th>구분</th><th>필수 휴무 <span class="small">(매주 요일 · 날짜)</span></th><th class="r">주 근무</th><th class="r">급여 <span class="small">(월 · 3개월)</span></th><th>상태</th><th>특이사항</th>${unlocked()?"<th>신분증</th><th>통장</th>":""}<th></th></tr></thead><tbody>
     ${gp.sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0)).map(p=>row(p,SLOT[p.slot]||s)).join("")}</tbody></table></div>`:`<p class="small muted" style="margin:0">아직 없어요.</p>`;
   const byG=shown.map(g=>{ const gpos=pos.filter(x=>x.group===g.id), s=(gpos.find(x=>x.slot)||{}).slot;
     return `<div class="group-h"><h4>${g.name} <span class="muted small">자리 ${P(g)}개 · 필요 ${N(g)}명 · 지금 ${M(g)}명</span></h4></div>${table(ppl.filter(p=>pgroup(p)===g.id),s)}`;}).join("")
