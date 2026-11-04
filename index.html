@@ -193,6 +193,8 @@ table.rota tr.offrow td{color:var(--muted);line-height:1.5;vertical-align:top}
 table.rota tr.sum td.ok{color:var(--ok);font-weight:600}
 table.rota tr.sum td.bad{color:var(--bad);font-weight:600}
 .printonly{display:none}
+.mchip{padding:1px 2px 1px 8px;font-size:12px;cursor:default}
+tr.mustrow>td{background:var(--soft)}
 table.rota th.today{box-shadow:inset 0 -3px 0 var(--accent)}
 table.rota td.closed{color:var(--muted);background:var(--soft);font-size:11px}
 table.rota td.swp{background:var(--okbg)}
@@ -364,7 +366,7 @@ const dbCol=c=>VCOL[c]?VCOL[c].col:c;
 const state = {markers:[],items:[],staff:[],tasks:[],quotes:[],files:[],settings:[],graphics:[],nights:[],sched:[],docs:[]};
 const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,files:false,settings:false,graphics:false,nights:false,sched:false,docs:false};
 const ui = {tab:"plan",floor:"4F",hidden:new Set(),addType:null,sel:null,labels:true,taskFilter:"open",confirmDel:null,
-  mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,rotaWeek:null,editCell:null};
+  mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,rotaWeek:null,editCell:null,mustOpen:null,mustMon:null};
 try{const t=localStorage.getItem("mb-tab"); if(t) ui.tab=t; const f=localStorage.getItem("mb-floor"); if(f) ui.floor=f; if(localStorage.getItem("mb-map")==="0") ui.mapOpen=false;}catch(e){}
 let db=null, mode="loading";
 
@@ -442,6 +444,11 @@ async function loadAll(){
 // 야간: 매주 하루 19:30~22:30, 알바 NIGHT_ALBA명 + 운영매니저. 휴게 없음. 야간도 근무 1일로 쳐요.
 const NIGHT_TIME="19:30~22:30";
 const NIGHT_W=0.5, NIGHT_MAX=2; // 야간 2번 = 근무 1일, 한 사람 한 주 최대 2번
+const MAX_H=40, NIGHT_H=3; // 주 40시간을 넘기지 않아요 (주간은 휴게 1시간 뺀 시간, 야간 3시간)
+const netH=t=>{ const [a,b]=String(t||"").split("~").map(x=>toMin(x)); return a!=null&&b!=null?Math.max(0,(b-a-60)/60):8; };
+const mustDow=p=>p.mustDow||[], mustDates=p=>p.mustDates||[]; // 필수 휴무: 매주 요일 / 특정 날짜
+const personNet=(p,pos)=>{ const x=pos.find(y=>y.id===p.pos); return x?netH(posTime(x)):Math.max(8,...pos.filter(y=>y.group===pgroup(p)).map(y=>netH(posTime(y)))); };
+const poolDays=(gid,pos)=>{ const hs=pos.filter(x=>x.group===gid).map(x=>netH(posTime(x))); return Math.max(1,Math.min(WORK_DAYS,Math.floor(MAX_H/Math.max(1,...hs)))); };
 const nightCfg=()=>{ const c=state.settings.find(x=>x.id==="cfg-night")||{}; return {alba:4,...c,dates:Array.isArray(c.dates)?c.dates.slice().sort():[]}; };
 const dayDays=p=>7-(p.off||[]).length;
 const weekCount=p=>dayDays(p);
@@ -454,22 +461,23 @@ function nightStats(){ // 주마다 야간 수, 요일별 야간 수
   nc.dates.forEach(d=>{ per[weekKey(d)]=(per[weekKey(d)]||0)+1; byDow[dowOf(d)]++; });
   return {perWeek:Math.max(1,...Object.values(per)), byDow}; // 날짜가 없으면 주 1회로 잡아요
 }
-// 날짜별 야간 인원: 그 요일에 주간을 쉬고, 그 주에 5일이 안 되는 사람 중 근무일·야간이 적은 사람부터
+// 날짜별 야간 인원: 그 요일에 주간을 쉬고(필수 휴무 날 제외), 주 40시간·야간 2번을 넘지 않는 사람 중 적게 일하는 사람부터
 function nightCrews(){
-  const nc=nightCfg(), ppl=alba(), total={}, crews={}, weeks={};
+  const nc=nightCfg(), ppl=alba(), pos=positions(), total={}, crews={}, weeks={};
+  const baseH={}; ppl.forEach(p=>baseH[p.id]=dayDays(p)*personNet(p,pos));
   nc.dates.forEach(d=>(weeks[weekKey(d)]=weeks[weekKey(d)]||[]).push(d));
   Object.values(weeks).forEach(ds=>{ const add={}, todo=ds.slice();
-    const load=p=>dayDays(p)+NIGHT_W*(add[p.id]||0);
-    const cands=date=>ppl.filter(p=>(p.off||[]).includes(dowOf(date))&&(add[p.id]||0)<NIGHT_MAX&&load(p)+NIGHT_W<=WORK_DAYS)
-      .sort((a,b)=>load(a)-load(b)||(total[a.id]||0)-(total[b.id]||0)||(a.order||0)-(b.order||0));
+    const load=p=>dayDays(p)+NIGHT_W*(add[p.id]||0), hrs=p=>baseH[p.id]+NIGHT_H*(add[p.id]||0);
+    const cands=date=>ppl.filter(p=>(p.off||[]).includes(dowOf(date))&&!mustDates(p).includes(date)&&(add[p.id]||0)<NIGHT_MAX&&load(p)+NIGHT_W<=WORK_DAYS&&hrs(p)+NIGHT_H<=MAX_H)
+      .sort((a,b)=>hrs(a)-hrs(b)||(total[a.id]||0)-(total[b.id]||0)||(a.order||0)-(b.order||0));
     while(todo.length){ todo.sort((a,b)=>cands(a).length-cands(b).length||a.localeCompare(b)); const date=todo.shift(); // 고를 사람이 적은 날부터
       const c=cands(date).slice(0,+nc.alba); c.forEach(p=>{ add[p.id]=(add[p.id]||0)+1; total[p.id]=(total[p.id]||0)+1; }); crews[date]=c; } });
   return {crews,total};
 }
 function needTargets(pos){ // 층마다 필요 인원 (야간 인원까지 주5일 안에서 채우도록)
   const nc=nightCfg(), need={}, target={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
-  const zones=ALLG.filter(g=>need[g.id]); zones.forEach(g=>target[g.id]=needFor(need[g.id]));
-  const slack=()=>zones.reduce((s,g)=>s+WORK_DAYS*target[g.id]-7*need[g.id],0);
+  const zones=ALLG.filter(g=>need[g.id]), D={}; zones.forEach(g=>{ D[g.id]=poolDays(g.id,pos); target[g.id]=Math.ceil(7*need[g.id]/D[g.id]); }); // 40시간 안에서 주 근무일
+  const slack=()=>zones.reduce((s,g)=>s+D[g.id]*target[g.id]-7*need[g.id],0);
   // 남는 근무일이 있는 사람이 야간 인원 수 이상, 그리고 야간 근무일(2번=1일)만큼 있어야 해요. 그래도 모자라면 한 명씩 더
   const nightDays=Math.max(+nc.alba,Math.ceil(+nc.alba*nightStats().perWeek*NIGHT_W))+WORK_DAYS*nightExtra();
   while(zones.length&&slack()<nightDays){ const g=zones.slice().sort((a,b)=>need[b.id]-need[a.id])[0]; target[g.id]++; }
@@ -481,7 +489,8 @@ function syncRoster(){
   const pos=positions(); if(!pos.some(x=>x.marker)) return;
   const nc=nightCfg(), need={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
   const ns=nightStats(), nightSig=`night:${nightBase()}+${nightExtra()}`;
-  const sig=Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+nightSig;
+  const mustSig="must:"+alba().map(p=>mustDow(p).length?p.id+mustDow(p).join(""):"").filter(Boolean).sort().join(",");
+  const sig=Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig;
   const cfg=state.settings.find(x=>x.id==="cfg-roster3");
   // 자리 구성·야간이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 딱 맞지 않으면 다시 짜요
   const exact=()=>{ const {res,extra}=coverage(); return DAYS.every((_,d)=>!extra[d].length&&pos.every(x=>res[x.id][d].who)); };
@@ -512,16 +521,33 @@ function syncRoster(){
     mem[g.id]=m.map((p,i)=>{ const want=i<P?pick(p):""; if((p.pos||"")!==want){ changed.set(p.id,true); return {...p,pos:want}; } return p; }); });
   // 휴무: 층마다 매일 딱 P명. 쉬는 날 합계 7×(사람−P)를 이어지는 날로 고르게 나누고,
   // 하루 더 쉬는 사람(주4일)이 야간 요일에 쉬도록 시작 요일을 골라요 → 그 사람이 야간에 들어가면 주5일
-  const plan=(m,P,r)=>{ const total=7*(m.length-P), base=Math.floor(total/m.length), more=total%m.length; let at=r;
-    return m.map((p,i)=>{ const k=base+(i>=m.length-more?1:0), off=Array.from({length:k},(_,j)=>(at+j)%7).sort((x,y)=>x-y); at+=k; return off; }); };
-  const allOk=zones.every(g=>{ const P=need[g.id], m=mem[g.id]; return m.every(p=>(p.off||[]).length>=7-WORK_DAYS)&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length===P); });
-  if(!allOk||!cfg||!String(cfg.sig).endsWith(nightSig)){ // 야간 날짜 구성이 바뀌어도 다시 짜요
-    zones.forEach(g=>{ const P=need[g.id], m=mem[g.id];
-      const w=ns.byDow.some(x=>x)?ns.byDow:DAYS.map((_,i)=>i===4?1:0); // 야간이 많은 요일에 주4일인 사람이 쉬도록
-      const score=r=>plan(m,P,r).reduce((s,o)=>s+(7-o.length<WORK_DAYS?o.reduce((t,d)=>t+w[d],0):0),0)*10-plan(m,P,r).flat().filter(d=>d>=5).length/100;
-      const r=[0,1,2,3,4,5,6].reduce((a,b)=>score(b)>score(a)?b:a,0), offs=plan(m,P,r);
+  // 휴무: 층마다 매일 딱 P명. 쉬는 날 합계 7×(사람−P)를 이어지는 날로 고르게 나누고, 필수 휴무(매주 요일)를 지키도록 사람에게 나눠 줘요.
+  // 하루 더 쉬는 사람(주4일)이 야간이 많은 요일에 쉬도록 시작 요일을 골라요
+  const blocks=(n,P,r)=>{ const total=7*(n-P), base=Math.floor(total/n), more=total%n; let at=r;
+    return Array.from({length:n},(_,i)=>{ const k=base+(i>=n-more?1:0), off=Array.from({length:k},(_,j)=>(at+j)%7).sort((x,y)=>x-y); at+=k; return off; }); };
+  const fits=(p,o)=>mustDow(p).every(d=>o.includes(d));
+  const match=(m,bl)=>{ const order=m.map((p,i)=>i).sort((a,b)=>mustDow(m[b]).length-mustDow(m[a]).length||a-b), used=new Set(), res=[];
+    const go=k=>{ if(k===order.length) return true; const i=order[k];
+      const tries=bl.map((o,j)=>j).sort((a,b)=>Math.abs(a-i)-Math.abs(b-i)); // 원래 순서에 가까운 칸부터 (대체 인력이 주4일)
+      for(const j of tries){ if(used.has(j)||!fits(m[i],bl[j])) continue; used.add(j); res[i]=bl[j]; if(go(k+1)) return true; used.delete(j); } return false; };
+    return go(0)?res:null; };
+  const greedy=(m,P)=>{ const cap=DAYS.map(()=>m.length-P), total=7*(m.length-P), base=Math.floor(total/m.length), more=total%m.length, res=m.map(()=>[]), miss=[];
+    m.forEach((p,i)=>mustDow(p).forEach(d=>{ if(cap[d]>0){ cap[d]--; res[i].push(d); } else miss.push(d); }));
+    m.forEach((p,i)=>{ const k=base+(i>=m.length-more?1:0); while(res[i].length<k){ const d=DAYS.map((_,x)=>x).filter(x=>cap[x]>0&&!res[i].includes(x))
+        .sort((a,b)=>cap[b]-cap[a]||(res[i].some(y=>Math.abs(y-b)%5===1)?1:0)-(res[i].some(y=>Math.abs(y-a)%5===1)?1:0)||a-b)[0]; if(d==null) break; cap[d]--; res[i].push(d); }
+      res[i].sort((a,b)=>a-b); });
+    return {res,miss}; };
+  const allOk=zones.every(g=>{ const P=need[g.id], m=mem[g.id], D=poolDays(g.id,pos); return m.every(p=>(p.off||[]).length>=7-D&&fits(p,p.off||[]))&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length===P); });
+  const missed=new Set();
+  if(!allOk||!cfg||!String(cfg.sig).endsWith(mustSig+"|"+nightSig)){ // 필수 휴무·야간 날짜 구성이 바뀌어도 다시 짜요
+    zones.forEach(g=>{ const P=need[g.id], m=mem[g.id], D=poolDays(g.id,pos);
+      const w=ns.byDow.some(x=>x)?ns.byDow:DAYS.map((_,i)=>i===4?1:0);
+      const score=r=>blocks(m.length,P,r).reduce((s,o)=>s+(7-o.length<D?o.reduce((t,d)=>t+w[d],0):0),0)*10-blocks(m.length,P,r).flat().filter(d=>d>=5).length/100;
+      let offs=null; for(const r of [0,1,2,3,4,5,6].sort((a,b)=>score(b)-score(a))){ offs=match(m,blocks(m.length,P,r)); if(offs) break; }
+      if(!offs){ const gr=greedy(m,P); offs=gr.res; gr.miss.forEach(d=>missed.add(DAYS[d])); }
       mem[g.id]=m.map((p,i)=>{ changed.set(p.id,true); return {...p,off:offs[i]}; }); });
-    zones.forEach(g=>{ mem[g.id]=mem[g.id].map(p=>{ if(p.night){ changed.set(p.id,true); const {night,...q}=p; return q; } return p; }); }); // 예전 요일 야간 표시 정리
+    zones.forEach(g=>{ mem[g.id]=mem[g.id].map(p=>{ if(p.night){ changed.set(p.id,true); const {night,...q}=p; return q; } return p; }); });
+    if(missed.size) toast(`필수 휴무가 몰려서 ${[...missed].join("·")}요일은 다 지키지 못했어요`);
   }
   zones.forEach(g=>mem[g.id].forEach(p=>{ if(changed.has(p.id)) changed.set(p.id,p); }));
   changed.forEach(p=>save("staff",p,true)); drop.forEach(id=>remove("staff",id));
@@ -1074,9 +1100,14 @@ const weekDates=mon=>DAYS.map((_,i)=>{ const d=new Date(mon+"T00:00"); d.setDate
 const curWeek=()=>{ const lo=weekKey(OPEN_FROM), hi=weekKey(OPEN_TO), t=weekKey(ymd(new Date())); const w=ui.rotaWeek||(t<lo?lo:t>hi?hi:t); return w<lo?lo:w>hi?hi:w; };
 function dayPlan(pos,res,date){ // 그날 자리별 사람 (바꾼 사람 반영), 야간, 휴무
   const d=dowOf(date), ov=ovrAll()[date]||{}, ppl=alba(), byId=id=>ppl.find(p=>p.id===id);
+  const crew=(nightCrews().crews[date])||[];
   const cells={}; pos.forEach(x=>{ const base=res[x.id][d]; const o=ov[x.id]&&byId(ov[x.id]);
     cells[x.id]=o?{who:o,kind:"swap",base:base.who}:{who:base.who,kind:base.kind}; });
-  const crew=(nightCrews().crews[date])||[];
+  // 필수 휴무 날짜인 사람은 그날 빼고, 같은 층에서 그날 쉬는 사람으로 자동 대체
+  const busy=new Set(Object.values(cells).map(c=>c.who&&c.who.id).filter(Boolean)); crew.forEach(p=>busy.add(p.id));
+  pos.forEach(x=>{ const c=cells[x.id]; if(c.kind==="swap"||!c.who||!mustDates(c.who).includes(date)) return;
+    const sub=ppl.filter(p=>!busy.has(p.id)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)).sort((a,b)=>(dayDays(a)>=WORK_DAYS?1:0)-(dayDays(b)>=WORK_DAYS?1:0)||(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||dayDays(a)-dayDays(b)||(a.order||0)-(b.order||0))[0]; // 40시간 안 넘는 사람 먼저
+    busy.delete(c.who.id); cells[x.id]=sub?{who:sub,kind:"auto",base:c.who}:{who:null,kind:"gap",base:c.who}; if(sub) busy.add(sub.id); });
   const working=new Set(Object.values(cells).map(c=>c.who&&c.who.id).filter(Boolean));
   const off=ppl.filter(p=>!working.has(p.id)&&!crew.some(c=>c.id===p.id));
   return {cells,crew,off,working};
@@ -1085,8 +1116,9 @@ function rotaHTML(pos,res){
   const mgr=state.staff.find(isMgr), mon=curWeek(), dates=weekDates(mon), open=dt=>dt>=OPEN_FROM&&dt<=OPEN_TO;
   const plans=dates.map(dt=>dayPlan(pos,res,dt));
   // 그 주 근무일 (주간+야간) → 5일 넘으면 빨간 테두리
-  const wk={}; plans.forEach((pl,i)=>{ if(!open(dates[i])) return; pl.working.forEach(id=>wk[id]=(wk[id]||0)+1); pl.crew.forEach(p=>wk[p.id]=(wk[p.id]||0)+NIGHT_W); });
-  const over=p=>p&&(wk[p.id]||0)>WORK_DAYS;
+  // 그 주 근무시간 (주간: 자리 시간에서 휴게 1시간 뺌, 야간 3시간) → 40시간 넘으면 빨간 테두리
+  const wk={}; plans.forEach((pl,i)=>{ if(!open(dates[i])) return; pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) wk[c.who.id]=(wk[c.who.id]||0)+netH(posTime(x)); }); pl.crew.forEach(p=>wk[p.id]=(wk[p.id]||0)+NIGHT_H); });
+  const over=p=>p&&(wk[p.id]||0)>MAX_H;
   const secs={}; pos.forEach(x=>(secs[posTime(x)]=secs[posTime(x)]||[]).push(x));
   const keys=Object.keys(secs).sort((a,b)=>toMin(a)-toMin(b));
   const lo=weekKey(OPEN_FROM), hi=weekKey(OPEN_TO);
@@ -1099,9 +1131,9 @@ function rotaHTML(pos,res){
   let body=keys.map(t=>sec(t,`휴게 1시간 · 하루 ${net(t)}시간`)+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${esc(x.label)}${posBrk(x)?`<span class="brk">☕ ${posBrk(x)}</span>`:""}</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
       const c=plans[i].cells[x.id], key=dt+"|"+x.id;
       if(ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>!pl.working.has(p.id)||p.id===(c.who&&c.who.id));
-        return `<td class="editing"><select data-swap="${key}"><option value="">${c.kind==="swap"?"원래대로":"그대로"}</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${wk[p.id]||0}일</option>`).join("")}</select></td>`; }
-      const cls=c.kind==="gap"?"gap":c.kind==="swap"?"swp":c.kind==="cover"?"cov":"";
-      return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="이날만 사람 바꾸기">${c.who?esc(pname(c.who)):"빈자리"}</button></td>`; }).join("")}</tr>`).join("")).join("");
+        return `<td class="editing"><select data-swap="${key}"><option value="">${c.kind==="swap"?"원래대로":"그대로"}</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select></td>`; }
+      const cls=c.kind==="gap"?"gap":c.kind==="swap"||c.kind==="auto"?"swp":c.kind==="cover"?"cov":"";
+      return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="${c.kind==="auto"?esc(pname(c.base))+" 필수 휴무 → 자동 대체":"이날만 사람 바꾸기"}">${c.who?esc(pname(c.who)):"빈자리"}</button></td>`; }).join("")}</tr>`).join("")).join("");
   const anyNight=plans.some((pl,i)=>open(dates[i])&&nightCfg().dates.includes(dates[i]));
   if(anyNight) body+=sec(`야간 ${NIGHT_TIME}`,"휴게 없음")+`<tr class="night"><td class="rl">야간</td>${dates.map((dt,i)=>nightCfg().dates.includes(dt)?`<td class="nt">${[mgr?`<b>${esc(pname(mgr)||"매니저")}</b>`:"",...plans[i].crew.map(p=>`<span class="${over(p)?"overtxt":""}">${esc(pname(p))}</span>`)].filter(Boolean).join("<br>")}</td>`:`<td></td>`).join("")}</tr>`;
   body+=sec("운영매니저","매일")+`<tr><td class="rl">매니저</td>${dates.map(dt=>open(dt)?`<td>${esc(mgr?pname(mgr)||"매니저":"매니저")}</td>`:closed).join("")}</tr>`;
@@ -1109,6 +1141,15 @@ function rotaHTML(pos,res){
   body+=`<tr class="sum"><td class="rl">인원</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed; const t=Object.values(plans[i].cells).filter(c=>c.who).length, n=plans[i].crew.length;
     return `<td class="${t===DAILY_ALBA?"ok":"bad"}">알바 ${t}${nightCfg().dates.includes(dt)?`<br>+야간 ${n}`:""}</td>`; }).join("")}</tr>`;
   return `${nav}<div class="tbl-wrap"><table class="rota">${head}${body}</table></div>`;
+}
+// 사람별 필수 휴무 날짜 달력
+function mustCal(p){
+  const months=["2026-12","2027-01","2027-02"], mon=ui.mustMon||(mustDates(p)[0]||OPEN_FROM).slice(0,7), [y,m]=mon.split("-").map(Number), sel=new Set(mustDates(p));
+  const lead=(new Date(y,m-1,1).getDay()+6)%7, last=new Date(y,m,0).getDate(), mi=months.indexOf(mon), cells=[];
+  for(let i=0;i<lead;i++) cells.push("<span></span>");
+  for(let d=1;d<=last;d++){ const ds=`${mon}-${String(d).padStart(2,"0")}`; cells.push(`<button type="button" class="cal ${sel.has(ds)?"on":""} ${(lead+d-1)%7>=5?"we":""}" data-mday="${ds}" ${ds>=OPEN_FROM&&ds<=OPEN_TO?"":"disabled"}>${d}</button>`); }
+  return `<div class="calbox" style="max-width:280px"><div class="row" style="justify-content:space-between"><button class="btn small" data-mnav="-1" ${mi<=0?"disabled":""}>‹</button><b>${esc(pname(p))} · ${y}년 ${m}월</b><button class="btn small" data-mnav="1" ${mi>=months.length-1?"disabled":""}>›</button></div>
+    <div class="calgrid">${DAYS.map((d,i)=>`<span class="calh ${i>=5?"we":""}">${d}</span>`).join("")}${cells.join("")}</div></div>`;
 }
 // 야간: 달력에서 날짜를 눌러 여러 날 고르기 (전시 기간 안)
 function nightHTML(){
@@ -1163,13 +1204,15 @@ function staffHTML(){
   const T=pos.length, NT=shown.reduce((s,g)=>s+N(g),0);
   const row=(p,s)=>{const wd=7-(p.off||[]).length;
     return `<tr data-id="${p.id}"><td class="num">${esc(p.code)}</td><td style="min-width:110px"><input data-f="name" value="${esc(p.name||"")}" placeholder="이름 넣기"></td><td>${p.kind==="대타"?"대체":`고정${(x=>x?" · "+esc(x.label):"")(pos.find(x=>x.id===p.pos))}`}</td>
-      <td><div class="days">${DAYS.map((d,i)=>`<button data-off="${i}" aria-pressed="${(p.off||[]).includes(i)}" aria-label="${d}요일 휴무">${d}</button>`).join("")}</div></td>
-      <td class="r num" style="color:${weekCount(p)>WORK_DAYS?"var(--bad)":weekCount(p)<WORK_DAYS-1?"var(--warn)":"inherit"}">${weekCount(p)}일${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(nightCrews().total[p.id]||0)}</td>
+      <td style="min-width:190px"><div class="days" title="매주 쉬어야 하는 요일">${DAYS.map((d,i)=>`<button data-must="${i}" aria-pressed="${mustDow(p).includes(i)}" aria-label="매주 ${d}요일 필수 휴무">${d}</button>`).join("")}</div>
+        <div class="row" style="gap:4px;margin-top:4px">${mustDates(p).map(d=>`<span class="chip mchip">${+d.slice(5,7)}/${+d.slice(8)}<button class="x" data-mrm="${d}" aria-label="빼기">×</button></span>`).join("")}<button class="linkbtn small noprint" data-mcal>${ui.mustOpen===p.id?"달력 닫기":"+ 날짜"}</button></div></td>
+      <td class="r num" style="color:${dayDays(p)*personNet(p,pos)>MAX_H?"var(--bad)":"inherit"}">${dayDays(p)}일 · ${+(dayDays(p)*personNet(p,pos)).toFixed(1)}h${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(nightCrews().total[p.id]||0)}</td>
       <td><select data-f="status">${STAFF_STATUS.map(x=>`<option ${p.status===x?"selected":""}>${x}</option>`).join("")}</select></td>
       <td style="min-width:180px"><input data-f="memo" value="${esc(p.memo||"")}" placeholder="예: 주말 선호, 교육 필요"></td>
       ${unlocked()?["idFile","bankFile"].map(k=>`<td class="noprint">${p[k]?`<span class="row" style="flex-wrap:nowrap"><button class="linkbtn small" data-sview="${k}">보기</button><button class="x" data-sdel="${k}" aria-label="삭제">×</button></span>`:`<div class="drop sdrop" data-sdrop="${k}">+ 사진</div>`}</td>`).join(""):""}
-      <td><button class="x" data-del aria-label="삭제">${ui.confirmDel===p.id?"삭제?":"×"}</button></td></tr>`;};
-  const table=(gp,s)=>gp.length?`<div class="tbl-wrap"><table><thead><tr><th>코드</th><th>이름 (눌러서 바꾸기)</th><th>구분</th><th>휴무 (누르면 전환)</th><th class="r">주 근무</th><th>상태</th><th>특이사항</th>${unlocked()?"<th>신분증</th><th>통장</th>":""}<th></th></tr></thead><tbody>
+      <td><button class="x" data-del aria-label="삭제">${ui.confirmDel===p.id?"삭제?":"×"}</button></td></tr>
+      ${ui.mustOpen===p.id?`<tr class="mustrow noprint" data-mfor="${p.id}"><td colspan="${unlocked()?10:8}">${mustCal(p)}</td></tr>`:""}`;};
+  const table=(gp,s)=>gp.length?`<div class="tbl-wrap"><table><thead><tr><th>코드</th><th>이름 (눌러서 바꾸기)</th><th>구분</th><th>필수 휴무 <span class="small">(매주 요일 · 날짜)</span></th><th class="r">주 근무</th><th>상태</th><th>특이사항</th>${unlocked()?"<th>신분증</th><th>통장</th>":""}<th></th></tr></thead><tbody>
     ${gp.sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0)).map(p=>row(p,SLOT[p.slot]||s)).join("")}</tbody></table></div>`:`<p class="small muted" style="margin:0">아직 없어요.</p>`;
   const byG=shown.map(g=>{ const gpos=pos.filter(x=>x.group===g.id), s=(gpos.find(x=>x.slot)||{}).slot;
     return `<div class="group-h"><h4>${g.name} <span class="muted small">자리 ${P(g)}개 · 필요 ${N(g)}명 · 지금 ${M(g)}명</span></h4></div>${table(ppl.filter(p=>pgroup(p)===g.id),s)}`;}).join("")
@@ -1206,7 +1249,9 @@ function bindStaff(){
   document.querySelectorAll("[data-day]").forEach(b=>b.onclick=()=>{ui.staffDay=+b.dataset.day;render();});
   document.querySelectorAll("tr[data-id]").forEach(tr=>{
     const p=()=>state.staff.find(x=>x.id===tr.dataset.id);
-    tr.querySelectorAll("[data-off]").forEach(b=>b.onclick=()=>{const i=+b.dataset.off; const o=new Set(p().off||[]); o.has(i)?o.delete(i):o.add(i); save("staff",{...p(),off:[...o].sort()});});
+    tr.querySelectorAll("[data-must]").forEach(b=>b.onclick=()=>{const i=+b.dataset.must; const o=new Set(mustDow(p())); o.has(i)?o.delete(i):o.add(i); save("staff",{...p(),mustDow:[...o].sort()}); syncRoster();});
+    tr.querySelectorAll("[data-mrm]").forEach(b=>b.onclick=()=>save("staff",{...p(),mustDates:mustDates(p()).filter(x=>x!==b.dataset.mrm)}));
+    const mc=tr.querySelector("[data-mcal]"); if(mc) mc.onclick=()=>{ ui.mustOpen=ui.mustOpen===p().id?null:p().id; ui.mustMon=null; render(); };
     tr.querySelectorAll("[data-f]").forEach(el=>el.onchange=()=>save("staff",{...p(),[el.dataset.f]:el.value.trim()}));
     tr.querySelector("[data-del]").onclick=()=>{ if(ui.confirmDel===p().id){ui.confirmDel=null;remove("staff",p().id);} else {ui.confirmDel=p().id;render();} };
     tr.querySelectorAll("[data-sdrop]").forEach(z=>dropZone(z,{accept:"image/*,application/pdf",onFiles:async fs=>{ const k=z.dataset.sdrop;
@@ -1215,6 +1260,9 @@ function bindStaff(){
     tr.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=()=>{ const k=b.dataset.sdel; if(!confirm("이 사진을 지울까요?")) return; remove("files",p()[k]); save("staff",{...p(),[k]:""}); });
   });
   bindLock(); bindRota();
+  document.querySelectorAll("tr[data-mfor]").forEach(tr=>{ const p=()=>state.staff.find(x=>x.id===tr.dataset.mfor);
+    tr.querySelectorAll("[data-mday]").forEach(b=>b.onclick=()=>{ const d=b.dataset.mday, ds=mustDates(p()); ui.mustMon=d.slice(0,7); save("staff",{...p(),mustDates:(ds.includes(d)?ds.filter(x=>x!==d):[...ds,d]).sort()}); });
+    tr.querySelectorAll("[data-mnav]").forEach(b=>b.onclick=()=>{ const ms=["2026-12","2027-01","2027-02"], cur=ui.mustMon||(mustDates(p())[0]||OPEN_FROM).slice(0,7); ui.mustMon=ms[Math.max(0,Math.min(2,ms.indexOf(cur)+(+b.dataset.mnav)))]; render(); }); });
   document.querySelectorAll("tr[data-ptime] input").forEach(el=>el.onchange=()=>{ const id=el.closest("tr").dataset.ptime, v=el.value.trim();
     if(v&&!/^\d{1,2}:\d{2}\s*~\s*\d{1,2}:\d{2}$/.test(v)){ toast("예: 11:00~20:00 처럼 적어 주세요"); return; }
     const c=state.settings.find(x=>x.id==="cfg-pos")||{id:"cfg-pos",pos:{}}; save("settings",{...c,pos:{...c.pos,[id]:{...(c.pos||{})[id],time:v.replace(/\s/g,"")}}}); });
