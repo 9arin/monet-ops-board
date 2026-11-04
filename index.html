@@ -456,7 +456,7 @@ const weekCount=p=>dayDays(p);
 const OPEN_FROM="2026-12-03", OPEN_TO="2027-02-28";
 const weekKey=date=>{ const d=new Date(date+"T00:00"); d.setDate(d.getDate()-((d.getDay()+6)%7)); return ymd(d); };
 const nightBase=()=>{ const nc=nightCfg(), ns=nightStats(); return `${nc.alba}x${ns.perWeek}:${ns.byDow.join(",")}`; };
-const nightExtra=()=>{ const nc=nightCfg(); return nc.extraFor===nightBase()?(+nc.extra||0):0; };
+const nightExtra=()=>{ const nc=nightCfg(); return nc.extraFor==="v2:"+nightBase()?(+nc.extra||0):0; }; // 예전 계산으로 늘린 인원은 무시
 function nightStats(){ // 주마다 야간 수, 요일별 야간 수
   const nc=nightCfg(), per={}, byDow=DAYS.map(()=>0);
   nc.dates.forEach(d=>{ per[weekKey(d)]=(per[weekKey(d)]||0)+1; byDow[dowOf(d)]++; });
@@ -472,8 +472,10 @@ function nightCrews(){
     const cands=date=>ppl.filter(p=>(p.off||[]).includes(dowOf(date))&&!mustDates(p).includes(date)&&(add[p.id]||0)<NIGHT_MAX&&load(p)+NIGHT_W<=WORK_DAYS&&hrs(p)+NIGHT_H<=MAX_H)
       .sort((a,b)=>hrs(a)-hrs(b)||(total[a.id]||0)-(total[b.id]||0)||(a.order||0)-(b.order||0));
     const man=nc.crew||{}; // 직접 고른 날은 그대로
-    todo.filter(d=>Array.isArray(man[d])).forEach(date=>{ const c=man[date].map(id=>ppl.find(p=>p.id===id)).filter(Boolean); c.forEach(p=>{ add[p.id]=(add[p.id]||0)+1; total[p.id]=(total[p.id]||0)+1; }); crews[date]=c; });
-    const rest=todo.filter(d=>!Array.isArray(man[d]));
+    const isMan=d=>Array.isArray(man[d])&&man[d].length; // 비워 둔 날은 자동
+    todo.filter(isMan).forEach(date=>{ const c=man[date].map(id=>ppl.find(p=>p.id===id)).filter(Boolean); c.forEach(p=>{ add[p.id]=(add[p.id]||0)+1; total[p.id]=(total[p.id]||0)+1; }); crews[date]=c; });
+    todo.filter(isMan).forEach(date=>{ const c=crews[date]; cands(date).filter(p=>!c.includes(p)).slice(0,Math.max(0,+nc.alba-c.length)).forEach(p=>{ c.push(p); add[p.id]=(add[p.id]||0)+1; total[p.id]=(total[p.id]||0)+1; }); }); // 골랐던 사람이 없어졌으면 채워요
+    const rest=todo.filter(d=>!isMan(d));
     while(rest.length){ rest.sort((a,b)=>cands(a).length-cands(b).length||a.localeCompare(b)); const date=rest.shift(); // 고를 사람이 적은 날부터
       const c=cands(date).slice(0,+nc.alba); c.forEach(p=>{ add[p.id]=(add[p.id]||0)+1; total[p.id]=(total[p.id]||0)+1; }); crews[date]=c; } });
   return {crews,total};
@@ -508,7 +510,7 @@ function syncRoster(){
   const nc=nightCfg(), need={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
   const ns=nightStats(), nightSig=`night:${nightBase()}+${nightExtra()}`;
   const mustSig="must:"+alba().map(p=>mustDow(p).length?p.id+mustDow(p).join(""):"").filter(Boolean).sort().join(",");
-  const sig="plan2|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig;
+  const sig="plan3|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig;
   const cfg=state.settings.find(x=>x.id==="cfg-roster3");
   // 자리 구성·야간이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 딱 맞지 않으면 다시 짜요
   const exact=()=>{ const {res,extra}=coverage(); return DAYS.every((_,d)=>!extra[d].length&&pos.every(x=>res[x.id][d].who)); };
@@ -577,7 +579,7 @@ function syncRoster(){
   if(changed.size||drop.length) toast(`근무표를 다시 맞췄어요 (매일 알바 ${DAILY_ALBA}명)`);
   // 야간 인원이 모자라는 날이 있으면 한 명 더 두고 다시 짜요 (최대 3명)
   if(Object.values(nightCrews().crews).some(c=>c.length<+nc.alba)&&nightExtra()<3){
-    save("settings",{...nightCfg(),id:"cfg-night",extra:nightExtra()+1,extraFor:nightBase()},true); rosterChecked=false; syncRoster(); }
+    save("settings",{...nightCfg(),id:"cfg-night",extra:nightExtra()+1,extraFor:"v2:"+nightBase()},true); rosterChecked=false; syncRoster(); }
 }
 // 한 번만: 4층 바닥 스티커마다 신세계 POP를 바로 위에 하나씩 (처리한 스티커엔 popDone 표시, 이후 새 스티커엔 안 함)
 function popOnStickers(){
