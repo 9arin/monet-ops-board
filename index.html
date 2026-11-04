@@ -177,6 +177,22 @@ tr.cand-row>td>*{position:sticky;left:10px;max-width:min(960px,calc(100vw - 96px
 .cand .t{font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
 .slotedit td input{min-width:90px}
 .kindseg{flex-wrap:wrap}
+table.week td{vertical-align:middle}
+.wkname{min-width:120px}
+.wkname input{display:block;margin-bottom:2px}
+.trange{min-width:170px}
+.rr{display:grid;grid-template-columns:28px 44px minmax(80px,1fr);gap:4px;align-items:center;font-size:11px;color:var(--muted)}
+.rr b{color:var(--ink);font-weight:600;font-size:12px;white-space:nowrap}
+.rr.wide{grid-template-columns:28px 84px minmax(80px,1fr)}
+.trange:has(.rr.wide){min-width:210px}
+.rr input[type=range]{width:100%;accent-color:var(--accent)}
+.trange select{border:1px solid var(--line);border-radius:6px;padding:2px 4px;background:var(--bg);font-size:12px;margin-top:2px}
+.tline{position:relative;height:8px;background:var(--soft);border-radius:4px;margin:2px 0 6px}
+.tline .tw{position:absolute;top:0;bottom:0;background:var(--accent);border-radius:4px}
+.tline .tb{position:absolute;top:0;bottom:0;background:var(--panel);opacity:.85;border-radius:2px}
+th.wkd,td.wkd{text-align:center;padding:4px 2px}
+.wkcell{width:52px;min-height:38px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--muted);font-size:11px;line-height:1.25;cursor:pointer;padding:2px}
+.wkcell.on{background:var(--okbg);color:var(--ok);border-color:transparent;font-weight:600}
 .docgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px}
 .doc{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .docthumb{aspect-ratio:4/3;background:var(--soft);border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-weight:700}
@@ -1011,6 +1027,50 @@ function bindNights(){
   $("#addNight").onsubmit=e=>{e.preventDefault(); const date=$("#nn-date").value; if(!date){toast("날짜를 골라 주세요");return;}
     const n={id:uid("n"),date,need:$("#nn-need").value,people:[],time:NIGHT_TIME}; save("nights",n); autoNight(n); };
 }
+/* ----- 주간 근무표 (사람별 근무·휴게 시간, 슬라이더로 조절) ----- */
+const T0=8*60, T1=23*60;
+const hm=m=>`${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`;
+const toMin=t=>{const m=String(t||"").match(/(\d{1,2}):(\d{2})/); return m?(+m[1])*60+(+m[2]):null;};
+function shiftOf(p,pos){ // 사람 시간이 없으면 맡은 자리 시간에서 가져와요
+  const x=(pos||positions()).find(y=>y.id===p.pos), sl=(x&&x.slot)||SLOT[p.slot];
+  const [a,b]=String(sl?sl.time:"11:00~20:00").split("~").map(toMin), br=String(sl?sl.brk:"").split("~").map(toMin);
+  const start=p.tStart??a??660, end=p.tEnd??b??1200, bl=p.bLen??(br[0]!=null&&br[1]!=null?br[1]-br[0]:60);
+  const bs=Math.min(Math.max(p.bStart??br[0]??Math.round((start+end)/60)*30,start),Math.max(start,end-bl));
+  return {start,end,bs,bl,net:Math.max(0,end-start-bl)};
+}
+const pct=m=>((m-T0)/(T1-T0)*100).toFixed(2);
+const tline=t=>`<div class="tline"><span class="tw" style="left:${pct(t.start)}%;width:${(pct(t.end)-pct(t.start)).toFixed(2)}%"></span>${t.bl?`<span class="tb" style="left:${pct(t.bs)}%;width:${(pct(t.bs+t.bl)-pct(t.bs)).toFixed(2)}%"></span>`:""}</div>`;
+function weekHTML(pos){
+  const ppl=alba().sort((a,b)=>(pgroup(a)>pgroup(b)?1:pgroup(a)<pgroup(b)?-1:0)||(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0));
+  const rows=ppl.map(p=>{ const t=shiftOf(p,pos), wd=7-(p.off||[]).length, h=wd*t.net/60;
+    return `<tr data-wk="${p.id}"><td class="wkname"><input data-wf="name" value="${esc(p.name||"")}" placeholder="${esc(p.code||"이름")}"><span class="small muted">${(ALLG.find(g=>g.id===pgroup(p))||{}).name||""} · ${p.kind==="대타"?"대체":"고정"}</span></td>
+      <td class="trange">${tline(t)}
+        <label class="rr">시작 <b class="num" data-lbl="start">${hm(t.start)}</b><input type="range" min="${T0}" max="${T1}" step="30" value="${t.start}" data-t="tStart"></label>
+        <label class="rr">끝 <b class="num" data-lbl="end">${hm(t.end)}</b><input type="range" min="${T0}" max="${T1}" step="30" value="${t.end}" data-t="tEnd"></label></td>
+      <td class="trange"><label class="rr wide">휴게 <b class="num" data-lbl="brk">${t.bl?hm(t.bs)+"~"+hm(t.bs+t.bl):"없음"}</b><input type="range" min="${T0}" max="${T1}" step="30" value="${t.bs}" data-t="bStart"></label>
+        <select data-t="bLen">${[0,30,60,90].map(n=>`<option value="${n}" ${t.bl===n?"selected":""}>${n?n+"분":"없음"}</option>`).join("")}</select></td>
+      ${DAYS.map((d,i)=>{const on=!(p.off||[]).includes(i); return `<td class="wkd"><button class="wkcell ${on?"on":""}" data-woff="${i}" aria-pressed="${!on}" aria-label="${d}요일 ${on?"근무":"휴무"}">${on?`<span class="num" data-lbl="day">${hm(t.start)}<br>${hm(t.end)}</span>`:"휴무"}</button></td>`;}).join("")}
+      <td class="r num" data-lbl="week" style="color:${h>40?"var(--bad)":"inherit"}">${wd}일<br>${+h.toFixed(1)}h</td></tr>`; }).join("");
+  return `<div class="panel" style="margin-top:16px"><h3>주간 근무표</h3>
+    <div class="tbl-wrap"><table class="week"><thead><tr><th>이름</th><th>근무시간</th><th>휴게</th>${DAYS.map(d=>`<th class="wkd">${d}</th>`).join("")}<th class="r">주 근무<br><span class="small">(휴게 뺌)</span></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function bindWeek(){
+  document.querySelectorAll("tr[data-wk]").forEach(tr=>{ const p=()=>state.staff.find(x=>x.id===tr.dataset.wk);
+    const read=()=>{ const v=k=>+tr.querySelector(`[data-t="${k}"]`).value; let start=v("tStart"), end=v("tEnd"), bl=v("bLen"), bs=v("bStart");
+      if(end<start+60) end=Math.min(T1,start+60), start=Math.min(start,end-60);
+      bs=Math.min(Math.max(bs,start),Math.max(start,end-bl)); return {start,end,bs,bl,net:Math.max(0,end-start-bl)}; };
+    const paint=()=>{ const t=read(), wd=7-(p().off||[]).length, h=wd*t.net/60;
+      tr.querySelector(".tline").outerHTML=tline(t);
+      tr.querySelector('[data-lbl="start"]').textContent=hm(t.start); tr.querySelector('[data-lbl="end"]').textContent=hm(t.end);
+      tr.querySelector('[data-lbl="brk"]').textContent=t.bl?hm(t.bs)+"~"+hm(t.bs+t.bl):"없음";
+      tr.querySelectorAll('[data-lbl="day"]').forEach(el=>el.innerHTML=`${hm(t.start)}<br>${hm(t.end)}`);
+      const w=tr.querySelector('[data-lbl="week"]'); w.innerHTML=`${wd}일<br>${+h.toFixed(1)}h`; w.style.color=h>40?"var(--bad)":"inherit"; return t; };
+    const commit=()=>{ const t=paint(); save("staff",{...p(),tStart:t.start,tEnd:t.end,bStart:t.bs,bLen:t.bl},true); };
+    tr.querySelectorAll("[data-t]").forEach(el=>{ el.oninput=paint; el.onchange=commit; });
+    tr.querySelector('[data-wf="name"]').onchange=e=>save("staff",{...p(),name:e.target.value.trim()});
+    tr.querySelectorAll("[data-woff]").forEach(b=>b.onclick=()=>{const i=+b.dataset.woff; const o=new Set(p().off||[]); o.has(i)?o.delete(i):o.add(i); save("staff",{...p(),off:[...o].sort()});});
+  });
+}
 function staffMap(res,extra){
   const d=ui.staffDay;
   const pins=state.markers.filter(m=>m.floor===ui.floor&&m.type==="staff").map(m=>{
@@ -1032,14 +1092,14 @@ function staffHTML(){
   const loose=ppl.filter(p=>!ALLG.some(g=>g.id===pgroup(p)));
   const T=pos.length, NT=shown.reduce((s,g)=>s+N(g),0);
   const row=(p,s)=>{const wd=7-(p.off||[]).length;
-    return `<tr data-id="${p.id}"><td class="num">${esc(p.code)}</td><td style="min-width:110px"><input data-f="name" value="${esc(p.name||"")}" placeholder="이름 넣기"></td><td>${p.kind==="대타"?"대체":`고정${(x=>x?" · "+esc(x.label):"")(pos.find(x=>x.id===p.pos))}`}</td><td class="num">${esc(s?s.time:"자리 따라")}</td><td class="num">${esc(s?s.brk:"자리 따라")}</td>
+    return `<tr data-id="${p.id}"><td class="num">${esc(p.code)}</td><td style="min-width:110px"><input data-f="name" value="${esc(p.name||"")}" placeholder="이름 넣기"></td><td>${p.kind==="대타"?"대체":`고정${(x=>x?" · "+esc(x.label):"")(pos.find(x=>x.id===p.pos))}`}</td>
       <td><div class="days">${DAYS.map((d,i)=>`<button data-off="${i}" aria-pressed="${(p.off||[]).includes(i)}" aria-label="${d}요일 휴무">${d}</button>`).join("")}</div></td>
-      <td class="r num" style="color:${wd>WORK_DAYS?"var(--bad)":wd<WORK_DAYS-1?"var(--warn)":"inherit"}">${wd}일 · ${wd*8}h${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(state.nights.filter(n=>(n.people||[]).includes(p.id)).length)}</td>
+      <td class="r num" style="color:${wd>WORK_DAYS?"var(--bad)":wd<WORK_DAYS-1?"var(--warn)":"inherit"}">${wd}일 · ${+(wd*shiftOf(p,pos).net/60).toFixed(1)}h${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(state.nights.filter(n=>(n.people||[]).includes(p.id)).length)}</td>
       <td><select data-f="status">${STAFF_STATUS.map(x=>`<option ${p.status===x?"selected":""}>${x}</option>`).join("")}</select></td>
       <td style="min-width:180px"><input data-f="memo" value="${esc(p.memo||"")}" placeholder="예: 주말 선호, 교육 필요"></td>
       ${unlocked()?["idFile","bankFile"].map(k=>`<td class="noprint">${p[k]?`<span class="row" style="flex-wrap:nowrap"><button class="linkbtn small" data-sview="${k}">보기</button><button class="x" data-sdel="${k}" aria-label="삭제">×</button></span>`:`<div class="drop sdrop" data-sdrop="${k}">+ 사진</div>`}</td>`).join(""):""}
       <td><button class="x" data-del aria-label="삭제">${ui.confirmDel===p.id?"삭제?":"×"}</button></td></tr>`;};
-  const table=(gp,s)=>gp.length?`<div class="tbl-wrap"><table><thead><tr><th>코드</th><th>이름 (눌러서 바꾸기)</th><th>구분</th><th>근무시간</th><th>휴게</th><th>휴무 (누르면 전환)</th><th class="r">주 근무</th><th>상태</th><th>특이사항</th>${unlocked()?"<th>신분증</th><th>통장</th>":""}<th></th></tr></thead><tbody>
+  const table=(gp,s)=>gp.length?`<div class="tbl-wrap"><table><thead><tr><th>코드</th><th>이름 (눌러서 바꾸기)</th><th>구분</th><th>휴무 (누르면 전환)</th><th class="r">주 근무</th><th>상태</th><th>특이사항</th>${unlocked()?"<th>신분증</th><th>통장</th>":""}<th></th></tr></thead><tbody>
     ${gp.sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0)).map(p=>row(p,SLOT[p.slot]||s)).join("")}</tbody></table></div>`:`<p class="small muted" style="margin:0">아직 없어요.</p>`;
   const byG=shown.map(g=>{ const gpos=pos.filter(x=>x.group===g.id), s=(gpos.find(x=>x.slot)||{}).slot;
     return `<div class="group-h"><h4>${g.name} <span class="muted small">자리 ${P(g)}개 · 필요 ${N(g)}명 · 지금 ${M(g)}명</span></h4></div>${table(ppl.filter(p=>pgroup(p)===g.id),s)}`;}).join("")
@@ -1063,7 +1123,7 @@ function staffHTML(){
   const slotEdit=ui.slotEdit?`<div class="tbl-wrap slotedit" style="margin-top:12px"><table><thead><tr><th>자리 이름</th><th>근무시간</th><th>휴게</th></tr></thead><tbody>
     ${GROUPS.map(g=>g.slots.map(s=>`<tr data-slot="${s.id}"><td><input data-sk="name" value="${esc(s.name)}"></td><td><input data-sk="time" value="${esc(s.time)}"></td><td><input data-sk="brk" value="${esc(s.brk)}"></td></tr>`).join("")).join("")}
     </tbody></table></div>`:"";
-  return `${staffMap(res,extra)}<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">필요 인원 · 주간 자리 채움</h3><button class="btn small noprint" id="slotEditBtn">${ui.slotEdit?"자리 고치기 닫기":"자리 이름·시간 바꾸기"}</button></div>${slotEdit}${plan}${grid}</div>${nightsHTML()}<div class="panel" style="margin-top:16px"><h3>인원 명단</h3>
+  return `${staffMap(res,extra)}<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">필요 인원 · 주간 자리 채움</h3><button class="btn small noprint" id="slotEditBtn">${ui.slotEdit?"자리 고치기 닫기":"자리 이름·시간 바꾸기"}</button></div>${slotEdit}${plan}${grid}</div>${weekHTML(pos)}${nightsHTML()}<div class="panel" style="margin-top:16px"><h3>인원 명단</h3>
   <div class="group-h"><h4>운영매니저 <span class="muted small">매일 근무 · 1명</span></h4></div>
   <label class="f" style="max-width:240px">이름<input id="mgrName" value="${esc(mgr?mgr.name:"")}" placeholder="운영매니저 이름"></label>
   ${lockBar()}
@@ -1091,7 +1151,7 @@ function bindStaff(){
     tr.querySelectorAll("[data-sview]").forEach(b=>b.onclick=()=>openSecret(p()[b.dataset.sview]));
     tr.querySelectorAll("[data-sdel]").forEach(b=>b.onclick=()=>{ const k=b.dataset.sdel; if(!confirm("이 사진을 지울까요?")) return; remove("files",p()[k]); save("staff",{...p(),[k]:""}); });
   });
-  bindLock(); bindNights();
+  bindLock(); bindNights(); bindWeek();
   $("#slotEditBtn").onclick=()=>{ui.slotEdit=!ui.slotEdit;render();};
   document.querySelectorAll("tr[data-slot]").forEach(tr=>tr.querySelectorAll("[data-sk]").forEach(el=>el.onchange=()=>{
     const cfg=state.settings.find(x=>x.id==="cfg-slots")||{id:"cfg-slots",slots:{}}; const id=tr.dataset.slot, k=el.dataset.sk;
