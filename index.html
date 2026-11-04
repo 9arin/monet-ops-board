@@ -327,7 +327,8 @@ async function save(col,obj,quiet){ // quiet: 입력 중이면 화면 새로 그
 async function remove(col,id){
   state[col]=state[col].filter(x=>x.id!==id); render();
   if(db){ const key=col+"/"+id; unremoved[key]={col,id}; delete unsaved[key];
-    const {error}=await db.from(TABLE).delete().eq("col",dbCol(col)).eq("id",id); delete unremoved[key]; if(error) handleErr(error);}
+    const {error}=await db.from(TABLE).delete().eq("col",dbCol(col)).eq("id",id); delete unremoved[key]; if(error) handleErr(error);
+    if(col==="files") db.from(TABLE).delete().eq("col","items").like("id",id+"~%").then(()=>{}); } // 조각도 같이 지움
 }
 // 글자를 치면 잠깐 뒤 자동 저장 (칸을 벗어나지 않고 새로고침해도 안 사라지게)
 let typeTimer=null;
@@ -349,13 +350,13 @@ const TABLE="board_docs";
 const cfg=window.BOARD_CONFIG||{};
 let channel=null;
 function showLogin(on){ $("#login").hidden=!on; $("#tabs").hidden=on; $("#view").hidden=on; $("#stats").hidden=on; }
-function applyRow(row){ if(!row||!COLS.includes(row.col)) return; const c=vcolOf(row.col,row.id);
+function applyRow(row){ if(!row||!COLS.includes(row.col)||String(row.id).includes("~")) return; const c=vcolOf(row.col,row.id); // ~ = 파일 조각
   const o=c==="files"?{id:row.id,...((row.data||{}).meta||{})}:{id:row.id,...row.data}; // 파일 본문(b64)은 필요할 때만 받아요
   const i=state[c].findIndex(x=>x.id===row.id); if(i>=0) state[c][i]=o; else state[c].push(o); }
 async function loadAll(){
   const [r1,r2]=await Promise.all([
     db.from(TABLE).select("col,id,data").not("id","like","f-%").limit(5000),
-    db.from(TABLE).select("col,id,meta:data->meta").eq("col","items").like("id","f-%").limit(2000)]);
+    db.from(TABLE).select("col,id,meta:data->meta").eq("col","items").like("id","f-%").not("id","like","%~%").limit(2000)]);
   if(r2.error) console.error(r2.error); // 파일 목록이 안 와도 보드는 열리게
   const error=r1.error;
   if(error){ setNotice("데이터를 불러오지 못했어요. 새로고침해 주세요."); console.error(error); return; }
@@ -499,7 +500,11 @@ function scheduleRender(){
 }
 
 /* ---------- 파일 끌어다 놓기 · 저장 ---------- */
-const MAX_FILE=4*1024*1024;
+const MAX_FILE=30*1024*1024; // 파일 하나 최대
+const CHUNK=1536*1024; // 이보다 큰 파일은 조각으로 나눠 여러 줄에 저장 (f-아이디~0, ~1 …)
+const DB_BUDGET=350*1024*1024; // 무료 데이터베이스(500MB) 중 파일에 쓸 몫
+const usedBytes=()=>state.files.reduce((s,f)=>s+(f.size||0),0)*1.37; // base64라 실제보다 약 37% 큼
+const mb=n=>Math.round(n/1048576);
 const localFiles={}; // 미리보기 모드에서만 사용
 // 창 아무 데나 떨어뜨려도 브라우저가 파일을 열지 않게
 ["dragover","drop"].forEach(t=>window.addEventListener(t,e=>{ if(!e.target.closest||!e.target.closest(".drop")) e.preventDefault(); }));
@@ -526,22 +531,45 @@ function shrinkImage(file,max,q){ // 사진을 줄여 JPEG로
 async function storeFile(file,raw){ // raw: 원본 그대로 (디자인 파일)
   let blob=file;
   if(!raw&&/^image\//.test(file.type)&&file.size>800*1024) blob=await shrinkImage(file,2000,.85);
-  if(blob.size>MAX_FILE){ toast("파일이 너무 커요. 4MB까지 올릴 수 있어요."); return null; }
-  const id=uid("f"), meta={name:file.name,type:blob.type||file.type,size:blob.size}, b64=await readURL(blob);
-  state.files.push({id,...meta});
-  if(!db){ localFiles[id]=b64; return id; }
-  const {error}=await db.from(TABLE).upsert({col:"items",id,data:{meta,b64},updated_at:new Date().toISOString()});
+  if(blob.size>MAX_FILE){ toast(`파일이 너무 커요. ${mb(MAX_FILE)}MB까지 올릴 수 있어요.`); return null; }
+  if(usedBytes()+blob.size*1.37>DB_BUDGET){ toast(`저장 공간이 부족해요 (지금 약 ${mb(usedBytes())}MB 사용). 안 쓰는 파일을 지워 주세요.`); return null; }
+  const id=uid("f"), meta={name:file.name,type:blob.type||file.type,size:blob.size};
+  if(blob.size<=CHUNK){
+    const b64=await readURL(blob); state.files.push({id,...meta});
+    if(!db){ localFiles[id]=b64; return id; }
+    const {error}=await db.from(TABLE).upsert({col:"items",id,data:{meta,b64},updated_at:new Date().toISOString()});
+    if(error){ handleErr(error); return null; }
+    return id;
+  }
+  meta.chunks=Math.ceil(blob.size/CHUNK);
+  if(!db){ state.files.push({id,...meta}); localFiles[id]=blob; return id; }
+  for(let k=0;k<meta.chunks;k++){
+    toast(`올리는 중… ${k+1}/${meta.chunks}`);
+    const b64=b64e(await blob.slice(k*CHUNK,(k+1)*CHUNK).arrayBuffer());
+    const {error}=await db.from(TABLE).upsert({col:"items",id:`${id}~${k}`,data:{b64},updated_at:new Date().toISOString()});
+    if(error){ handleErr(error); db.from(TABLE).delete().eq("col","items").like("id",`${id}~%`).then(()=>{}); return null; }
+  }
+  const {error}=await db.from(TABLE).upsert({col:"items",id,data:{meta},updated_at:new Date().toISOString()});
   if(error){ handleErr(error); return null; }
+  state.files.push({id,...meta});
   return id;
 }
-async function fileB64(id){
-  let b64=localFiles[id];
-  if(!b64&&db){ const {data,error}=await db.from(TABLE).select("b64:data->>b64").eq("col","items").eq("id",id).single(); if(!error) b64=data.b64; }
-  return b64;
+async function fileBlob(id){ // 저장한 파일 → Blob (조각 파일은 이어 붙임)
+  const meta=state.files.find(f=>f.id===id)||{}, loc=localFiles[id];
+  if(loc instanceof Blob) return loc;
+  if(loc) return (await fetch(loc)).blob();
+  if(!db) return null;
+  if(meta.chunks){ const parts=[];
+    for(let k=0;k<meta.chunks;k++){ if(meta.chunks>2) toast(`받는 중… ${k+1}/${meta.chunks}`);
+      const {data,error}=await db.from(TABLE).select("b64:data->>b64").eq("col","items").eq("id",`${id}~${k}`).single();
+      if(error||!data) return null; parts.push(b64d(data.b64)); }
+    return new Blob(parts,{type:meta.type||"application/octet-stream"}); }
+  const {data,error}=await db.from(TABLE).select("b64:data->>b64").eq("col","items").eq("id",id).single();
+  return error||!data||!data.b64?null:(await fetch(data.b64)).blob();
 }
 async function downloadFile(id,name){
-  toast("내려받는 중…"); const b64=await fileB64(id); if(!b64){ toast("파일을 받지 못했어요."); return; }
-  const u=URL.createObjectURL(await (await fetch(b64)).blob()), a=document.createElement("a");
+  toast("내려받는 중…"); const blob=await fileBlob(id); if(!blob){ toast("파일을 받지 못했어요."); return; }
+  const u=URL.createObjectURL(blob), a=document.createElement("a");
   a.href=u; a.download=name||"file"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),5000);
 }
 async function pdfThumb(file,max){ // PDF 첫 장 → 미리보기 사진
@@ -557,10 +585,9 @@ const vname=(name,v)=>{ const m=String(name).match(/^(.*?)(\.[^.]+)?$/); return 
 const fsize=n=>n>1048576?(n/1048576).toFixed(1)+"MB":Math.max(1,Math.round(n/1024))+"KB";
 async function openFile(id){
   const w=window.open("","_blank"); // 팝업 차단을 피하려고 먼저 열어 둠
-  let b64=localFiles[id];
-  if(!b64&&db){ const {data,error}=await db.from(TABLE).select("b64:data->>b64").eq("col","items").eq("id",id).single(); if(!error) b64=data.b64; }
-  if(!b64){ if(w) w.close(); toast("파일을 열지 못했어요."); return; }
-  const blob=await (await fetch(b64)).blob(); const u=URL.createObjectURL(blob);
+  const blob=await fileBlob(id);
+  if(!blob){ if(w) w.close(); toast("파일을 열지 못했어요."); return; }
+  const u=URL.createObjectURL(blob);
   if(w) w.location=u; else location.href=u;
 }
 
@@ -663,7 +690,7 @@ async function createLock(pw){
 async function storeSecret(file){
   if(!unlocked()) return null;
   let blob=file; if(/^image\//.test(file.type)) blob=await shrinkImage(file,1600,.85);
-  if(blob.size>MAX_FILE){ toast("파일이 너무 커요. 4MB까지 올릴 수 있어요."); return null; }
+  if(blob.size>4*1048576){ toast("신분증·통장 파일은 4MB까지 올릴 수 있어요."); return null; }
   const {iv,ct}=await seal(ui.unlockKey,await blob.arrayBuffer());
   const id=uid("f"), meta={name:"locked",type:blob.type||"application/octet-stream",size:blob.size,enc:true,iv}; // 파일 이름은 남기지 않아요
   state.files.push({id,...meta});
@@ -1016,7 +1043,7 @@ function quotesHTML(sum){
         <button class="btn small" data-qcolor title="라벨 색 바꾸기"><span class="dot" style="background:${qcolor(q)}"></span> 색</button></div>
     </div>`;}).join("");
   return `<div class="panel" style="margin-bottom:16px"><h3>견적서</h3>
-    <div class="drop noprint" id="quoteDrop"><b>견적서 파일을 여기로 끌어다 놓으세요</b><br><span class="small">PDF·사진 · 눌러서 고를 수도 있어요 · 회사명, 계좌, 금액, 연락처를 자동으로 읽어요</span></div>
+    <div class="drop noprint" id="quoteDrop"><b>견적서 파일을 여기로 끌어다 놓으세요</b><br><span class="small">PDF·사진 · 눌러서 고를 수도 있어요 · 회사명, 계좌, 금액, 연락처를 자동으로 읽어요 · 파일당 ${mb(MAX_FILE)}MB까지</span></div>
     ${cards?`<div class="qgrid">${cards}</div>`:""}
     <p class="small muted" style="margin:8px 0 0">자동으로 읽은 내용은 꼭 한 번 확인해 주세요. 틀린 칸은 눌러서 바로 고치면 돼요. 견적서마다 라벨이 생기고, 아래 물품 표에서 '견적' 칸으로 묶을 수 있어요.</p></div>`;
 }
@@ -1188,7 +1215,7 @@ function gfxHTML(){
     <div class="row" style="flex-wrap:nowrap"><label class="f" style="flex:1">크기<input id="g-size" value="${esc(sel.size||"")}" placeholder="예: 3000×2400"></label>
       <label class="f" style="flex:1">상태<select id="g-status">${GSTATUS.map(s=>`<option ${sel.status===s?"selected":""}>${s}</option>`).join("")}</select></label></div>
     <label class="f">시안 파일 (PDF·이미지)<div class="drop gimg" id="g-img">${sel.image?`<img src="${esc(sel.image)}" alt="시안 미리보기">`:"PDF나 이미지를 끌어다 놓거나 눌러서 고르기"}</div></label>
-    <span class="small muted">올릴 때마다 V1, V2…로 버전이 쌓여요 (파일당 ${MAX_FILE/1048576}MB까지)</span>
+    <span class="small muted">올릴 때마다 V1, V2…로 버전이 쌓여요. 파일당 ${mb(MAX_FILE)}MB까지 · 전체 저장 공간 ${mb(usedBytes())}/${mb(DB_BUDGET)}MB 사용</span>
     ${(sel.files||[]).length?`<div class="gfiles">${sel.files.slice().reverse().map(f=>`<div class="gfile"><b class="num">V${f.v}</b><span class="fname" title="${esc(f.name)}">${esc(f.name)}</span><span class="small muted">${fsize(f.size||0)} · ${esc(f.at||"")}</span><button class="btn small" data-gdl="${f.fileId}" type="button">다운로드</button>${ui.planEdit?`<button class="x" data-gfdel="${f.fileId}" aria-label="이 버전 삭제">×</button>`:""}</div>`).join("")}</div>`:""}
     <label class="f">메모<input id="g-note" value="${esc(sel.note||"")}" placeholder="업체, 확인할 점"></label>
     <div class="row" style="justify-content:space-between"><button class="btn" id="g-close">닫기</button>
@@ -1249,7 +1276,7 @@ function bindGfx(){
   $("#g-status").onchange=e=>upd({status:e.target.value});
   dropZone($("#g-img"),{accept:"application/pdf,image/*",onFiles:async fs=>{ const f=fs[0], id=sel.id;
       if(!isPdf(f)&&!/^image\//.test(f.type)){ toast("PDF나 이미지 파일만 올릴 수 있어요."); return; }
-      if(f.size>MAX_FILE){ toast(`파일이 너무 커요. ${MAX_FILE/1048576}MB까지 올릴 수 있어요.`); return; }
+      if(f.size>MAX_FILE){ toast(`파일이 너무 커요. ${mb(MAX_FILE)}MB까지 올릴 수 있어요.`); return; }
       toast("올리는 중…");
       const [thumb,fid]=await Promise.all([makeThumb(f).catch(e=>{console.error(e);return null;}),storeFile(f,true)]); if(!fid) return;
       const g=state.graphics.find(x=>x.id===id); if(!g) return;
