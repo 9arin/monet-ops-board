@@ -371,38 +371,43 @@ async function loadAll(){
 }
 // 배치도 자리 수가 바뀌면(처음 포함): 구역마다 고정 + 대체 인원을 채우고, 매일 자리가 다 차도록 휴무(연속 2일)를 짜요.
 // 있는 사람의 이름 등은 그대로. 휴무표가 이미 맞으면 건드리지 않아요. 같은 자리 구성에선 한 번만 돌아요.
+let rosterChecked=false;
 function syncRoster(){
   if(!loaded.settings||!loaded.staff||!loaded.markers) return;
   const pos=positions(); if(!pos.some(x=>x.marker)) return;
   const need={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
   const sig=Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|");
-  const cfg=state.settings.find(x=>x.id==="cfg-roster3"); if(cfg&&cfg.sig===sig) return;
+  const cfg=state.settings.find(x=>x.id==="cfg-roster3");
+  // 자리 구성이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 알바가 딱 맞지 않으면 다시 짜요
+  const exact=()=>{ const {res,extra}=coverage(); return DAYS.every((_,d)=>!extra[d].length&&pos.every(x=>res[x.id][d].who)); };
+  const recheck=!rosterChecked; rosterChecked=true;
+  if(cfg&&cfg.sig===sig&&!(recheck&&!exact())) return;
   const ppl=alba().slice().sort((a,b)=>(a.order||0)-(b.order||0)), changed=new Map();
   const floorOf=p=>(ALLG.find(g=>g.id===pgroup(p))||FLOATS.find(g=>g.id===p.group)||{}).floor;
-  const spare=ppl.filter(p=>!need[pgroup(p)]); // 자리 없는 구역·예전 로테이션 사람 → 같은 층 모자란 구역으로
+  const spare=ppl.filter(p=>!need[pgroup(p)]); // 자리 없는 구역·예전 로테이션 사람
+  const zones=ALLG.filter(g=>need[g.id]), mem={};
   let n=Math.max(0,...ppl.map(p=>parseInt(String(p.code||"").replace(/\D/g,""))||0)), ord=Math.max(0,...ppl.map(p=>p.order||0));
-  ALLG.filter(g=>need[g.id]).forEach(g=>{
-    const P=need[g.id], N=needFor(P);
-    let mem=ppl.filter(p=>pgroup(p)===g.id);
-    while(mem.length<N){
-      const si=spare.findIndex(p=>floorOf(p)===g.floor);
-      let id=`p-auto-${g.id}-${mem.length+1}`; if(state.staff.some(x=>x.id===id)) id=uid("p");
-      mem.push(si>=0?{...spare.splice(si,1)[0],group:g.id,slot:"",pos:""}:{id,code:"R"+(++n),order:++ord,name:"",status:"모집 중",memo:"",group:g.id,slot:"",off:[]});
-      changed.set(mem[mem.length-1].id,true);
-    }
-    mem.sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0));
-    mem=mem.map((p,i)=>{const kind=i<P?"담당":"대타"; if(p.kind!==kind){changed.set(p.id,true); return {...p,kind};} return p;});
-    // 매일 딱 P명: 쉬는 날 합계 = 7×(사람 수 − P). 고르게 나누면 2일(주5일) 또는 3일(주4일). 대체 인력부터 주4일
-    const ok=mem.every(p=>(p.off||[]).length>=7-WORK_DAYS)&&DAYS.every((_,d)=>mem.filter(p=>!(p.off||[]).includes(d)).length===P);
-    if(!ok){
-      const total=7*(mem.length-P), base=Math.floor(total/mem.length), more=total%mem.length;
-      let at=0; mem=mem.map((p,i)=>{ const k=base+(i>=mem.length-more?1:0); // 이어지는 날로 쉬기 → 요일마다 쉬는 사람 수가 똑같음
+  const move=(p,g)=>{ const q={...p,group:g.id,slot:"",pos:""}; changed.set(q.id,true); return q; };
+  zones.forEach(g=>{ const N=needFor(need[g.id]); mem[g.id]=ppl.filter(p=>pgroup(p)===g.id);
+    while(mem[g.id].length<N){ const si=spare.findIndex(p=>floorOf(p)===g.floor);
+      let id=`p-auto-${g.id}-${mem[g.id].length+1}`; if(state.staff.some(x=>x.id===id)) id=uid("p");
+      const q=si>=0?move(spare.splice(si,1)[0],g):{id,code:"R"+(++n),order:++ord,name:"",status:"모집 중",memo:"",group:g.id,slot:"",off:[]};
+      changed.set(q.id,true); mem[g.id].push(q); } });
+  spare.splice(0).forEach(p=>{ // 남는 사람도 구역에 넣어서 하루 인원이 늘지 않게 (쉬는 날이 늘어남)
+    const g=zones.filter(z=>z.floor===floorOf(p)).concat(zones).sort((a,b)=>(mem[a.id].length/need[a.id])-(mem[b.id].length/need[b.id]))[0];
+    mem[g.id].push(move(p,g)); });
+  zones.forEach(g=>{ const P=need[g.id]; let m=mem[g.id];
+    m.sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0));
+    m=m.map((p,i)=>{const kind=i<P?"담당":"대타"; if(p.kind!==kind){changed.set(p.id,true); return {...p,kind};} return p;});
+    // 매일 딱 P명: 쉬는 날 합계 = 7×(사람 수 − P)를 고르게 나눠요 (주5일, 사람이 많으면 주4일 등)
+    const ok=m.every(p=>(p.off||[]).length>=7-WORK_DAYS)&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length===P);
+    if(!ok){ const total=7*(m.length-P), base=Math.floor(total/m.length), more=total%m.length; let at=0;
+      m=m.map((p,i)=>{ const k=base+(i>=m.length-more?1:0); // 이어지는 날로 쉬기 → 요일마다 쉬는 사람 수가 똑같음
         const off=Array.from({length:k},(_,j)=>(at+j)%7).sort((x,y)=>x-y); at+=k; changed.set(p.id,true); return {...p,off}; }); }
-    mem.forEach(p=>{ if(changed.has(p.id)) changed.set(p.id,p); });
-  });
+    m.forEach(p=>{ if(changed.has(p.id)) changed.set(p.id,p); }); });
   changed.forEach(p=>save("staff",p,true));
   save("settings",{id:"cfg-roster3",sig,at:new Date().toISOString()},true);
-  if(changed.size) toast("배치도 자리에 맞춰 알바 명단과 휴무표를 맞췄어요");
+  if(changed.size) toast(`매일 알바 ${DAILY_ALBA}명이 되도록 휴무표를 다시 맞췄어요`);
 }
 // 한 번만: 4층 바닥 스티커마다 신세계 POP를 바로 위에 하나씩 (처리한 스티커엔 popDone 표시, 이후 새 스티커엔 안 함)
 function popOnStickers(){
@@ -709,10 +714,10 @@ async function openSecret(id){
   catch(e){ if(w) w.close(); toast("파일을 열지 못했어요."); }
 }
 function lockBar(){
-  if(unlocked()) return `<div class="lockbar noprint"><span>🔓 신분증·통장 사진 칸이 열려 있어요. 새로고침하거나 10분이 지나면 다시 잠겨요.</span><button class="btn small" id="relock" type="button">다시 잠그기</button></div>`;
-  if(!lockCfg()) return `<form class="lockbar noprint" id="lockForm"><span>🔒 신분증·통장 사진 칸은 잠겨 있어요. 처음이니 잠금 비밀번호를 정해 주세요. <b>잊어버리면 사진을 다시 볼 수 없어요.</b></span>
+  if(unlocked()) return `<div class="lockbar noprint"><span>🔓 신분증·통장 열림</span><button class="btn small" id="relock" type="button">다시 잠그기</button></div>`;
+  if(!lockCfg()) return `<form class="lockbar noprint" id="lockForm"><span>🔒 신분증·통장 · 잠금 비밀번호 정하기 <b>(잊으면 복구 안 돼요)</b></span>
     <span class="row"><input type="password" id="lockPw" placeholder="새 잠금 비밀번호" autocomplete="new-password" minlength="4" required><input type="password" id="lockPw2" placeholder="한 번 더" autocomplete="new-password" required><button class="btn primary" type="submit">정하고 열기</button></span></form>`;
-  return `<form class="lockbar noprint" id="unlockForm"><span>🔒 신분증·통장 사진 칸은 잠겨 있어요.</span>
+  return `<form class="lockbar noprint" id="unlockForm"><span>🔒 신분증·통장</span>
     <span class="row"><input type="password" id="unlockPw" placeholder="잠금 비밀번호" autocomplete="off" required><button class="btn primary" type="submit">잠금 풀기</button></span></form>`;
 }
 function bindLock(){
@@ -940,7 +945,7 @@ function staffMap(res,extra){
     return {id:m.id,x:m.x,y:m.y,color:gap?"var(--bad)":tcolor("staff"),text:gap?"!":"●",label:`${m.label} · ${who}`,gap,faded};
   });
   const dayseg=`<div class="seg daypick" role="group" aria-label="요일">${DAYS.map((x,i)=>`<button data-day="${i}" aria-pressed="${d===i}">${x}</button>`).join("")}</div>`;
-  return mapCard("요일별 배치",dayseg,pins,"요일을 고르면 그날 각 자리에 서는 사람이 도면에 표시돼요. 점을 누르면 아래 표의 그 자리 줄로 내려가요. 빨간 점은 빈자리예요.");
+  return mapCard("요일별 배치",dayseg,pins,"");
 }
 function staffHTML(){
   if(!loaded.staff) return loadingOrEmpty("staff","");
@@ -964,29 +969,24 @@ function staffHTML(){
     return `<div class="group-h"><h4>${g.name} <span class="muted small">${g.floor} · 자리 ${P(g)}개 · 필요 ${N(g)}명 · 지금 ${M(g)}명</span></h4></div>${table(ppl.filter(p=>pgroup(p)===g.id),s)}`;}).join("")
     +(loose.length?`<div class="group-h"><h4>배치 없음 <span class="muted small">${loose.length}명 · 자리가 정해지지 않은 사람</span></h4></div>${table(loose,null)}`:"");
   const summary=`<div class="tbl-wrap"><table><thead><tr><th>구역</th><th class="r">하루 자리</th><th class="r">고정</th><th class="r">대체 인력</th><th class="r">필요 인원</th><th class="r">지금</th></tr></thead><tbody>
-    ${shown.filter(g=>P(g)).map(g=>`<tr><td><b>${g.name}</b> <span class="small muted">${g.floor} · ${pos.filter(x=>x.group===g.id).map(x=>esc(x.label)).join(", ")}</span></td><td class="r num">${P(g)}</td><td class="r num">${P(g)}</td><td class="r num">${N(g)-P(g)}</td><td class="r num"><b>${N(g)}</b></td><td class="r num" style="color:${M(g)<N(g)?"var(--bad)":"inherit"}">${M(g)}</td></tr>`).join("")}
+    ${shown.filter(g=>P(g)).map(g=>`<tr><td><b>${g.name}</b> <span class="small muted">${g.floor}</span></td><td class="r num">${P(g)}</td><td class="r num">${P(g)}</td><td class="r num">${N(g)-P(g)}</td><td class="r num"><b>${N(g)}</b></td><td class="r num" style="color:${M(g)<N(g)?"var(--bad)":"inherit"}">${M(g)}</td></tr>`).join("")}
     <tr><td><b>합계</b></td><td class="r num"><b>${T}</b></td><td class="r num">${T}</td><td class="r num">${NT-T}</td><td class="r num"><b>${NT}</b></td><td class="r num">${ppl.length}</td></tr></tbody></table></div>`;
   const spare=positions.spare||[];
-  const plan=`<p style="margin:0 0 8px">매일 <b>알바 ${DAILY_ALBA}명 + 운영매니저 1명 = 하루 ${DAILY_ALBA+1}명</b>이 나와요. 알바는 요일마다 딱 ${DAILY_ALBA}명, 더도 덜도 아니에요.
-    한 사람은 주 ${WORK_DAYS}일까지만 일하니까, 구역마다 쉬는 사람 대신 들어갈 <b>대체 인력</b>이 필요해요. (자리 수 × 7일 ÷ ${WORK_DAYS}일, 올림)
-    ${T!==DAILY_ALBA?`<br><b style="color:var(--bad)">배치도의 알바 자리가 ${T}개예요. ${DAILY_ALBA}개가 되어야 해요.</b>`:""}
-    ${spare.length?`<br><span class="small muted">배치도 알바 자리가 ${DAILY_ALBA}개보다 많아서 ${spare.map(x=>esc(x.label)).join(", ")}는 예비 자리로 뺐어요.</span>`:""}</p>${summary}
-    <p style="margin:8px 0 12px">→ 알바 <b>총 ${NT}명</b> (고정 ${T}명 + 대체 ${NT-T}명)이 필요하고, 지금 ${ppl.length}명이에요.
-    ${ppl.length>=NT?`<b style="color:var(--ok)">인원은 충분해요.</b>`:`<b style="color:var(--bad)">${NT-ppl.length}명 더 필요해요.</b>`}
-    <span class="small muted">하루 ${DAILY_ALBA}명을 딱 맞추려고 대체 인력 몇 명은 주 4일 근무예요(휴무 3일). 자리는 배치도의 알바생 점으로 정해져요.</span></p>`;
+  const plan=`<p style="margin:0 0 8px">하루 알바 <b>${DAILY_ALBA}명</b> + 운영매니저 1명 · 필요 <b>${NT}명</b> · 지금 <b style="color:${ppl.length<NT?"var(--bad)":"inherit"}">${ppl.length}명</b>
+    ${T!==DAILY_ALBA?`<br><b style="color:var(--bad)">배치도 알바 자리 ${T}개 (${DAILY_ALBA}개여야 해요)</b>`:""}
+    ${spare.length?`<br><span class="small muted">예비 자리: ${spare.map(x=>esc(x.label)).join(", ")}</span>`:""}</p>${summary}`;
   const grid=`<div class="tbl-wrap"><table class="cov"><thead><tr><th>자리</th>${DAYS.map(d=>`<th style="text-align:center">${d}</th>`).join("")}</tr></thead><tbody>
-    ${pos.map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="slot">${esc(x.label)} <span class="small muted">${(ALLG.find(g=>g.id===x.group)||{}).name||""}</span></td>${DAYS.map((_,d)=>{const c=res[x.id][d];
+    ${pos.map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="slot">${esc(x.label)}</td>${DAYS.map((_,d)=>{const c=res[x.id][d];
       if(c.kind==="gap") return `<td class="c-gap">빈자리</td>`;
       return `<td class="${c.kind==="cover"?"c-cover":"c-main"}">${esc(pname(c.who))}${c.kind==="cover"?" (대체)":""}</td>`;}).join("")}</tr>`).join("")}
-    <tr data-pos="extra" class="${ui.hiPos==="extra"?"rowsel":""}"><td class="slot">남는 인원 (지원 가능)</td>${DAYS.map((_,d)=>`<td class="${extra[d].length?"c-extra":""}">${extra[d].map(pname).map(esc).join(", ")}</td>`).join("")}</tr>
+    ${extra.some(e=>e.length)?`<tr data-pos="extra" class="${ui.hiPos==="extra"?"rowsel":""}"><td class="slot">남는 인원</td>${DAYS.map((_,d)=>`<td class="${extra[d].length?"c-gap":""}">${extra[d].map(pname).map(esc).join(", ")}</td>`).join("")}</tr>`:""}
     <tr><td class="slot">하루 알바</td>${DAYS.map((_,d)=>{const t=pos.filter(x=>res[x.id][d].who).length;
       const all=t+extra[d].length; return `<td class="num ${t===DAILY_ALBA&&!extra[d].length?"c-extra":"c-gap"}">알바 ${all}명<br>+ 매니저 = ${all+1}명</td>`;}).join("")}</tr>
-    </tbody></table></div>
-    <p class="small muted" style="margin:8px 0 0">흰 칸은 고정, 노란 칸은 대체 인력이 들어가는 날이에요. 휴무 요일을 바꾸면 바로 다시 계산돼요. 이름을 넣으면 코드 대신 이름이 보여요.</p>`;
+    </tbody></table></div>`;
   const roles=ALLG.filter(g=>P(g)||M(g)).map(g=>`<optgroup label="${g.floor} · ${g.name}"><option value="${g.id}:담당">${g.name} · 고정</option><option value="${g.id}:대타">${g.name} · 대체</option></optgroup>`).join("");
   const slotEdit=ui.slotEdit?`<div class="tbl-wrap slotedit" style="margin-top:12px"><table><thead><tr><th>자리 이름</th><th>근무시간</th><th>휴게</th></tr></thead><tbody>
     ${GROUPS.map(g=>g.slots.map(s=>`<tr data-slot="${s.id}"><td><input data-sk="name" value="${esc(s.name)}"></td><td><input data-sk="time" value="${esc(s.time)}"></td><td><input data-sk="brk" value="${esc(s.brk)}"></td></tr>`).join("")).join("")}
-    </tbody></table><p class="small muted" style="margin:6px 0 0">칸을 고치면 바로 저장돼요. 칸을 비우면 원래 값으로 돌아가요.</p></div>`:"";
+    </tbody></table></div>`:"";
   return `${staffMap(res,extra)}<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">필요 인원 · 주간 자리 채움</h3><button class="btn small noprint" id="slotEditBtn">${ui.slotEdit?"자리 고치기 닫기":"자리 이름·시간 바꾸기"}</button></div>${slotEdit}${plan}${grid}</div><div class="panel" style="margin-top:16px"><h3>인원 명단</h3>
   <div class="group-h"><h4>운영매니저 <span class="muted small">매일 근무 · 1명</span></h4></div>
   <label class="f" style="max-width:240px">이름<input id="mgrName" value="${esc(mgr?mgr.name:"")}" placeholder="운영매니저 이름"></label>
@@ -995,7 +995,7 @@ function staffHTML(){
   <form class="addform three" id="addStaff"><label class="f">구역<select id="ns-role">${roles}</select></label>
     <label class="f">이름<input id="ns-name" placeholder="비워 둬도 돼요"></label>
     <button class="btn primary" type="submit">인원 추가</button></form>
-  <p class="small muted" style="margin:12px 0 0">알바는 주 ${WORK_DAYS}일 · 하루 8시간(현장 9시간, 휴게 1시간) · 시급 11,000원. 주 근무가 ${WORK_DAYS}일보다 많으면 빨간색, ${WORK_DAYS-2}일 이하면 노란색으로 보여요.</p></div>`;
+  </div>`;
 }
 function bindStaff(){
   bindMapCard(id=>{ // 도면의 알바생 점 → 그 자리 줄로
