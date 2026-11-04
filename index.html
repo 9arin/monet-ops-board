@@ -341,7 +341,8 @@ function applySlotCfg(){ // 인력 탭에서 바꾼 자리 이름·시간 (DB st
   GROUPS.forEach(g=>g.slots.forEach(s=>{ const o=c[s.id]||{}; Object.assign(s,SLOT_ORIG[s.id]);
     ["name","time","brk"].forEach(k=>{ if(o[k]) s[k]=o[k]; }); SLOT[s.id]={...s,group:g.id}; }));
 }
-const ITEM_KIND = ["구매","대여","제작","협조 요청"];
+const ITEM_KIND = ["구매","대여","제작","협조 요청","보유"];
+const OWNED="보유"; // 이미 가진 물품: 견적·단가 없음
 const ITEM_STATUS = ["필요","견적","주문","입고","설치 완료","반납 완료"];
 const STAFF_STATUS = ["모집 중","면접","확정"];
 const TASK_CATS = ["확정 필요","채용·계약","물품","교육","현장 세팅","행정"];
@@ -1221,7 +1222,7 @@ function itemsHTML(){
   const f=ui.quoteFilter;
   const base=all.filter(i=>!f||(f==="none"?!qOf(i):i.quote===f)), kf=ui.kindFilter;
   const rows=base.filter(i=>!kf||i.kind===kf);
-  const amt=i=>Number(i.qty||(i.link?counts[i.link]:0)||0)*Number(i.price||0);
+  const amt=i=>i.kind===OWNED?0:Number(i.qty||(i.link?counts[i.link]:0)||0)*Number(i.price||0);
   const sum=pred=>all.filter(pred).reduce((s,i)=>s+amt(i),0);
   const total=k=>base.filter(i=>i.kind===k).reduce((s,i)=>s+amt(i),0);
   const scls=s=>["입고","설치 완료","반납 완료"].includes(s)?"s-done":(s==="필요"?"s-need":"s-mid");
@@ -1230,12 +1231,12 @@ function itemsHTML(){
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
       return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 고르기">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:"+"}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
-      <td style="min-width:120px"><select data-f="quote" class="qsel" style="--qc:${qq?qcolor(qq):"transparent"}"><option value="">없음</option>${state.quotes.map(x=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(x.vendor||"이름 없는 견적")}</option>`).join("")}</select></td>
+      ${i.kind===OWNED?`<td class="muted small">필요 없음</td>`:`<td style="min-width:120px"><select data-f="quote" class="qsel" style="--qc:${qq?qcolor(qq):"transparent"}"><option value="">없음</option>${state.quotes.map(x=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(x.vendor||"이름 없는 견적")}</option>`).join("")}</select></td>`}
       <td><select data-f="kind">${ITEM_KIND.map(k=>`<option ${i.kind===k?"selected":""}>${k}</option>`).join("")}</select></td>
       <td class="r" style="width:80px"><input class="num" data-f="qty" type="number" min="0" value="${esc(i.qty||"")}" placeholder="${auto??""}" style="text-align:right"></td>
       <td class="r num">${auto===null?`<span class="muted">–</span>`:`<button class="linkbtn num" data-focus="${esc(i.link)}" title="도면에서 보기">${auto}</button>`}</td>
-      <td class="r" style="width:110px"><input class="num" data-f="price" type="number" min="0" value="${esc(i.price||"")}" style="text-align:right"></td>
-      <td class="r num">${won(q*Number(i.price||0))}</td>
+      ${i.kind===OWNED?`<td class="r muted">–</td><td class="r muted">–</td>`:`<td class="r" style="width:110px"><input class="num" data-f="price" type="number" min="0" value="${esc(i.price||"")}" style="text-align:right"></td>
+      <td class="r num">${won(q*Number(i.price||0))}</td>`}
       <td style="min-width:100px"><input data-f="vendor" value="${esc(i.vendor||"")}"></td>
       <td style="min-width:130px"><input data-f="due" type="date" value="${esc(i.due||"")}"></td>
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
@@ -1322,6 +1323,7 @@ function bindItems(){
   document.querySelectorAll("tr[data-id]:not(.cand-row)").forEach(tr=>{
     const it=()=>curItem(tr.dataset.id);
     tr.querySelectorAll("[data-f]").forEach(el=>el.onchange=()=>{ const k=el.dataset.f, v=el.value.trim(), cur=it(), patch={[k]:v};
+      if(k==="kind"&&v===OWNED) patch.quote=""; // 보유는 견적 없음
       if(k==="quote"&&v&&!cur.vendor){ const q=state.quotes.find(x=>x.id===v); if(q&&q.vendor) patch.vendor=q.vendor; } // 견적 고르면 업체도 채움
       save("items",{...cur,...patch}); });
     tr.querySelector("[data-del]").onclick=()=>{ if(ui.confirmDel===it().id){ui.confirmDel=null;remove("items",it().id);} else {ui.confirmDel=it().id;render();} };
