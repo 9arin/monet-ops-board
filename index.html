@@ -143,7 +143,8 @@ td.r,th.r{text-align:right}
 .x:hover{color:var(--bad)}
 .addform{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end;margin-top:12px}
 .addform.three{grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto}
-@media (max-width:720px){.addform,.addform.three{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.addform.six{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,2fr) auto}
+@media (max-width:720px){.addform,.addform.three,.addform.six{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;z-index:50}
 @media (prefers-reduced-motion:no-preference){.mk{transition:box-shadow .15s}}
 .auth{max-width:420px;margin:8vh auto 0;display:flex;flex-direction:column;gap:12px}
@@ -176,6 +177,22 @@ tr.cand-row>td>*{position:sticky;left:10px;max-width:min(960px,calc(100vw - 96px
 .cand .t{font-size:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
 .slotedit td input{min-width:90px}
 .kindseg{flex-wrap:wrap}
+.docgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px}
+.doc{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.docthumb{aspect-ratio:4/3;background:var(--soft);border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-weight:700}
+.docthumb img{width:100%;height:100%;object-fit:contain;background:var(--panel)}
+.docname{border:1px solid transparent;border-radius:6px;padding:2px 4px;background:transparent;font-weight:600;min-width:0}
+.docname:hover,.docname:focus{border-color:var(--line);background:var(--bg)}
+table.sched{width:auto;border-collapse:separate;border-spacing:0}
+table.sched th,table.sched td{padding:4px;border-bottom:1px solid var(--line)}
+table.sched .sticky{position:sticky;left:0;background:var(--panel);z-index:1;white-space:nowrap;min-width:110px}
+table.sched .sd{min-width:34px;text-align:center;font-size:11px;border-left:1px solid var(--line)}
+table.sched th.sd{font-weight:600;line-height:1.2}
+table.sched .we{background:var(--soft)}
+table.sched th.today{color:var(--accent)}
+table.sched td.on{background:var(--accent);color:var(--accent-ink);position:relative}
+table.sched td.ms{background:var(--warnbg)}
+table.sched .slbl{position:relative;white-space:nowrap;font-size:11px;font-weight:600;z-index:2}
 .nchip{cursor:default;padding:2px 4px 2px 10px}
 .nadd{border:1px dashed var(--line);border-radius:999px;padding:3px 8px;background:var(--panel);font-size:13px}
 .kindseg button .num{font-size:11px;opacity:.7}
@@ -291,12 +308,12 @@ const TASK_CATS = ["확정 필요","채용·계약","물품","교육","현장 �
 const COLS = ["markers","items","staff","tasks"];
 
 // DB 컬렉션은 4개 그대로 두고, id 앞글자로 나눠 담아요 (SQL 변경 없이): 견적서 q-, 파일 f- → items / 설정 cfg- → staff
-const VCOL = {quotes:{col:"items",pre:"q-"},files:{col:"items",pre:"f-"},settings:{col:"staff",pre:"cfg-"},graphics:{col:"markers",pre:"g-"},nights:{col:"tasks",pre:"n-"}};
+const VCOL = {quotes:{col:"items",pre:"q-"},files:{col:"items",pre:"f-"},settings:{col:"staff",pre:"cfg-"},graphics:{col:"markers",pre:"g-"},nights:{col:"tasks",pre:"n-"},sched:{col:"tasks",pre:"s-"},docs:{col:"items",pre:"d-"}};
 const ALLC = COLS.concat(Object.keys(VCOL));
 const vcolOf=(col,id)=>{for(const [k,v] of Object.entries(VCOL)) if(v.col===col&&String(id).startsWith(v.pre)) return k; return col;};
 const dbCol=c=>VCOL[c]?VCOL[c].col:c;
-const state = {markers:[],items:[],staff:[],tasks:[],quotes:[],files:[],settings:[],graphics:[],nights:[]};
-const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,files:false,settings:false,graphics:false,nights:false};
+const state = {markers:[],items:[],staff:[],tasks:[],quotes:[],files:[],settings:[],graphics:[],nights:[],sched:[],docs:[]};
+const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,files:false,settings:false,graphics:false,nights:false,sched:false,docs:false};
 const ui = {tab:"plan",floor:"4F",hidden:new Set(),addType:null,sel:null,labels:true,taskFilter:"open",confirmDel:null,
   mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null};
 try{const t=localStorage.getItem("mb-tab"); if(t) ui.tab=t; const f=localStorage.getItem("mb-floor"); if(f) ui.floor=f; if(localStorage.getItem("mb-map")==="0") ui.mapOpen=false;}catch(e){}
@@ -368,7 +385,7 @@ async function loadAll(){
   Object.values(unremoved).forEach(({col,id})=>{ state[col]=state[col].filter(x=>x.id!==id); });
   const {data:ok}=await db.rpc("can_board");
   if(ok===false) setNotice("들어올 권한이 없어요. 팀 비밀번호가 바뀌었을 수 있어요. 로그아웃 후 다시 들어와 주세요.");
-  else { setNotice(""); [popOnStickers,syncRoster,seedGraphics].forEach(f=>{ try{ f(); }catch(e){ console.error(f.name,e); } }); } // 하나가 실패해도 보드는 열리게
+  else { setNotice(""); [popOnStickers,syncRoster,seedGraphics,seedSched].forEach(f=>{ try{ f(); }catch(e){ console.error(f.name,e); } }); } // 하나가 실패해도 보드는 열리게
   scheduleRender();
 }
 // 배치도 자리 수가 바뀌면(처음 포함): 구역마다 고정 + 대체 인원을 채우고, 매일 자리가 다 차도록 휴무(연속 2일)를 짜요.
@@ -781,6 +798,8 @@ function renderInner(){
   else if(ui.tab==="staff") v.innerHTML=staffHTML(), bindStaff();
   else if(ui.tab==="items") v.innerHTML=itemsHTML(), bindItems();
   else if(ui.tab==="gfx") v.innerHTML=gfxHTML(), bindGfx();
+  else if(ui.tab==="sched") v.innerHTML=schedHTML(), bindSched();
+  else if(ui.tab==="docs") v.innerHTML=docsHTML(), bindDocs();
   else v.innerHTML=tasksHTML(), bindTasks();
 }
 function renderStats(){
@@ -799,7 +818,7 @@ function renderStats(){
   ].join("");
 }
 function renderTabs(){
-  const tabs=[["plan","배치도",state.markers.length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
+  const tabs=[["plan","배치도",state.markers.length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
   $("#tabs").innerHTML=tabs.map(([k,n,c])=>`<button role="tab" data-tab="${k}" aria-selected="${ui.tab===k}">${n}<span class="cnt">${c}</span></button>`).join("");
   $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;ui.sel=null;try{localStorage.setItem("mb-tab",ui.tab)}catch(e){};render();});
 }
@@ -810,7 +829,7 @@ function printAll(){
   const sec=(t,h)=>`<section class="p-sec"><h2>${t}</h2>${h}</section>`;
   const parts=["4F","3F"].map(f=>{ui.floor=f; return sec(`배치도 · ${f==="4F"?"4층":"3층"}`,planHTML());});
   parts.push(...["4F","3F"].map(f=>{ui.floor=f; return sec(`그래픽 · ${f==="4F"?"4층":"3층"}`,gfxHTML());})); ui.floor=keep.floor;
-  parts.push(sec("인력",staffHTML()),sec("물품",itemsHTML()),sec("할 일",tasksHTML()));
+  parts.push(sec("인력",staffHTML()),sec("물품",itemsHTML()),sec("일정",schedHTML()),sec("할 일",tasksHTML()));
   Object.assign(ui,keep);
   $("#printArea").innerHTML=parts.join("");
   const root=document.documentElement, theme=root.getAttribute("data-theme");
@@ -1352,6 +1371,86 @@ function seedGraphics(){
   if(!loaded.settings||state.settings.some(x=>x.id==="cfg-gfx-seed")) return;
   if(!state.graphics.length) GFX_SEED.forEach(([floor,type,x1,y1,x2,y2,label],i)=>save("graphics",{id:`g-seed-${String(i+1).padStart(2,"0")}`,floor,type,x1,y1,x2,y2,label,content:"",size:"",status:"내용 정리",note:""},true));
   save("settings",{id:"cfg-gfx-seed",at:new Date().toISOString()},true);
+}
+
+/* ----- 자료 (도면집·일정표 등 파일 보관) ----- */
+function docsHTML(){
+  const ds=state.docs.slice().sort((a,b)=>(b.at||"").localeCompare(a.at||"")||b.id.localeCompare(a.id));
+  return `<div class="panel"><h3>자료</h3>
+    <div class="drop noprint" id="docDrop"><b>파일을 여기로 끌어다 놓으세요</b><br><span class="small">도면집·일정표·계약서 등 · 파일당 ${mb(MAX_FILE)}MB까지 · 저장 공간 ${mb(usedBytes())}/${mb(DB_BUDGET)}MB</span></div>
+    ${ds.length?`<div class="docgrid">${ds.map(d=>`<div class="doc" data-doc="${d.id}">
+      <div class="docthumb">${d.thumb?`<img src="${esc(d.thumb)}" alt="">`:`<span class="num">${esc((String(d.name).match(/\.([^.]+)$/)||[,"FILE"])[1].toUpperCase())}</span>`}</div>
+      <input class="docname" data-dname value="${esc(d.title||d.name)}">
+      <div class="small muted">${fsize(d.size||0)} · ${esc(d.at||"")}</div>
+      <div class="row" style="justify-content:space-between"><span class="row">${isPdf({type:d.type,name:d.name})||/^image\//.test(d.type||"")?`<button class="btn small" data-dopen>보기</button>`:""}<button class="btn small" data-ddl>다운로드</button></span>
+        <button class="x" data-ddel aria-label="삭제">${ui.confirmDel===d.id?"삭제?":"×"}</button></div></div>`).join("")}</div>`:""}</div>`;
+}
+async function addDocs(files){
+  for(const f of files){
+    if(f.size>MAX_FILE){ toast(`${f.name}: ${mb(MAX_FILE)}MB까지 올릴 수 있어요.`); continue; }
+    toast(`${f.name} 올리는 중…`);
+    const [thumb,fid]=await Promise.all([(isPdf(f)||/^image\//.test(f.type)?makeThumb(f):Promise.resolve(null)).catch(()=>null),storeFile(f,true)]);
+    if(!fid) continue;
+    save("docs",{id:uid("d"),fileId:fid,name:f.name,type:f.type,size:f.size,thumb:thumb||"",at:ymd(new Date())},true);
+    toast(`${f.name} 올렸어요`);
+  }
+}
+function bindDocs(){
+  dropZone($("#docDrop"),{onFiles:addDocs});
+  document.querySelectorAll("[data-doc]").forEach(el=>{ const d=()=>state.docs.find(x=>x.id===el.dataset.doc);
+    const o=el.querySelector("[data-dopen]"); if(o) o.onclick=()=>openFile(d().fileId);
+    el.querySelector("[data-ddl]").onclick=()=>downloadFile(d().fileId,d().name);
+    el.querySelector("[data-dname]").onchange=e=>save("docs",{...d(),title:e.target.value.trim()});
+    el.querySelector("[data-ddel]").onclick=()=>{ const x=d(); if(ui.confirmDel===x.id){ui.confirmDel=null; remove("files",x.fileId); remove("docs",x.id);} else {ui.confirmDel=x.id;render();} };
+  });
+}
+
+/* ----- 일정 (시공 공정표) ----- */
+const SCHED_FROM="2026-11-09", SCHED_TO="2026-12-03", SHIFTS=["주간","야간"];
+const addDay=(date,n)=>{ const d=new Date(date+"T00:00"); d.setDate(d.getDate()+n); return ymd(d); };
+function schedHTML(){
+  const cfg=state.settings.find(x=>x.id==="cfg-sched")||{};
+  const bars=state.sched.filter(x=>x.kind!=="milestone"), ms=state.sched.filter(x=>x.kind==="milestone");
+  const all=state.sched.flatMap(x=>[x.start||x.date,x.end||x.date]).filter(Boolean);
+  const from=[cfg.from||SCHED_FROM,...all].sort()[0], to=[cfg.to||SCHED_TO,...all].sort().slice(-1)[0];
+  const days=[]; for(let d=from;d<=to&&days.length<200;d=addDay(d,1)) days.push(d);
+  const vendors=[...new Set([...(cfg.vendors||[]),...bars.map(b=>b.vendor).filter(Boolean)])];
+  const today=ymd(new Date());
+  const head=`<tr><th class="sticky">구분</th>${days.map(d=>{const w=dowOf(d); return `<th class="sd ${w>=5?"we":""} ${d===today?"today":""}">${+d.slice(5,7)}/${+d.slice(8)}<br><span class="small">${DAYS[w]}</span></th>`;}).join("")}</tr>`;
+  const cellsFor=list=>days.map(d=>{ const hit=list.filter(b=>(b.start||b.date)<=d&&d<=(b.end||b.start||b.date)); const w=dowOf(d);
+    if(!hit.length) return `<td class="sd ${w>=5?"we":""}"></td>`;
+    const first=hit.find(b=>(b.start||b.date)===d||d===from);
+    return `<td class="sd on" title="${esc(hit.map(b=>b.label||"").join(", "))}">${first?`<span class="slbl">${esc(first.label||"")}</span>`:""}</td>`; }).join("");
+  const rows=`<tr><td class="sticky"><b>MILESTONE</b></td>${days.map(d=>{const m=ms.filter(x=>x.date===d); return `<td class="sd ${m.length?"ms":""}">${m.map(x=>`<span class="slbl">◆ ${esc(x.label||"")}</span>`).join("")}</td>`;}).join("")}</tr>`
+    +vendors.flatMap(v=>SHIFTS.map(sh=>`<tr><td class="sticky">${sh==="주간"?`<b>${esc(v)}</b> `:""}<span class="small muted">${sh}</span></td>${cellsFor(bars.filter(b=>b.vendor===v&&(b.shift||"주간")===sh))}</tr>`)).join("");
+  const list=state.sched.slice().sort((a,b)=>(a.start||a.date||"").localeCompare(b.start||b.date||"")).map(x=>x.kind==="milestone"
+    ?`<tr data-sid="${x.id}"><td>◆ 마일스톤</td><td></td><td><input type="date" data-sf="date" value="${esc(x.date||"")}"></td><td></td><td><input data-sf="label" value="${esc(x.label||"")}"></td><td><button class="x" data-sdel>×</button></td></tr>`
+    :`<tr data-sid="${x.id}"><td><input data-sf="vendor" value="${esc(x.vendor||"")}" list="vendorList"></td><td><select data-sf="shift">${SHIFTS.map(s=>`<option ${(x.shift||"주간")===s?"selected":""}>${s}</option>`).join("")}</select></td>
+      <td><input type="date" data-sf="start" value="${esc(x.start||"")}"></td><td><input type="date" data-sf="end" value="${esc(x.end||"")}"></td><td><input data-sf="label" value="${esc(x.label||"")}" placeholder="작업 내용"></td><td><button class="x" data-sdel>×</button></td></tr>`).join("");
+  return `<div class="panel"><h3>시공 일정</h3><div class="tbl-wrap"><table class="sched">${head}${rows}</table></div></div>
+  <div class="panel" style="margin-top:16px"><h3>일정 목록</h3>
+    ${list?`<div class="tbl-wrap"><table><thead><tr><th>업체</th><th>주간/야간</th><th>시작</th><th>끝</th><th>내용</th><th></th></tr></thead><tbody>${list}</tbody></table></div>`:""}
+    <datalist id="vendorList">${vendors.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
+    <form class="addform six" id="addSched"><label class="f">업체<input id="ns-vendor" list="vendorList" placeholder="예: 큐비크스" required></label>
+      <label class="f">주간/야간<select id="ns-shift">${SHIFTS.map(s=>`<option>${s}</option>`).join("")}</select></label>
+      <label class="f">시작<input type="date" id="ns-start" required></label><label class="f">끝<input type="date" id="ns-end"></label>
+      <label class="f">내용<input id="ns-label" placeholder="예: 가벽 설치"></label><button class="btn primary" type="submit">추가</button></form>
+    <form class="addform three" id="addMile" style="margin-top:8px"><label class="f">마일스톤<input id="nm-label" placeholder="예: 오픈" required></label>
+      <label class="f">날짜<input type="date" id="nm-date" required></label><button class="btn" type="submit">마일스톤 추가</button></form></div>`;
+}
+function bindSched(){
+  document.querySelectorAll("tr[data-sid]").forEach(tr=>{ const x=()=>state.sched.find(s=>s.id===tr.dataset.sid);
+    tr.querySelectorAll("[data-sf]").forEach(el=>el.onchange=()=>save("sched",{...x(),[el.dataset.sf]:el.value.trim()}));
+    tr.querySelector("[data-sdel]").onclick=()=>remove("sched",x().id); });
+  $("#addSched").onsubmit=e=>{e.preventDefault(); const start=$("#ns-start").value;
+    save("sched",{id:uid("s"),kind:"bar",vendor:$("#ns-vendor").value.trim(),shift:$("#ns-shift").value,start,end:$("#ns-end").value||start,label:$("#ns-label").value.trim()}); toast("추가했어요");};
+  $("#addMile").onsubmit=e=>{e.preventDefault(); save("sched",{id:uid("s"),kind:"milestone",date:$("#nm-date").value,label:$("#nm-label").value.trim()}); toast("추가했어요");};
+}
+// 한 번만: 받은 공정표(11/9~12/3, 큐비크스·NGD, 11/9 제작물 발주)를 넣어 둬요
+function seedSched(){
+  if(!loaded.settings||state.settings.some(x=>x.id==="cfg-sched")) return;
+  save("settings",{id:"cfg-sched",from:SCHED_FROM,to:SCHED_TO,vendors:["큐비크스","NGD"]},true);
+  if(!state.sched.length) save("sched",{id:"s-seed-1",kind:"milestone",date:"2026-11-09",label:"제작물 발주"},true);
 }
 
 /* ----- tasks ----- */
