@@ -676,7 +676,7 @@ let renderQueued=false;
 function scheduleRender(){
   const a=document.activeElement;
   if(a && $("#view").contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName)){
-    if(!renderQueued){renderQueued=true; a.addEventListener("blur",()=>{renderQueued=false; setTimeout(render,0);},{once:true});}
+    if(!renderQueued){renderQueued=true; a.addEventListener("blur",()=>{renderQueued=false; setTimeout(scheduleRender,0);},{once:true});} // 다음 칸으로 옮겨 가면 계속 기다려요
     return;
   }
   render();
@@ -947,9 +947,17 @@ const isMgr=p=>p.kind==="관리자";
 const alba=()=>state.staff.filter(p=>!isMgr(p));
 
 /* ---------- render ---------- */
+// 추가 칸(물품·할 일·인원 추가 등)에 쓰던 글자는 화면을 다시 그려도 남겨요. 추가 버튼을 누르면 비워요
+const drafts={};
+["input","change"].forEach(t=>document.addEventListener(t,e=>{ const el=e.target; if(el&&el.form&&el.id&&$("#view").contains(el)) drafts[el.id]=el.type==="checkbox"?el.checked:el.value; }));
+document.addEventListener("submit",e=>{ [...(e.target.elements||[])].forEach(el=>{ if(el.id) delete drafts[el.id]; }); },true);
+document.addEventListener("submit",e=>{ const id=e.target.id; if(id) setTimeout(()=>{ const f=document.getElementById(id); if(f&&f.reset) f.reset(); },0); }); // 추가한 뒤 칸 비우기
 function render(){
+  const a=document.activeElement, fid=a&&a.id&&$("#view").contains(a)?a.id:null, sel=fid&&typeof a.selectionStart==="number"?[a.selectionStart,a.selectionEnd]:null;
   try{ renderInner(); }
   catch(e){ console.error(e); $("#view").innerHTML=`<div class="empty">이 화면을 그리다 문제가 생겼어요. 다른 탭을 눌렀다 돌아오거나 새로고침해 주세요.<br><span class="small">${esc(e.message)}</span></div>`; }
+  Object.entries(drafts).forEach(([id,v])=>{ const el=document.getElementById(id); if(!el||!el.form) return; if(el.type==="checkbox") el.checked=v; else el.value=v; });
+  if(fid){ const el=document.getElementById(fid); if(el&&document.activeElement!==el){ el.focus({preventScroll:true}); if(sel) try{ el.setSelectionRange(sel[0],sel[1]); }catch(e){} } } // 쓰던 칸에 커서 유지
 }
 function renderInner(){
   applySlotCfg(); renderStats(); renderTabs();
