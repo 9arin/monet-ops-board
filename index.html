@@ -201,6 +201,9 @@ table.rota tr.offrow td{color:var(--muted);line-height:1.5;vertical-align:top}
 table.rota tr.sum td.ok{color:var(--ok);font-weight:600}
 table.rota tr.sum td.bad{color:var(--bad);font-weight:600}
 .printonly{display:none}
+.pdfpick{position:absolute;z-index:60;width:240px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+.pdfpick label{padding:3px 0;cursor:pointer}
+@media print{.pdfpick{display:none!important}}
 .uchip{cursor:default;margin:2px}
 table.rota .poslbl{all:unset;cursor:pointer;font-weight:600;border-bottom:1px dashed var(--line)}
 table.rota .poslbl:hover{color:var(--accent)}
@@ -661,7 +664,7 @@ async function onSession(session){
     const email=$("#loginEmail").value.trim(); $("#loginMsg").textContent="보내는 중…";
     const {error}=await authClient.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
     $("#loginMsg").textContent=error?"보내지 못했어요: "+error.message:"메일을 보냈어요. 받은편지함(스팸함 포함)을 확인해 주세요."; });
-  $("#pdfBtn").addEventListener("click",printAll);
+  $("#pdfBtn").addEventListener("click",openPdfPick);
   $("#logout").addEventListener("click",async()=>{ lsSet(KEY_LS,null); stopAll(); mode="login"; db=authClient;
     await authClient.auth.signOut(); $("#who").hidden=true; showLogin(true); });
   let last; // undefined = 아직 확인 전
@@ -1003,13 +1006,32 @@ function renderTabs(){
   $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;ui.sel=null;try{localStorage.setItem("mb-tab",ui.tab)}catch(e){};render();});
 }
 /* 네 탭을 한 번에 그려서 인쇄 창을 열어요 (대상: PDF로 저장) */
-function printAll(){
+// PDF에 넣을 항목 고르기 (고른 건 이 기기에 기억)
+const PDF_PARTS=[["plan4","배치도 4층"],["plan3","배치도 3층"],["gfx4","그래픽 4층"],["gfx3","그래픽 3층"],["staff","인력"],["items","물품"],["sched","일정"],["tasks","할 일"]];
+function pdfPicked(){ try{ const v=JSON.parse(localStorage.getItem("mb-pdf")||"null"); if(Array.isArray(v)) return v; }catch(e){} return PDF_PARTS.map(x=>x[0]); }
+function openPdfPick(){
+  let box=$("#pdfPick"); if(box){ box.remove(); return; }
+  const on=new Set(pdfPicked());
+  box=document.createElement("div"); box.id="pdfPick"; box.className="pdfpick panel"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","PDF에 넣을 항목");
+  box.innerHTML=`<h3 style="margin:0 0 8px">PDF에 넣을 항목</h3>${PDF_PARTS.map(([k,n])=>`<label class="row small" style="gap:6px"><input type="checkbox" value="${k}" ${on.has(k)?"checked":""}> ${n}</label>`).join("")}
+    <div class="row" style="justify-content:space-between;margin-top:10px"><span class="row small"><button class="linkbtn" data-pall="1" type="button">전체</button><button class="linkbtn" data-pall="0" type="button">해제</button></span>
+      <span class="row"><button class="btn" data-pclose type="button">닫기</button><button class="btn primary" data-pgo type="button">PDF 저장</button></span></div>`;
+  document.body.appendChild(box);
+  const r=$("#pdfBtn").getBoundingClientRect(); box.style.top=(r.bottom+window.scrollY+6)+"px"; box.style.left=Math.max(8,Math.min(r.left+window.scrollX,window.innerWidth-260))+"px";
+  box.querySelectorAll("[data-pall]").forEach(b=>b.onclick=()=>box.querySelectorAll("input").forEach(i=>i.checked=b.dataset.pall==="1"));
+  box.querySelector("[data-pclose]").onclick=()=>box.remove();
+  box.querySelector("[data-pgo]").onclick=()=>{ const pick=[...box.querySelectorAll("input:checked")].map(i=>i.value); if(!pick.length){ toast("항목을 하나 이상 골라 주세요"); return; }
+    try{ localStorage.setItem("mb-pdf",JSON.stringify(pick)); }catch(e){} box.remove(); printAll(pick); };
+}
+function printAll(pick){
+  const want=new Set(pick||pdfPicked());
   const keep={floor:ui.floor,sel:ui.sel,addType:ui.addType,mapOpen:ui.mapOpen,taskFilter:ui.taskFilter,itemFocus:ui.itemFocus,placingTask:ui.placingTask,confirmDel:ui.confirmDel,gSel:ui.gSel,gAdd:ui.gAdd,gStart:ui.gStart,kindFilter:ui.kindFilter,hiPos:ui.hiPos,hiItem:ui.hiItem,quoteFilter:ui.quoteFilter,openItem:ui.openItem,slotEdit:ui.slotEdit};
   Object.assign(ui,{sel:null,addType:null,mapOpen:false,taskFilter:"all",itemFocus:null,placingTask:null,confirmDel:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,quoteFilter:null,openItem:null,slotEdit:false});
   const sec=(t,h)=>`<section class="p-sec"><h2>${t}</h2>${h}</section>`;
-  const parts=["4F","3F"].map(f=>{ui.floor=f; return sec(`배치도 · ${f==="4F"?"4층":"3층"}`,planHTML());});
-  parts.push(...["4F","3F"].map(f=>{ui.floor=f; return sec(`그래픽 · ${f==="4F"?"4층":"3층"}`,gfxHTML());})); ui.floor=keep.floor;
-  parts.push(sec("인력",staffHTML()),sec("물품",itemsHTML()),sec("일정",schedHTML()),sec("할 일",tasksHTML()));
+  const parts=[];
+  ["4F","3F"].forEach(f=>{ if(want.has("plan"+f[0])){ ui.floor=f; parts.push(sec(`배치도 · ${f==="4F"?"4층":"3층"}`,planHTML())); } });
+  ["4F","3F"].forEach(f=>{ if(want.has("gfx"+f[0])){ ui.floor=f; parts.push(sec(`그래픽 · ${f==="4F"?"4층":"3층"}`,gfxHTML())); } }); ui.floor=keep.floor;
+  [["staff","인력",staffHTML],["items","물품",itemsHTML],["sched","일정",schedHTML],["tasks","할 일",tasksHTML]].forEach(([k,n,f])=>{ if(want.has(k)) parts.push(sec(n,f())); });
   Object.assign(ui,keep);
   $("#printArea").innerHTML=parts.join("");
   const root=document.documentElement, theme=root.getAttribute("data-theme");
