@@ -315,9 +315,9 @@ tr.rowsel td{background:var(--warnbg)}
     <div class="who" id="who" hidden><span id="whoEmail"></span><button class="btn" id="pdfBtn" type="button">PDF 저장</button><button class="btn" id="logout" type="button">로그아웃</button></div>
   </header>
   <section class="panel auth" id="login" hidden>
-    <h2>팀 비밀번호</h2>
+    <h2>비밀번호</h2>
     <p>운영매니저에게 받은 팀 비밀번호를 입력해 주세요. 이 기기에서는 다음부터 자동으로 들어와요.</p>
-    <form id="keyForm"><input type="password" id="keyInput" required placeholder="팀 비밀번호" autocomplete="current-password"><button class="btn primary" type="submit">들어가기</button></form>
+    <form id="keyForm"><input type="password" id="keyInput" required placeholder="비밀번호" autocomplete="current-password"><button class="btn primary" type="submit">들어가기</button></form>
     <p id="keyMsg" role="status"></p>
     <details>
       <summary class="linkbtn">관리자 이메일 로그인</summary>
@@ -402,7 +402,7 @@ async function save(col,obj,quiet){ // quiet: 입력 중이면 화면 새로 그
   const i=state[col].findIndex(x=>x.id===obj.id);
   if(i>=0) state[col][i]=obj; else state[col].push(obj);
   (quiet||typing())?scheduleRender():render(); // 글자 치는 중엔 화면을 다시 그리지 않아요 (커서 유지)
-  if(!db) return;
+  if(!db||guest) return;
   const key=col+"/"+obj.id; const {id,...data}=obj;
   unsaved[key]={col,obj}; pending[key]=data; if(inflight[key]) return;
   inflight[key]=true;
@@ -413,7 +413,7 @@ async function save(col,obj,quiet){ // quiet: 입력 중이면 화면 새로 그
 }
 async function remove(col,id){
   state[col]=state[col].filter(x=>x.id!==id); render();
-  if(db){ const key=col+"/"+id; unremoved[key]={col,id}; delete unsaved[key];
+  if(db&&!guest){ const key=col+"/"+id; unremoved[key]={col,id}; delete unsaved[key];
     const {error}=await db.from(TABLE).delete().eq("col",dbCol(col)).eq("id",id); delete unremoved[key]; if(error) handleErr(error);
     if(col==="files") db.from(TABLE).delete().eq("col","items").like("id",id+"~%").then(()=>{}); } // 조각도 같이 지움
 }
@@ -451,6 +451,7 @@ async function loadAll(){
   r1.data.forEach(applyRow); (r2.data||[]).forEach(r=>applyRow({col:r.col,id:r.id,data:{meta:r.meta}}));
   Object.values(unsaved).forEach(({col,obj})=>{ const i=state[col].findIndex(x=>x.id===obj.id); if(i>=0) state[col][i]=obj; else state[col].push(obj); }); // 방금 고친 건 내 것으로
   Object.values(unremoved).forEach(({col,id})=>{ state[col]=state[col].filter(x=>x.id!==id); });
+  if(guest){ setNotice(""); scheduleRender(); return; } /* 손님: 그래픽만 받아 오고, 아무것도 고치지 않아요 */
   const {data:ok}=await db.rpc("can_board");
   if(ok===false) setNotice("들어올 권한이 없어요. 팀 비밀번호가 바뀌었을 수 있어요. 로그아웃 후 다시 들어와 주세요.");
   else { setNotice(""); [popOnStickers,syncRoster,seedGraphics,seedSched].forEach(f=>{ try{ f(); }catch(e){ console.error(f.name,e); } }); } // 하나가 실패해도 보드는 열리게
@@ -611,15 +612,24 @@ function popOnStickers(){
   });
 }
 const KEY_LS="mb-teamkey-h"; // 비밀번호 해시
+const GKEY_LS="mb-guestkey-h"; // 손님 비밀번호 해시 (그래픽만 보기)
+let guest=false;
 const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
 let pollTimer=null;
-function makeClient(key){
+function makeClient(key,hdr){
   return window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_KEY,
-    key?{global:{headers:{"x-board-key":key}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:"mb-key-client"}}:{});
+    key?{global:{headers:{[hdr||"x-board-key"]:key}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:"mb-key-client"}}:{});
 }
 async function sha256hex(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
 async function checkKey(key){ const c=makeClient(key); const {data,error}=await c.rpc("can_board"); return (!error&&data===true)?c:null; }
+async function checkGuest(key){ const c=makeClient(key,"x-guest-key"); const {data,error}=await c.rpc("has_guest_key"); return (!error&&data===true)?c:null; }
+function startGuestMode(c){
+  db=c; mode="db"; guest=true; document.body.classList.add("guest"); ui.tab="gfx"; ui.planEdit=false; showLogin(false);
+  $("#whoEmail").textContent="그래픽 보기 전용"; $("#who").hidden=false;
+  loadAll(); clearInterval(pollTimer);
+  pollTimer=setInterval(()=>{ if(!document.hidden) loadAll(); },30000);
+}
 function startKeyMode(c){
   db=c; mode="db"; showLogin(false);
   $("#whoEmail").textContent="팀 비밀번호로 접속"; $("#who").hidden=false;
@@ -642,6 +652,8 @@ async function onSession(session){
     stopAll(); db=authClient;
     const key=lsGet(KEY_LS);
     if(key){ const c=await checkKey(key); if(c){ startKeyMode(c); return; } lsSet(KEY_LS,null); }
+    const gk=lsGet(GKEY_LS);
+    if(gk){ const c=await checkGuest(gk); if(c){ startGuestMode(c); return; } lsSet(GKEY_LS,null); }
     mode="login"; $("#who").hidden=true; showLogin(true); return; }
   stopAll(); db=authClient; showLogin(false); mode="db";
   $("#whoEmail").textContent=session.user.email||""; $("#who").hidden=false;
@@ -658,14 +670,16 @@ async function onSession(session){
   $("#keyForm").addEventListener("submit",async e=>{ e.preventDefault();
     const key=await sha256hex($("#keyInput").value); $("#keyMsg").textContent="확인 중…"; // 비밀번호 원문 대신 해시만 보내고 저장
     const c=await checkKey(key);
-    if(!c){ $("#keyMsg").textContent="비밀번호가 맞지 않아요."; return; }
+    if(!c){ const g=await checkGuest(key);
+      if(g){ lsSet(GKEY_LS,key); $("#keyInput").value=""; $("#keyMsg").textContent=""; stopAll(); startGuestMode(g); return; }
+      $("#keyMsg").textContent="비밀번호가 맞지 않아요."; return; }
     lsSet(KEY_LS,key); $("#keyInput").value=""; $("#keyMsg").textContent=""; stopAll(); startKeyMode(c); });
   $("#loginForm").addEventListener("submit",async e=>{ e.preventDefault();
     const email=$("#loginEmail").value.trim(); $("#loginMsg").textContent="보내는 중…";
     const {error}=await authClient.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
     $("#loginMsg").textContent=error?"보내지 못했어요: "+error.message:"메일을 보냈어요. 받은편지함(스팸함 포함)을 확인해 주세요."; });
   $("#pdfBtn").addEventListener("click",openPdfPick);
-  $("#logout").addEventListener("click",async()=>{ lsSet(KEY_LS,null); stopAll(); mode="login"; db=authClient;
+  $("#logout").addEventListener("click",async()=>{ lsSet(KEY_LS,null); lsSet(GKEY_LS,null); if(guest){ location.reload(); return; } stopAll(); mode="login"; db=authClient;
     await authClient.auth.signOut(); $("#who").hidden=true; showLogin(true); });
   let last; // undefined = 아직 확인 전
   authClient.auth.onAuthStateChange((_ev,session)=>{ const k=session?session.user.id:null; if(k===last) return; last=k; onSession(session); });
@@ -975,6 +989,7 @@ function render(){
   if(fid){ const el=document.getElementById(fid); if(el&&document.activeElement!==el){ el.focus({preventScroll:true}); if(sel) try{ el.setSelectionRange(sel[0],sel[1]); }catch(e){} } } // 쓰던 칸에 커서 유지
 }
 function renderInner(){
+  if(guest) ui.tab="gfx";
   applySlotCfg(); renderStats(); renderTabs();
   const v=$("#view");
   if(ui.tab==="plan") v.innerHTML=planHTML(), bindPlan();
@@ -984,8 +999,11 @@ function renderInner(){
   else if(ui.tab==="sched") v.innerHTML=schedHTML(), bindSched();
   else if(ui.tab==="docs") v.innerHTML=docsHTML(), bindDocs();
   else v.innerHTML=tasksHTML(), bindTasks();
+  if(guest){ v.querySelectorAll("#planEditBtn,#g-img,#g-del,[data-gfdel],.gimg-l").forEach(e=>e.remove());
+    v.querySelectorAll("#g-type,#g-label,#g-content,#g-size,#g-status,#g-note").forEach(e=>e.disabled=true); }
 }
 function renderStats(){
+  if(guest){ $("#stats").innerHTML=""; return; }
   const st=alba(), it=state.items, tk=state.tasks;
   const conf=st.filter(p=>p.status==="확정").length;
   const itemsOpen=it.filter(i=>!["입고","설치 완료","반납 완료"].includes(i.status)).length;
@@ -1002,18 +1020,19 @@ function renderStats(){
 }
 function renderTabs(){
   const tabs=[["plan","배치도",state.markers.length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
-  $("#tabs").innerHTML=tabs.map(([k,n,c])=>`<button role="tab" data-tab="${k}" aria-selected="${ui.tab===k}">${n}<span class="cnt">${c}</span></button>`).join("");
+  $("#tabs").innerHTML=tabs.filter(t=>!guest||t[0]==="gfx").map(([k,n,c])=>`<button role="tab" data-tab="${k}" aria-selected="${ui.tab===k}">${n}<span class="cnt">${c}</span></button>`).join("");
   $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;ui.sel=null;try{localStorage.setItem("mb-tab",ui.tab)}catch(e){};render();});
 }
 /* 네 탭을 한 번에 그려서 인쇄 창을 열어요 (대상: PDF로 저장) */
 // PDF에 넣을 항목 고르기 (고른 건 이 기기에 기억)
 const PDF_PARTS=[["plan4","배치도 4층"],["plan3","배치도 3층"],["gfx4","그래픽 4층"],["gfx3","그래픽 3층"],["staff","인력"],["items","물품"],["sched","일정"],["tasks","할 일"]];
+const pdfParts=()=>guest?PDF_PARTS.filter(x=>/^gfx/.test(x[0])):PDF_PARTS;
 function pdfPicked(){ try{ const v=JSON.parse(localStorage.getItem("mb-pdf")||"null"); if(Array.isArray(v)) return v; }catch(e){} return PDF_PARTS.map(x=>x[0]); }
 function openPdfPick(){
   let box=$("#pdfPick"); if(box){ box.remove(); return; }
   const on=new Set(pdfPicked());
   box=document.createElement("div"); box.id="pdfPick"; box.className="pdfpick panel"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","PDF에 넣을 항목");
-  box.innerHTML=`<h3 style="margin:0 0 8px">PDF에 넣을 항목</h3>${PDF_PARTS.map(([k,n])=>`<label class="row small" style="gap:6px"><input type="checkbox" value="${k}" ${on.has(k)?"checked":""}> ${n}</label>`).join("")}
+  box.innerHTML=`<h3 style="margin:0 0 8px">PDF에 넣을 항목</h3>${pdfParts().map(([k,n])=>`<label class="row small" style="gap:6px"><input type="checkbox" value="${k}" ${on.has(k)?"checked":""}> ${n}</label>`).join("")}
     <div class="row" style="justify-content:space-between;margin-top:10px"><span class="row small"><button class="linkbtn" data-pall="1" type="button">전체</button><button class="linkbtn" data-pall="0" type="button">해제</button></span>
       <span class="row"><button class="btn" data-pclose type="button">닫기</button><button class="btn primary" data-pgo type="button">PDF 저장</button></span></div>`;
   document.body.appendChild(box);
@@ -1024,7 +1043,7 @@ function openPdfPick(){
     try{ localStorage.setItem("mb-pdf",JSON.stringify(pick)); }catch(e){} box.remove(); printAll(pick); };
 }
 function printAll(pick){
-  const want=new Set(pick||pdfPicked());
+  const want=new Set((pick||pdfPicked()).filter(k=>pdfParts().some(x=>x[0]===k)));
   const keep={floor:ui.floor,sel:ui.sel,addType:ui.addType,mapOpen:ui.mapOpen,taskFilter:ui.taskFilter,itemFocus:ui.itemFocus,placingTask:ui.placingTask,confirmDel:ui.confirmDel,gSel:ui.gSel,gAdd:ui.gAdd,gStart:ui.gStart,kindFilter:ui.kindFilter,hiPos:ui.hiPos,hiItem:ui.hiItem,quoteFilter:ui.quoteFilter,openItem:ui.openItem,slotEdit:ui.slotEdit};
   Object.assign(ui,{sel:null,addType:null,mapOpen:false,taskFilter:"all",itemFocus:null,placingTask:null,confirmDel:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,quoteFilter:null,openItem:null,slotEdit:false});
   const sec=(t,h)=>`<section class="p-sec"><h2>${t}</h2>${h}</section>`;
@@ -1646,7 +1665,7 @@ function gfxHTML(){
     <label class="f">들어갈 내용<textarea id="g-content" placeholder="예: 전시 타이틀 + 모네 대표작 이미지">${esc(sel.content||"")}</textarea></label>
     <div class="row" style="flex-wrap:nowrap"><label class="f" style="flex:1">크기<input id="g-size" value="${esc(sel.size||"")}" placeholder="예: 3000×2400"></label>
       <label class="f" style="flex:1">상태<select id="g-status">${GSTATUS.map(s=>`<option ${sel.status===s?"selected":""}>${s}</option>`).join("")}</select></label></div>
-    <label class="f">시안 파일 (PDF·이미지)<div class="drop gimg" id="g-img">${sel.image?`<img src="${esc(sel.image)}" alt="시안 미리보기">`:"PDF나 이미지를 끌어다 놓거나 눌러서 고르기"}</div></label>
+    <label class="f gimg-l">시안 파일 (PDF·이미지)<div class="drop gimg" id="g-img">${sel.image?`<img src="${esc(sel.image)}" alt="시안 미리보기">`:"PDF나 이미지를 끌어다 놓거나 눌러서 고르기"}</div></label>
     <span class="small muted">올릴 때마다 V1, V2…로 버전이 쌓여요. 파일당 ${mb(MAX_FILE)}MB까지 · 전체 저장 공간 ${mb(usedBytes())}/${mb(DB_BUDGET)}MB 사용</span>
     ${(sel.files||[]).length?`<div class="gfiles">${sel.files.slice().reverse().map(f=>`<div class="gfile"><b class="num">V${f.v}</b><span class="fname" title="${esc(f.name)}">${esc(f.name)}</span><span class="small muted">${fsize(f.size||0)} · ${esc(f.at||"")}</span><button class="btn small" data-gdl="${f.fileId}" type="button">다운로드</button>${ui.planEdit?`<button class="x" data-gfdel="${f.fileId}" aria-label="이 버전 삭제">×</button>`:""}</div>`).join("")}</div>`:""}
     <label class="f">메모<input id="g-note" value="${esc(sel.note||"")}" placeholder="업체, 확인할 점"></label>
@@ -1654,7 +1673,7 @@ function gfxHTML(){
       ${ui.planEdit?`<button class="btn danger" id="g-del">${ui.confirmDel===sel.id?"한 번 더 누르면 삭제":"삭제"}</button>`:""}</div></div></div>`
     :`<div class="panel"><h3>${ui.floor==="4F"?"4층":"3층"} 그래픽</h3>
     <div class="legend">${Object.entries(GTYPES).map(([k,t])=>`<div class="li"><span><span class="dot" style="background:${gcolor(k)}"></span>${t.name}</span><span class="num">${cnt(k)}<span class="muted small"> / 전체 ${state.graphics.filter(g=>g.type===k).length}</span></span></div>`).join("")}</div>
-    <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"아래 '추가'에서 종류를 고르고, 도면에서 시작점과 끝점을 차례로 누르면 선이 그어져요. 번호를 끌면 선이 통째로, 끝의 네모를 끌면 길이가 바뀌어요.":"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 위치를 바꾸려면 '위치 편집'을 눌러요."}</p></div>`;
+    <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"아래 '추가'에서 종류를 고르고, 도면에서 시작점과 끝점을 차례로 누르면 선이 그어져요. 번호를 끌면 선이 통째로, 끝의 네모를 끌면 길이가 바뀌어요.":guest?"번호를 누르면 무엇이 들어가는지 볼 수 있어요. 시안은 '받기'로 내려받아요.":"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 위치를 바꾸려면 '위치 편집'을 눌러요."}</p></div>`;
   const all=state.graphics.slice().sort((a,b)=>a.floor===b.floor?a.id.localeCompare(b.id):a.floor==="4F"?-1:1);
   const table=all.length?`<div class="tbl-wrap"><table><thead><tr><th>층</th><th>번호</th><th>종류</th><th>위치</th><th>들어갈 내용</th><th>크기</th><th>상태</th><th>시안</th></tr></thead><tbody>
     ${all.map(g=>`<tr data-grow="${g.id}" class="${ui.gSel===g.id?"rowsel":""}"><td>${g.floor==="4F"?"4층":"3층"}</td><td class="num">${num[g.id]}</td><td><span class="dot" style="display:inline-block;vertical-align:middle;background:${gcolor(g.type)}"></span> ${esc((GTYPES[g.type]||{}).name)}</td>
@@ -1670,9 +1689,28 @@ function gfxHTML(){
       <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도"><svg class="glines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>${badges}${handles}${start}</div></div>
     ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}${ui.gAdd?`<span class="muted">${ui.gStart?"끝점을 누르세요.":"시작점을 누르세요."}</span>`:""}</div>`:""}
   </div><aside class="side">${editor}</aside></div>
-  <div class="panel" style="margin-top:16px"><h3>그래픽 목록</h3>${table}</div>`;
+  <div class="panel" style="margin-top:16px"><h3>그래픽 목록</h3>${table}</div>${guest?"":guestBox()}`;
+}
+/* 손님 비밀번호: 이 비밀번호로 들어오면 그래픽만 보여요 (DB에서도 그래픽만 읽을 수 있음) */
+function guestBox(){
+  return `<div class="panel noprint" style="margin-top:16px"><h3>손님 비밀번호 <span class="small muted" id="guestState">${ui.guestOn==null?"":ui.guestOn?"· 켜짐":"· 꺼짐"}</span></h3>
+    <p class="small muted" style="margin:0 0 8px">이 비밀번호로 들어온 사람은 그래픽만 볼 수 있어요. 고치거나 지울 수 없고, 인력·물품·급여 등은 보이지 않아요.</p>
+    <div class="row"><input type="password" id="guestPw" placeholder="새 손님 비밀번호" autocomplete="new-password" style="max-width:200px">
+      <button class="btn small" id="guestSet" type="button">정하기</button><button class="btn small" id="guestOff" type="button">끄기</button></div></div>`;
+}
+function bindGuestBox(){
+  const set=$("#guestSet"); if(!set||!db) return;
+  const show=()=>{ const el=$("#guestState"); if(el) el.textContent=ui.guestOn?"· 켜짐":"· 꺼짐"; };
+  if(ui.guestOn===undefined){ ui.guestOn=null; db.rpc("guest_on").then(r=>{ if(!r.error){ ui.guestOn=!!r.data; show(); } }); }
+  set.onclick=async()=>{ const pw=$("#guestPw").value; if(!pw){ toast("비밀번호를 넣어 주세요"); return; }
+    const {error}=await db.rpc("set_guest_key",{h:await sha256hex(pw)});
+    if(error){ toast("저장하지 못했어요"); console.error(error); return; }
+    $("#guestPw").value=""; ui.guestOn=true; show(); toast("손님 비밀번호를 정했어요"); };
+  $("#guestOff").onclick=async()=>{ const {error}=await db.rpc("set_guest_key",{h:""});
+    if(error){ toast("끄지 못했어요"); return; } ui.guestOn=false; show(); toast("손님 비밀번호를 껐어요"); };
 }
 function bindGfx(){
+  bindGuestBox();
   document.querySelectorAll("[data-floor]").forEach(b=>b.onclick=()=>{ui.floor=b.dataset.floor;ui.gSel=null;ui.gStart=null;try{localStorage.setItem("mb-floor",ui.floor)}catch(e){};render();});
   document.querySelectorAll("[data-vis]").forEach(b=>b.onclick=()=>{const k=b.dataset.vis;ui.hidden.has(k)?ui.hidden.delete(k):ui.hidden.add(k);render();});
   document.querySelectorAll("[data-gadd]").forEach(b=>b.onclick=()=>{ui.gAdd=ui.gAdd===b.dataset.gadd?null:b.dataset.gadd;ui.gStart=null;render();});
