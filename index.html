@@ -626,7 +626,7 @@ async function sha256hex(t){ const b=await crypto.subtle.digest('SHA-256',new Te
 async function checkKey(key){ const c=makeClient(key); const {data,error}=await c.rpc("can_board"); return (!error&&data===true)?c:null; }
 async function checkGuest(key){ const c=makeClient(key,"x-guest-key"); const {data,error}=await c.rpc("has_guest_key"); return (!error&&data===true)?c:null; }
 function startGuestMode(c){
-  db=c; mode="db"; setGuest(true); ui.tab="gfx"; ui.planEdit=false; showLogin(false);
+  db=c; mode="db"; setGuest(true); ui.tab="gfx"; ui.planEdit=false; render(); showLogin(false); /* 탭을 먼저 그래픽만으로 다시 그린 뒤 보여 줘요 */
   $("#whoEmail").textContent="그래픽 보기 전용"; $("#who").hidden=false;
   loadAll(); clearInterval(pollTimer);
   pollTimer=setInterval(()=>{ if(!document.hidden) loadAll(); },30000);
@@ -669,6 +669,7 @@ async function onSession(session){
     mode="local"; ALLC.forEach(c=>loaded[c]=true);
     setNotice("config.js에 Supabase 주소가 없어서 저장되지 않는 미리보기 모드예요."); render(); return; }
   authClient=makeClient(null); db=authClient;
+  ["#tabs","#view","#stats"].forEach(k=>$(k).hidden=true); /* 누구로 들어오는지 정해질 때까지 탭을 숨겨요 (팀/손님/로그인 화면에서 다시 보임) */
   $("#keyForm").addEventListener("submit",async e=>{ e.preventDefault();
     const key=await sha256hex($("#keyInput").value); $("#keyMsg").textContent="확인 중…"; // 비밀번호 원문 대신 해시만 보내고 저장
     const c=await checkKey(key);
