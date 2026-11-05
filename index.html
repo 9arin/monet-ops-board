@@ -613,9 +613,10 @@ function popOnStickers(){
 }
 const KEY_LS="mb-teamkey-h"; // 비밀번호 해시
 const GKEY_LS="mb-guestkey-h"; // 손님 비밀번호 해시 (그래픽만 보기)
-let guest=false;
 const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
+let guest=!!(lsGet(GKEY_LS)&&!lsGet(KEY_LS)); /* 손님으로 들어왔던 기기는 처음부터 그래픽만 그려요 (다른 탭이 잠깐 보이지 않게) */
+function setGuest(on){ guest=on; document.body.classList.toggle("guest",on); }
 let pollTimer=null;
 function makeClient(key,hdr){
   return window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_KEY,
@@ -625,7 +626,7 @@ async function sha256hex(t){ const b=await crypto.subtle.digest('SHA-256',new Te
 async function checkKey(key){ const c=makeClient(key); const {data,error}=await c.rpc("can_board"); return (!error&&data===true)?c:null; }
 async function checkGuest(key){ const c=makeClient(key,"x-guest-key"); const {data,error}=await c.rpc("has_guest_key"); return (!error&&data===true)?c:null; }
 function startGuestMode(c){
-  db=c; mode="db"; guest=true; document.body.classList.add("guest"); ui.tab="gfx"; ui.planEdit=false; showLogin(false);
+  db=c; mode="db"; setGuest(true); ui.tab="gfx"; ui.planEdit=false; showLogin(false);
   $("#whoEmail").textContent="그래픽 보기 전용"; $("#who").hidden=false;
   loadAll(); clearInterval(pollTimer);
   pollTimer=setInterval(()=>{ if(!document.hidden) loadAll(); },30000);
@@ -651,18 +652,19 @@ async function onSession(session){
     if(mode==="db"&&db!==authClient) return; // 팀 비밀번호 모드 유지
     stopAll(); db=authClient;
     const key=lsGet(KEY_LS);
-    if(key){ const c=await checkKey(key); if(c){ startKeyMode(c); return; } lsSet(KEY_LS,null); }
+    if(key){ const c=await checkKey(key); if(c){ setGuest(false); startKeyMode(c); return; } lsSet(KEY_LS,null); }
     const gk=lsGet(GKEY_LS);
     if(gk){ const c=await checkGuest(gk); if(c){ startGuestMode(c); return; } lsSet(GKEY_LS,null); }
+    setGuest(false);
     mode="login"; $("#who").hidden=true; showLogin(true); return; }
-  stopAll(); db=authClient; showLogin(false); mode="db";
+  stopAll(); db=authClient; setGuest(false); showLogin(false); mode="db";
   $("#whoEmail").textContent=session.user.email||""; $("#who").hidden=false;
   subscribe();
 }
 (async()=>{
   await null; // 스크립트 전체가 준비된 뒤 시작 (탭 복원 시 오류 방지)
   lsSet("mb-teamkey",null); // 예전 방식(비밀번호 원문 저장) 정리
-  render();
+  setGuest(guest); render();
   if(!window.supabase||!cfg.SUPABASE_URL||cfg.SUPABASE_URL.includes("YOUR-PROJECT")){
     mode="local"; ALLC.forEach(c=>loaded[c]=true);
     setNotice("config.js에 Supabase 주소가 없어서 저장되지 않는 미리보기 모드예요."); render(); return; }
@@ -673,7 +675,7 @@ async function onSession(session){
     if(!c){ const g=await checkGuest(key);
       if(g){ lsSet(GKEY_LS,key); $("#keyInput").value=""; $("#keyMsg").textContent=""; stopAll(); startGuestMode(g); return; }
       $("#keyMsg").textContent="비밀번호가 맞지 않아요."; return; }
-    lsSet(KEY_LS,key); $("#keyInput").value=""; $("#keyMsg").textContent=""; stopAll(); startKeyMode(c); });
+    lsSet(KEY_LS,key); $("#keyInput").value=""; $("#keyMsg").textContent=""; stopAll(); setGuest(false); startKeyMode(c); });
   $("#loginForm").addEventListener("submit",async e=>{ e.preventDefault();
     const email=$("#loginEmail").value.trim(); $("#loginMsg").textContent="보내는 중…";
     const {error}=await authClient.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
