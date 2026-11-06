@@ -16,7 +16,7 @@
   --ok:#2f7d4f; --warn:#b7791f; --bad:#c0392b; --okbg:#e3f1e8; --warnbg:#fbf0dc; --badbg:#f9e3e0;
   --t-staff:#2e9a52; --t-stanchion:#d93a2f; --t-pop:#e2b007; --t-desk:#ef8a1f; --t-chair:#222222;
   --t-exhibit:#c2287a; --t-sticker:#2f6fdb; --t-caution:#14968c; --t-note:#7a8583;
-  --plan-filter:none;
+  --plan-filter:none; --scrim:rgba(20,26,25,.88);
   --f-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --f-num:"IBM Plex Mono",ui-monospace,monospace;
 }
@@ -278,6 +278,21 @@ table.sched .slbl{position:relative;white-space:nowrap;font-size:11px;font-weigh
 .gfile{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:6px;align-items:center;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:4px 6px}
 .gfile .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr[data-grow]{cursor:pointer}
+.gfl{margin:16px 0 8px}.gfl:first-child{margin-top:0}
+.gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px}
+.gcard{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;background:var(--panel);min-width:0}
+.gcard.rowsel{outline:2px solid var(--accent);outline-offset:-1px}
+.gcard-img{all:unset;cursor:zoom-in;display:block;position:relative;border-radius:8px;overflow:hidden;background:var(--soft)}
+.gcard-img img{width:100%;height:220px;object-fit:contain;display:block}
+.gcard-img span{position:absolute;right:6px;bottom:6px;background:var(--panel);color:var(--ink);padding:2px 8px;border-radius:6px;border:1px solid var(--line)}
+.gcard-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gnum{min-width:22px;height:22px;padding:0 5px;border-radius:11px;display:inline-grid;place-items:center;color:var(--accent-ink);font-size:12px}
+.gnote{background:var(--warnbg);color:var(--warn);border-radius:6px;padding:6px 8px}
+.gart{font-size:13px}.gart th,.gart td{padding:4px 6px}.gart td:first-child,.gart td:last-child{white-space:nowrap}
+.glist{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
+.lightbox{position:fixed;inset:0;z-index:100;background:var(--scrim);color:var(--accent-ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;cursor:zoom-out}
+.lightbox img{max-width:100%;max-height:calc(100vh - 90px);object-fit:contain;background:var(--panel);border-radius:6px}
+@media print{.gcard{break-inside:avoid}.gcard-img span{display:none}}
 tr.rowsel td{background:var(--warnbg)}
 .lockbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:10px 12px;margin:12px 0 4px;font-size:13px}
 .lockbar input{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel);min-width:0;width:150px}
@@ -1652,6 +1667,23 @@ const GTYPES={graphic:{name:"그래픽",c:"--t-stanchion"},caption:{name:"캡션
 const GSTATUS=["내용 정리","디자인 중","시안 확정","제작 중","설치 완료"];
 const gcolor=t=>`var(${(GTYPES[t]||GTYPES.graphic).c})`;
 const gnum=()=>{const n={}; ["4F","3F"].forEach(f=>state.graphics.filter(g=>g.floor===f).sort((a,b)=>a.id.localeCompare(b.id)).forEach((g,i)=>n[g.id]=i+1)); return n;};
+/* 들어갈 내용: '01 작가 · 작품 (A1 세로)' 줄들은 표로, 나머지는 줄마다 목록으로 */
+const ART_RE=/^\s*(\d+)\s+(.+?)\s*·\s*(.+?)\s*(?:\(([^)]*)\))?\s*$/;
+function gContent(c){
+  const ls=String(c||"").split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  if(!ls.length) return `<p class="small muted" style="margin:0">들어갈 내용 미정</p>`;
+  const m=ls.map(l=>l.match(ART_RE));
+  if(m.every(Boolean)) return `<div class="tbl-wrap"><table class="gart"><thead><tr><th>번호</th><th>작가</th><th>작품</th><th>크기</th></tr></thead><tbody>${m.map(x=>`<tr><td class="num">${esc(x[1])}</td><td>${esc(x[2])}</td><td>${esc(x[3])}</td><td class="num">${esc(x[4]||"")}</td></tr>`).join("")}</tbody></table></div>`;
+  return `<ul class="glist">${ls.map(l=>`<li>${esc(l)}</li>`).join("")}</ul>`;
+}
+function zoomGfx(g){
+  const box=document.createElement("div"); box.className="lightbox"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","도면 크게 보기");
+  box.innerHTML=`<img src="${esc(g.image)}" alt=""><div class="row"><span class="small">${esc(g.label||"")}</span><button class="btn" type="button">닫기</button></div>`;
+  const close=()=>{ box.remove(); document.removeEventListener("keydown",esc1); }; const esc1=e=>{ if(e.key==="Escape") close(); };
+  box.onclick=close; document.addEventListener("keydown",esc1); document.body.appendChild(box);
+  const f=(g.files||[]).slice(-1)[0]; /* 원본이 사진이면 선명한 원본으로 바꿔 보여 줘요 */
+  if(f&&(/^image\//.test(f.type||"")||/\.(jpe?g|png|webp|gif)$/i.test(f.name||""))) fileBlob(f.fileId).then(b=>{ if(b&&box.isConnected) box.querySelector("img").src=URL.createObjectURL(b); }).catch(()=>{});
+}
 function gfxHTML(){
   const gs=state.graphics.filter(g=>g.floor===ui.floor), num=gnum(), sel=state.graphics.find(g=>g.id===ui.gSel);
   const cnt=t=>gs.filter(g=>g.type===t).length;
@@ -1678,11 +1710,22 @@ function gfxHTML(){
     <div class="legend">${Object.entries(GTYPES).map(([k,t])=>`<div class="li"><span><span class="dot" style="background:${gcolor(k)}"></span>${t.name}</span><span class="num">${cnt(k)}<span class="muted small"> / 전체 ${state.graphics.filter(g=>g.type===k).length}</span></span></div>`).join("")}</div>
     <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"아래 '추가'에서 종류를 고르고, 도면에서 시작점과 끝점을 차례로 누르면 선이 그어져요. 번호를 끌면 선이 통째로, 끝의 네모를 끌면 길이가 바뀌어요.":guest?"번호를 누르면 무엇이 들어가는지 볼 수 있어요. 시안은 '받기'로 내려받아요.":"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 위치를 바꾸려면 '위치 편집'을 눌러요."}</p></div>`;
   const all=state.graphics.slice().sort((a,b)=>a.floor===b.floor?a.id.localeCompare(b.id):a.floor==="4F"?-1:1);
-  const table=all.length?`<div class="tbl-wrap"><table><thead><tr><th>층</th><th>번호</th><th>종류</th><th>위치</th><th>들어갈 내용</th><th>크기</th><th>상태</th><th>시안</th></tr></thead><tbody>
-    ${all.map(g=>`<tr data-grow="${g.id}" class="${ui.gSel===g.id?"rowsel":""}"><td>${g.floor==="4F"?"4층":"3층"}</td><td class="num">${num[g.id]}</td><td><span class="dot" style="display:inline-block;vertical-align:middle;background:${gcolor(g.type)}"></span> ${esc((GTYPES[g.type]||{}).name)}</td>
-      <td>${esc(g.label||"")}</td><td style="min-width:180px">${esc(g.content||"")||'<span class="muted">미정</span>'}</td><td class="num">${esc(g.size||"")}</td>
-      <td><span class="pill ${g.status==="설치 완료"?"s-done":g.status&&g.status!=="내용 정리"?"s-mid":"s-need"}">${esc(g.status||"내용 정리")}</span></td>
-      <td>${g.image?`<img class="gthumb" src="${esc(g.image)}" alt="">`:""}${(g.files||[]).length?(f=>`<button class="linkbtn small" data-gdl-row="${g.id}" title="${esc(f.name)}">V${f.v} 받기</button>`)(g.files[g.files.length-1]):""}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">아직 그래픽이 없어요. '위치 편집'을 누르고 도면에 선을 그어 보세요.</div>`;
+  const stp=g=>`<span class="pill ${g.status==="설치 완료"?"s-done":g.status&&g.status!=="내용 정리"?"s-mid":"s-need"}">${esc(g.status||"내용 정리")}</span>`;
+  const tname=g=>esc((GTYPES[g.type]||{}).name||"");
+  const full=all.filter(g=>g.image||g.content||(g.files||[]).length), bare=all.filter(g=>!full.includes(g));
+  const card=g=>{ const f=(g.files||[]).slice(-1)[0];
+    return `<article class="gcard ${ui.gSel===g.id?"rowsel":""}" data-grow="${g.id}">
+    ${g.image?`<button class="gcard-img" type="button" data-gzoom="${g.id}" aria-label="도면 크게 보기"><img src="${esc(g.image)}" alt="${esc(g.label||"")} 도면"><span class="small">크게 보기</span></button>`:""}
+    <div class="gcard-h"><span class="gnum num" style="background:${gcolor(g.type)}">${num[g.id]}</span><b>${esc(g.label||"")}</b>${stp(g)}</div>
+    <div class="small muted">${g.floor==="4F"?"4층":"3층"} · ${tname(g)}${g.size?` · ${esc(g.size)}`:""}</div>
+    ${g.note?`<div class="gnote small">${esc(g.note)}</div>`:""}
+    ${gContent(g.content)}
+    ${f?`<div class="row small" style="justify-content:space-between"><span class="muted">${esc(f.name)}</span><button class="btn small" type="button" data-gdl-row="${g.id}">V${f.v} 받기</button></div>`:""}
+  </article>`; };
+  const byFloor=["4F","3F"].map(fl=>{ const gs2=full.filter(g=>g.floor===fl); return gs2.length?`<h4 class="gfl">${fl==="4F"?"4층":"3층"} <span class="small muted">${gs2.length}개</span></h4><div class="gcards">${gs2.map(card).join("")}</div>`:""; }).join("");
+  const bareT=bare.length?`<h4 class="gfl">내용이 아직 없는 자리 <span class="small muted">${bare.length}개</span></h4><div class="tbl-wrap"><table><thead><tr><th>번호</th><th>층</th><th>종류</th><th>위치</th><th>상태</th></tr></thead><tbody>
+    ${bare.map(g=>`<tr data-grow="${g.id}" class="${ui.gSel===g.id?"rowsel":""}"><td class="num">${num[g.id]}</td><td>${g.floor==="4F"?"4층":"3층"}</td><td><span class="dot" style="display:inline-block;vertical-align:middle;background:${gcolor(g.type)}"></span> ${tname(g)}</td><td>${esc(g.label||"")}</td><td>${stp(g)}</td></tr>`).join("")}</tbody></table></div>`:"";
+  const table=all.length?byFloor+bareT:`<div class="empty">아직 그래픽이 없어요. '위치 편집'을 누르고 도면에 선을 그어 보세요.</div>`;
   return `<div class="row noprint" style="justify-content:space-between;margin-bottom:12px">${floorSeg()}
     <div class="row"><label class="row small muted"><input type="checkbox" id="lblToggle" ${ui.labels?"checked":""}> 이름 표시</label>
       <button class="btn ${ui.planEdit?"primary":""}" id="planEditBtn">${ui.planEdit?"편집 끝내기":"위치 편집"}</button></div></div>
@@ -1720,6 +1763,7 @@ function bindGfx(){
   $("#lblToggle").onchange=e=>{ui.labels=e.target.checked;render();};
   $("#planEditBtn").onclick=()=>{ui.planEdit=!ui.planEdit;ui.gAdd=null;ui.gStart=null;ui.confirmDel=null;if(!ui.planEdit) toast("위치를 잠갔어요");render();};
   document.querySelectorAll("[data-gdl-row]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const g=state.graphics.find(x=>x.id===b.dataset.gdlRow), f=g.files[g.files.length-1]; downloadFile(f.fileId,f.name); });
+  document.querySelectorAll("[data-gzoom]").forEach(b=>b.onclick=e=>{ e.stopPropagation(); const g=state.graphics.find(x=>x.id===b.dataset.gzoom); if(g) zoomGfx(g); });
   document.querySelectorAll("[data-grow]").forEach(tr=>tr.onclick=()=>{const g=state.graphics.find(x=>x.id===tr.dataset.grow); if(!g) return; ui.gSel=g.id; ui.floor=g.floor; render(); window.scrollTo({top:0,behavior:"smooth"});});
   const plan=$("#gplan");
   const pt=e=>{const r=plan.getBoundingClientRect(); return {x:+Math.min(99.5,Math.max(.5,(e.clientX-r.left)/r.width*100)).toFixed(2),y:+Math.min(99.5,Math.max(.5,(e.clientY-r.top)/r.height*100)).toFixed(2)};};
