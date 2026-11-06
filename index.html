@@ -16,6 +16,7 @@
   --ok:#2f7d4f; --warn:#b7791f; --bad:#c0392b; --okbg:#e3f1e8; --warnbg:#fbf0dc; --badbg:#f9e3e0;
   --t-staff:#2e9a52; --t-stanchion:#d93a2f; --t-pop:#e2b007; --t-desk:#ef8a1f; --t-chair:#222222;
   --t-exhibit:#c2287a; --t-sticker:#2f6fdb; --t-caution:#14968c; --t-note:#7a8583;
+  --v1:#7a5af5; --v2:#b58900; --v3:#3f9a3a; --v4:#14968c; --v5:#9a6b2f; --v6:#2f6fdb; --v7:#c2287a; --vbg:.16;
   --plan-filter:none; --scrim:rgba(20,26,25,.88); --scrim-ink:#ffffff; --shadow:rgba(20,30,28,.18);
   --f-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --f-num:"IBM Plex Mono",ui-monospace,monospace;
@@ -26,6 +27,7 @@
   --ok:#6cc48d; --warn:#e3b55a; --bad:#ef7a6c; --okbg:#1d3326; --warnbg:#3a2f18; --badbg:#3d1f1b;
   --t-staff:#4fc77a; --t-stanchion:#ff6b5e; --t-pop:#f4cf3a; --t-desk:#ffa24a; --t-chair:#e7ecea;
   --t-exhibit:#f05aa8; --t-sticker:#6ea0ff; --t-caution:#3cc7bb; --t-note:#9aa6a3;
+  --v1:#a48cff; --v2:#e8c14a; --v3:#6cc46a; --v4:#3cc7bb; --v5:#d19a5c; --v6:#6ea0ff; --v7:#f05aa8; --vbg:.22;
   --plan-filter:invert(.9) hue-rotate(180deg); --shadow:rgba(0,0,0,.55); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#141a19; --panel:#1c2423; --ink:#e7ecea; --muted:#9aa6a3; --line:#2f3a38; --soft:#242e2c;
@@ -33,6 +35,7 @@
   --ok:#6cc48d; --warn:#e3b55a; --bad:#ef7a6c; --okbg:#1d3326; --warnbg:#3a2f18; --badbg:#3d1f1b;
   --t-staff:#4fc77a; --t-stanchion:#ff6b5e; --t-pop:#f4cf3a; --t-desk:#ffa24a; --t-chair:#e7ecea;
   --t-exhibit:#f05aa8; --t-sticker:#6ea0ff; --t-caution:#3cc7bb; --t-note:#9aa6a3;
+  --v1:#a48cff; --v2:#e8c14a; --v3:#6cc46a; --v4:#3cc7bb; --v5:#d19a5c; --v6:#6ea0ff; --v7:#f05aa8; --vbg:.22;
   --plan-filter:invert(.9) hue-rotate(180deg); --shadow:rgba(0,0,0,.55); color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.5;
@@ -252,16 +255,56 @@ th.wkd,td.wkd{text-align:center;padding:4px 2px}
 .docthumb img{width:100%;height:100%;object-fit:contain;background:var(--panel)}
 .docname{border:1px solid transparent;border-radius:6px;padding:2px 4px;background:transparent;font-weight:600;min-width:0}
 .docname:hover,.docname:focus{border-color:var(--line);background:var(--bg)}
-table.sched{width:auto;border-collapse:separate;border-spacing:0}
-table.sched th,table.sched td{padding:4px;border-bottom:1px solid var(--line)}
-table.sched .sticky{position:sticky;left:0;background:var(--panel);z-index:1;white-space:nowrap;min-width:110px}
-table.sched .sd{min-width:34px;text-align:center;font-size:11px;border-left:1px solid var(--line)}
-table.sched th.sd{font-weight:600;line-height:1.2}
-table.sched .we{background:var(--soft)}
-table.sched th.today{color:var(--accent)}
-table.sched td.on{background:var(--accent);color:var(--accent-ink);position:relative}
-table.sched td.ms{background:var(--warnbg)}
-table.sched .slbl{position:relative;white-space:nowrap;font-size:11px;font-weight:600;z-index:2}
+/* 일정: 업체별 색 막대(공정표) + 날짜별 보기 */
+.sv{--c:var(--muted)}
+.vtag{display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:12px;white-space:nowrap}
+.vtag::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--c);flex:none}
+.schips{display:flex;flex-wrap:wrap;gap:6px}
+.schips .chip[aria-pressed="false"]{opacity:.45}
+.schips .chip small{color:var(--muted);font-weight:400}
+.gwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;-webkit-overflow-scrolling:touch}
+.gantt{display:grid;position:relative;min-width:max-content;font-size:12px}
+.gantt>*{min-width:0}
+.gantt .gnl{position:sticky;left:0;z-index:3;background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px 8px;display:flex;flex-direction:column;justify-content:center;line-height:1.25}
+.gantt .gnl .sh{font-size:11px;color:var(--muted)}
+.gantt .gnl.vfirst{border-top:2px solid var(--line)}
+.gantt .gh{text-align:center;font-weight:600;line-height:1.2;padding:6px 0;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+.gantt .gh.we{color:var(--bad)}
+.gantt .gh.today{background:var(--accent);color:var(--accent-ink);border-radius:6px 6px 0 0}
+.gantt .gh .wk{display:block;font-size:10px;color:var(--muted);font-weight:500}
+.gantt .gcol{border-left:1px solid var(--line);z-index:0}
+.gantt .gcol.we{background:var(--soft)}
+.gantt .gcol.today{box-shadow:inset 0 0 0 2px var(--accent)}
+.gantt .gnlane{border-bottom:1px solid var(--line);z-index:0}
+.gantt .gnlane.vfirst{border-top:2px solid var(--line)}
+.gbar{position:relative;z-index:1;margin:3px 2px;border-radius:6px;padding:3px 6px;border:0;border-left:4px solid var(--c);
+  background:color-mix(in srgb,var(--c) calc(var(--vbg)*100%),var(--panel));color:var(--ink);text-align:left;cursor:pointer;
+  font-size:11.5px;line-height:1.25;font-weight:500;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;word-break:keep-all;overflow-wrap:anywhere}
+.gbar[aria-pressed="true"]{outline:2px solid var(--c);outline-offset:1px}
+.gms{position:relative;z-index:1;margin:3px 2px;border-radius:6px;padding:3px 5px;background:var(--warnbg);font-size:11px;font-weight:700;line-height:1.2;word-break:keep-all}
+.sdetail{margin-top:10px;border-left:4px solid var(--c);background:color-mix(in srgb,var(--c) calc(var(--vbg)*100%),var(--panel));border-radius:8px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start}
+.sdetail b{font-size:15px}
+.sdetail .grow{flex:1;min-width:0}
+.sweek{margin:18px 0 6px;font-size:13px;color:var(--muted);font-weight:700}
+.sweek:first-child{margin-top:0}
+.sday{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--panel)}
+.sday.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.sday.we .sdate{color:var(--bad)}
+.sday.empty{padding:6px 12px;color:var(--muted)}
+.sday .sdhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.sdate{font-weight:700;font-size:15px;font-family:var(--f-num)}
+.sday .mpill{background:var(--warnbg);border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700}
+.sday .tpill{background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700}
+.sshift{display:grid;grid-template-columns:44px minmax(0,1fr);gap:6px;margin-top:8px}
+.sshift>.k{font-size:12px;color:var(--muted);font-weight:700;padding-top:3px}
+.sitem{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:5px 8px;border-radius:6px;border-left:4px solid var(--c);
+  background:color-mix(in srgb,var(--c) calc(var(--vbg)*100%),var(--panel));margin-bottom:4px}
+.sitem .lbl{flex:1 1 180px;min-width:0;word-break:keep-all;overflow-wrap:anywhere}
+.sitem .rng{font-size:11px;color:var(--muted);white-space:nowrap}
+details.sedit>summary{cursor:pointer;font-weight:700;font-size:15px}
+details.sedit .vgrp{margin-top:14px}
+details.sedit .vgrp h4{margin:0 0 6px}
+@media print{.gwrap{overflow:visible;border:0}.gantt .gnl,.gantt .gh{position:static}details.sedit,.schips,.sviewseg{display:none}}
 .nchip{cursor:default;padding:2px 4px 2px 10px}
 .nadd{border:1px dashed var(--line);border-radius:999px;padding:3px 8px;background:var(--panel);font-size:13px}
 .kindseg button .num{font-size:11px;opacity:.7}
@@ -278,12 +321,15 @@ table.sched .slbl{position:relative;white-space:nowrap;font-size:11px;font-weigh
 .gfile{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:6px;align-items:center;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:4px 6px}
 .gfile .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr[data-grow]{cursor:pointer}
-.mkpop{position:absolute;z-index:30;width:250px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px var(--shadow);padding:10px 12px;cursor:default;touch-action:auto;user-select:text;display:flex;flex-direction:column;gap:6px;font-size:13px;text-align:left}
+.mkpop{position:absolute;z-index:30;width:min(280px,86vw);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px var(--shadow);padding:10px 12px;cursor:default;touch-action:auto;user-select:text;display:flex;flex-direction:column;gap:6px;font-size:13px;text-align:left}
 .mkpop-h{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .mkpop-h b{font-size:14px}
 .plan .mkpop img{position:static;inset:auto;filter:none;pointer-events:auto;width:100%;height:auto;max-height:130px;object-fit:contain;background:var(--soft);border-radius:6px;display:block}
 .mkpop .it{display:flex;gap:8px;align-items:center}
 .plan .mkpop .it img{width:44px;height:44px;flex:0 0 44px;object-fit:cover}
+.mkpop .it.big{flex-direction:column;align-items:stretch;gap:4px}
+.plan .mkpop .it.big img{width:100%;height:170px;flex:none;object-fit:contain;cursor:zoom-in}
+.mkpop .pill.ok{background:var(--okbg);color:var(--ok)}
 .mkpop .x{position:absolute;top:4px;right:6px}
 .drop.thumb{position:relative}
 .drop.thumb .phcnt{position:absolute;right:1px;bottom:1px;background:var(--panel);color:var(--ink);font-size:10px;line-height:14px;padding:0 4px;border-radius:6px}
@@ -1163,6 +1209,9 @@ function bindPlan(){
   $("#planEditBtn").onclick=()=>{ui.planEdit=!ui.planEdit; ui.addType=null; ui.confirmDel=null; if(!ui.planEdit) toast("위치를 잠갔어요"); render();};
   const plan=$("#plan");
   const px=plan.querySelector("[data-popx]"); if(px) px.onclick=()=>{ui.sel=null;render();};
+  fitPop(plan);
+  plan.querySelectorAll("[data-itzoom]").forEach(im=>im.onclick=()=>{ const i=state.items.find(x=>x.id===im.dataset.itzoom); if(!i) return;
+    const ph=(i.photos||[]).find(p=>p.thumb===i.image); zoomImg(i.image,i.name||"",ph&&ph.fileId); });
   plan.addEventListener("pointerdown",e=>{
     if(e.target.closest(".mkpop")) return; /* 정보 창 안을 누를 땐 그대로 */
     const mk=e.target.closest(".mk"); const r=plan.getBoundingClientRect();
@@ -1198,16 +1247,26 @@ function bindPlan(){
 }
 
 /* 도면에서 점을 누르면 그 자리에 뜨는 작은 정보 창 */
+// 정보 창이 도면 밖으로 잘리지 않게 위아래로 밀어 넣어요 (넘치면 안에서 스크롤)
+function fitPop(box){ const pop=box&&box.querySelector(".mkpop"); if(!pop) return;
+  const sc=box.closest(".plan-scroll")||box, pr=box.getBoundingClientRect(), sr=sc.getBoundingClientRect();
+  const v={top:Math.max(pr.top,sr.top),bottom:Math.min(pr.bottom,sr.bottom),left:Math.max(pr.left,sr.left),right:Math.min(pr.right,sr.right)};
+  if(v.bottom-v.top<40) return; pop.style.maxHeight=(v.bottom-v.top-8)+"px"; pop.style.overflowY="auto";
+  const r=pop.getBoundingClientRect(); let dy=0, dx=0;
+  if(r.top<v.top+4) dy=v.top+4-r.top; else if(r.bottom>v.bottom-4) dy=v.bottom-4-r.bottom;
+  if(r.left<v.left+4) dx=v.left+4-r.left; else if(r.right>v.right-4) dx=v.right-4-r.right;
+  if(dy) pop.style.marginTop=dy+"px"; if(dx) pop.style.marginLeft=dx+"px"; }
 function popPos(x,y){ return `left:${x}%;top:${y}%;transform:translate(${x<30?"-14px":x>70?"calc(-100% + 14px)":"-50%"},${y>48?"calc(-100% - 18px)":"18px"})`; }
 function mkPop(m){
-  const t=TYPES[m.type]||{}, its=state.items.filter(i=>i.link===m.type).slice(0,3), q=Number(m.qty)||1;
+  const t=TYPES[m.type]||{}, q=Number(m.qty)||1;
+  const its=state.items.filter(i=>i.link===m.type).sort((a,b)=>(!!b.image-!!a.image)||(!!b.chosen-!!a.chosen)).slice(0,3); /* 사진 있는(최종 선택된) 물품 먼저 */
   return `<div class="mkpop" style="${popPos(m.x,m.y)}" role="dialog" aria-label="${esc(m.label||t.name||"")}">
     <button class="x" data-popx aria-label="닫기">×</button>
     <div class="mkpop-h"><span class="dot" style="background:${tcolor(m.type)}"></span><span class="small muted">${esc(t.name||"")}</span></div>
     <b>${esc(m.label||t.name||"")}</b>
     <div class="small">수량 <b class="num">${q}</b>${m.type==="sticker"&&m.glyph?` · 방향 ${esc(m.glyph)}`:""}</div>
     ${m.note?`<div class="small muted">${esc(m.note)}</div>`:""}
-    ${its.map(i=>`<div class="it">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:""}<div><div>${esc(i.name||"")}</div><div class="small muted">${esc(i.status||"")}${i.kind?` · ${esc(i.kind)}`:""}${i.price&&i.kind!==OWNED?` · ${won(Number(i.price))}원`:""}</div></div></div>`).join("")}
+    ${its.map((i,k)=>`<div class="it ${i.image&&k===0?"big":""}">${i.image?`<img src="${esc(i.image)}" alt="${esc(i.name||"")} 사진" referrerpolicy="no-referrer" data-itzoom="${i.id}" title="눌러서 크게 보기">`:""}<div><div><b>${esc(i.name||"")}</b>${i.chosen?` <span class="pill ok">최종 선택</span>`:""}</div><div class="small muted">${esc(i.status||"")}${i.kind?` · ${esc(i.kind)}`:""}${i.price&&i.kind!==OWNED?` · ${won(Number(i.price))}원`:""}${(i.photos||[]).length>1?` · 사진 ${i.photos.length}장`:""}</div></div></div>`).join("")}
   </div>`;
 }
 function gPop(g,n){
@@ -1851,7 +1910,7 @@ function bindGfx(){
   document.querySelectorAll("[data-grow]").forEach(tr=>tr.onclick=()=>{const g=state.graphics.find(x=>x.id===tr.dataset.grow); if(!g) return; ui.gSel=g.id; ui.floor=g.floor; render(); window.scrollTo({top:0,behavior:"smooth"});});
   const plan=$("#gplan");
   const pt=e=>{const r=plan.getBoundingClientRect(); return {x:+Math.min(99.5,Math.max(.5,(e.clientX-r.left)/r.width*100)).toFixed(2),y:+Math.min(99.5,Math.max(.5,(e.clientY-r.top)/r.height*100)).toFixed(2)};};
-  { const px=plan.querySelector("[data-popx]"); if(px) px.onclick=()=>{ui.gSel=null;render();};
+  { const px=plan.querySelector("[data-popx]"); if(px) px.onclick=()=>{ui.gSel=null;render();}; fitPop(plan);
     const pz=plan.querySelector("[data-popzoom]"); if(pz) pz.onclick=()=>{ const g=state.graphics.find(x=>x.id===ui.gSel); if(g) zoomGfx(g); };
     const pg=plan.querySelector("[data-popgo]"); if(pg) pg.onclick=()=>goRow(`[data-grow="${ui.gSel}"]`); }
   plan.addEventListener("pointerdown",e=>{
@@ -1944,43 +2003,109 @@ function bindDocs(){
 /* ----- 일정 (시공 공정표) ----- */
 const SCHED_FROM="2026-11-09", SCHED_TO="2026-12-03", SHIFTS=["주간","야간"];
 const addDay=(date,n)=>{ const d=new Date(date+"T00:00"); d.setDate(d.getDate()+n); return ymd(d); };
-function schedHTML(){
+const md=d=>`${+d.slice(5,7)}/${+d.slice(8)}`;
+const sStart=x=>x.start||x.date||"", sEnd=x=>x.end||x.start||x.date||"";
+const dayDiff=(a,b)=>Math.round((new Date(b+"T00:00")-new Date(a+"T00:00"))/864e5);
+try{ ui.schedView=localStorage.getItem("mb-schedview")||"day"; ui.schedHide=new Set(JSON.parse(localStorage.getItem("mb-schedhide")||"[]")); }catch(e){ ui.schedView="day"; ui.schedHide=new Set(); }
+function schedModel(){
   const cfg=state.settings.find(x=>x.id==="cfg-sched")||{};
-  const bars=state.sched.filter(x=>x.kind!=="milestone"), ms=state.sched.filter(x=>x.kind==="milestone");
-  const all=state.sched.flatMap(x=>[x.start||x.date,x.end||x.date]).filter(Boolean);
+  const bars=state.sched.filter(x=>x.kind!=="milestone"&&sStart(x)), ms=state.sched.filter(x=>x.kind==="milestone"&&x.date);
+  const all=state.sched.flatMap(x=>[sStart(x),sEnd(x)]).filter(Boolean);
   const from=[cfg.from||SCHED_FROM,...all].sort()[0], to=[cfg.to||SCHED_TO,...all].sort().slice(-1)[0];
   const days=[]; for(let d=from;d<=to&&days.length<200;d=addDay(d,1)) days.push(d);
   const vendors=[...new Set([...(cfg.vendors||[]),...bars.map(b=>b.vendor).filter(Boolean)])];
-  const today=ymd(new Date());
-  const head=`<tr><th class="sticky">구분</th>${days.map(d=>{const w=dowOf(d); return `<th class="sd ${w>=5?"we":""} ${d===today?"today":""}">${+d.slice(5,7)}/${+d.slice(8)}<br><span class="small">${DAYS[w]}</span></th>`;}).join("")}</tr>`;
-  const cellsFor=list=>days.map(d=>{ const hit=list.filter(b=>(b.start||b.date)<=d&&d<=(b.end||b.start||b.date)); const w=dowOf(d);
-    if(!hit.length) return `<td class="sd ${w>=5?"we":""}"></td>`;
-    const first=hit.find(b=>(b.start||b.date)===d||d===from);
-    return `<td class="sd on" title="${esc(hit.map(b=>b.label||"").join(", "))}">${first?`<span class="slbl">${esc(first.label||"")}</span>`:""}</td>`; }).join("");
-  const rows=`<tr><td class="sticky"><b>MILESTONE</b></td>${days.map(d=>{const m=ms.filter(x=>x.date===d); return `<td class="sd ${m.length?"ms":""}">${m.map(x=>`<span class="slbl">◆ ${esc(x.label||"")}</span>`).join("")}</td>`;}).join("")}</tr>`
-    +vendors.flatMap(v=>SHIFTS.map(sh=>`<tr><td class="sticky">${sh==="주간"?`<b>${esc(v)}</b> `:""}<span class="small muted">${sh}</span></td>${cellsFor(bars.filter(b=>b.vendor===v&&(b.shift||"주간")===sh))}</tr>`)).join("");
-  const list=state.sched.slice().sort((a,b)=>(a.start||a.date||"").localeCompare(b.start||b.date||"")).map(x=>x.kind==="milestone"
-    ?`<tr data-sid="${x.id}"><td>◆ 마일스톤</td><td></td><td><input type="date" data-sf="date" value="${esc(x.date||"")}"></td><td></td><td><input data-sf="label" value="${esc(x.label||"")}"></td><td><button class="x" data-sdel>×</button></td></tr>`
-    :`<tr data-sid="${x.id}"><td><input data-sf="vendor" value="${esc(x.vendor||"")}" list="vendorList"></td><td><select data-sf="shift">${SHIFTS.map(s=>`<option ${(x.shift||"주간")===s?"selected":""}>${s}</option>`).join("")}</select></td>
-      <td><input type="date" data-sf="start" value="${esc(x.start||"")}"></td><td><input type="date" data-sf="end" value="${esc(x.end||"")}"></td><td><input data-sf="label" value="${esc(x.label||"")}" placeholder="작업 내용"></td><td><button class="x" data-sdel>×</button></td></tr>`).join("");
-  return `<div class="panel"><h3>시공 일정</h3><div class="tbl-wrap"><table class="sched">${head}${rows}</table></div></div>
-  <div class="panel" style="margin-top:16px"><h3>일정 목록</h3>
-    ${list?`<div class="tbl-wrap"><table><thead><tr><th>업체</th><th>주간/야간</th><th>시작</th><th>끝</th><th>내용</th><th></th></tr></thead><tbody>${list}</tbody></table></div>`:""}
-    <datalist id="vendorList">${vendors.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
+  const color=v=>`var(--v${(Math.max(0,vendors.indexOf(v))%7)+1})`;
+  return {cfg,bars,ms,days,from,to,vendors,color,notes:cfg.notes||{},today:ymd(new Date())};
+}
+const vstyle=(M,v)=>`style="--c:${M.color(v)}"`;
+function schedHTML(){
+  const M=schedModel(), hide=ui.schedHide, shown=M.vendors.filter(v=>!hide.has(v));
+  const bars=M.bars.filter(b=>!hide.has(b.vendor));
+  const chips=M.vendors.length?`<div class="schips" role="group" aria-label="업체 보기">${M.vendors.map(v=>`<button class="chip" data-sv="${esc(v)}" aria-pressed="${!hide.has(v)}" ${vstyle(M,v)}><span class="vtag">${esc(v)}</span> <small>${M.bars.filter(b=>b.vendor===v).length}</small></button>`).join("")}</div>`:"";
+  const notes=shown.filter(v=>M.notes[v]).map(v=>`<div class="small" style="margin-top:6px"><span class="vtag" ${vstyle(M,v)}>${esc(v)}</span> ${esc(M.notes[v])}</div>`).join("");
+  const top=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">시공 일정 <span class="small muted">${md(M.from)} ~ ${md(M.to)}</span></h3>
+    <div class="seg sviewseg" role="group" aria-label="보기 방식"><button data-sview="day" aria-pressed="${ui.schedView!=="bar"}">날짜별</button><button data-sview="bar" aria-pressed="${ui.schedView==="bar"}">공정표</button></div></div>${chips}${notes}`;
+  const body=ui.schedView==="bar"?ganttHTML(M,shown,bars):agendaHTML(M,bars);
+  return `<div class="panel">${top}<div style="margin-top:12px">${body}</div></div>${schedEditHTML(M)}`;
+}
+function agendaHTML(M,bars){
+  let out="", wk=-1;
+  M.days.forEach((d,i)=>{
+    const w=Math.floor(i/7); if(w!==wk){ wk=w; const e=M.days[Math.min(M.days.length-1,i+6)]; out+=`<div class="sweek">${w+1}주차 · ${md(d)} ~ ${md(e)}</div>`; }
+    const dow=dowOf(d), mss=M.ms.filter(x=>x.date===d), hit=bars.filter(b=>sStart(b)<=d&&d<=sEnd(b));
+    const head=`<div class="sdhead"><span class="sdate">${md(d)} <span style="font-family:var(--f-ui)">${DAYS[dow]}</span></span>${d===M.today?`<span class="tpill">오늘</span>`:""}${mss.map(x=>`<span class="mpill">◆ ${esc(x.label||"")}</span>`).join("")}${!hit.length?`<span class="small">작업 없음</span>`:""}</div>`;
+    const sh=SHIFTS.map(k=>{ const L=hit.filter(b=>(b.shift||"주간")===k).sort((a,b)=>M.vendors.indexOf(a.vendor)-M.vendors.indexOf(b.vendor)); if(!L.length) return "";
+      return `<div class="sshift"><div class="k">${k}</div><div>${L.map(b=>{ const n=dayDiff(sStart(b),sEnd(b))+1, k2=dayDiff(sStart(b),d)+1;
+        return `<div class="sitem" ${vstyle(M,b.vendor)}><span class="vtag">${esc(b.vendor||"")}</span><span class="lbl">${esc(b.label||"")}</span><span class="rng">${n>1?`${md(sStart(b))}~${md(sEnd(b))} · ${n}일 중 ${k2}일째`:"하루"}</span></div>`; }).join("")}</div></div>`; }).join("");
+    out+=`<div class="sday ${dow>=5?"we":""} ${d===M.today?"today":""} ${hit.length?"":"empty"}" ${d===M.today?'id="sToday"':""}>${head}${sh}</div>`;
+  });
+  return out||`<p class="muted">아직 일정이 없어요.</p>`;
+}
+function ganttHTML(M,shown,bars){
+  const N=M.days.length, idx=d=>M.days.indexOf(d);
+  const narrow=window.innerWidth<640, colW=narrow?50:60, labW=narrow?92:130;
+  // 줄 나누기: 업체 × 주간/야간, 같은 칸에 겹치면 한 줄 더
+  const lanes=[]; // {v,sh,first,items:[]}
+  shown.forEach(v=>SHIFTS.forEach((sh,si)=>{
+    const L=bars.filter(b=>b.vendor===v&&(b.shift||"주간")===sh).sort((a,b)=>sStart(a).localeCompare(sStart(b)));
+    const sub=[]; L.forEach(b=>{ let ln=sub.find(s=>sEnd(s[s.length-1])<sStart(b)); if(!ln){ln=[];sub.push(ln);} ln.push(b); });
+    if(!sub.length) sub.push([]);
+    sub.forEach((items,k)=>lanes.push({v,sh,first:si===0&&k===0,lead:k===0,span:sub.length,items}));
+  }));
+  const R0=3; let html="";
+  M.days.forEach((d,i)=>{ const w=dowOf(d), c=i+2;
+    html+=`<div class="gh ${w>=5?"we":""} ${d===M.today?"today":""}" style="grid-row:1;grid-column:${c}">${md(d)}<span class="wk">${DAYS[w]}</span></div>`;
+    html+=`<div class="gcol ${w>=5?"we":""} ${d===M.today?"today":""}" style="grid-row:2/${R0+lanes.length};grid-column:${c}"></div>`; });
+  html+=`<div class="gnl" style="grid-row:1;grid-column:1;z-index:4">구분</div><div class="gnl" style="grid-row:2;grid-column:1"><b>일정</b></div><div class="glane" style="grid-row:2;grid-column:2/${N+2}"></div>`;
+  M.ms.forEach(x=>{ const i=idx(x.date); if(i>=0) html+=`<div class="gms" style="grid-row:2;grid-column:${i+2}">◆ ${esc(x.label||"")}</div>`; });
+  lanes.forEach((ln,k)=>{ const r=R0+k;
+    if(ln.lead) html+=`<div class="gnl ${ln.first?"vfirst":""}" style="--c:${M.color(ln.v)};grid-row:${r}/span ${ln.span};grid-column:1">${ln.first?`<span class="vtag">${esc(ln.v)}</span>`:""}<span class="sh">${ln.sh}</span></div>`;
+    html+=`<div class="glane ${ln.first?"vfirst":""}" style="grid-row:${r};grid-column:2/${N+2}"></div>`;
+    ln.items.forEach(b=>{ const a=Math.max(0,idx(sStart(b))), e=idx(sEnd(b))<0?N-1:idx(sEnd(b));
+      html+=`<button class="gbar" data-gb="${b.id}" aria-pressed="${ui.schedSel===b.id}" style="--c:${M.color(b.vendor)};grid-row:${r};grid-column:${a+2}/${e+3}" title="${esc(b.label||"")}">${esc(b.label||"")}</button>`; });
+  });
+  const sel=bars.find(b=>b.id===ui.schedSel);
+  const det=sel?`<div class="sdetail" ${vstyle(M,sel.vendor)}><div class="grow"><span class="vtag">${esc(sel.vendor||"")}</span> <span class="small muted">${esc(sel.shift||"주간")}</span><br><b>${esc(sel.label||"")}</b><br><span class="small">${md(sStart(sel))}(${DAYS[dowOf(sStart(sel))]})${sEnd(sel)!==sStart(sel)?` ~ ${md(sEnd(sel))}(${DAYS[dowOf(sEnd(sel))]}) · ${dayDiff(sStart(sel),sEnd(sel))+1}일`:" · 하루"}</span></div><button class="x" data-gbx aria-label="닫기">×</button></div>`
+    :`<p class="small muted" style="margin:8px 0 0">막대를 누르면 내용이 크게 보여요. 옆으로 밀어서 날짜를 넘겨 보세요.</p>`;
+  return `<div class="gwrap" id="gwrap"><div class="gantt" style="grid-template-columns:${labW}px repeat(${N},${colW}px);grid-template-rows:auto auto repeat(${lanes.length},minmax(46px,auto))">${html}</div></div>${det}`;
+}
+function schedEditHTML(M){
+  const row=x=>x.kind==="milestone"
+    ?`<tr data-sid="${x.id}"><td colspan="2">◆ 일정</td><td><input type="date" data-sf="date" value="${esc(x.date||"")}"></td><td></td><td><input data-sf="label" value="${esc(x.label||"")}"></td><td><button class="x" data-sdel>×</button></td></tr>`
+    :`<tr data-sid="${x.id}"><td><input data-sf="vendor" value="${esc(x.vendor||"")}" list="vendorList" style="width:110px"></td><td><select data-sf="shift">${SHIFTS.map(s=>`<option ${(x.shift||"주간")===s?"selected":""}>${s}</option>`).join("")}</select></td>
+      <td><input type="date" data-sf="start" value="${esc(x.start||"")}"></td><td><input type="date" data-sf="end" value="${esc(x.end||"")}"></td><td><input data-sf="label" value="${esc(x.label||"")}" placeholder="작업 내용" style="min-width:220px"></td><td><button class="x" data-sdel>×</button></td></tr>`;
+  const thead=`<thead><tr><th>업체</th><th>주간/야간</th><th>시작</th><th>끝</th><th>내용</th><th></th></tr></thead>`;
+  const byS=(a,b)=>sStart(a).localeCompare(sStart(b));
+  const groups=[["◆ 주요 일정 (마일스톤)",M.ms.slice().sort(byS)],...M.vendors.map(v=>[v,M.bars.filter(b=>b.vendor===v).sort(byS)]),["업체 없음",M.bars.filter(b=>!b.vendor).sort(byS)]].filter(g=>g[1].length);
+  return `<details class="panel sedit" style="margin-top:16px" ${ui.schedEdit?"open":""}><summary>일정 고치기 · 추가 <span class="small muted">${state.sched.length}개</span></summary>
+    ${groups.map(([n,L])=>`<div class="vgrp"><h4>${M.vendors.includes(n)?`<span class="vtag" ${vstyle(M,n)}>${esc(n)}</span>`:esc(n)} <span class="small muted">${L.length}</span></h4>
+      ${M.vendors.includes(n)?`<label class="small muted">메모 <input data-vnote="${esc(n)}" value="${esc(M.notes[n]||"")}" placeholder="예: 3F만 작업" style="width:min(320px,100%)"></label>`:""}
+      <div class="tbl-wrap"><table>${thead}<tbody>${L.map(row).join("")}</tbody></table></div></div>`).join("")}
+    <datalist id="vendorList">${M.vendors.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
+    <h4 style="margin:18px 0 6px">새 일정 넣기</h4>
     <form class="addform six" id="addSched"><label class="f">업체<input id="ns-vendor" list="vendorList" placeholder="예: 큐비크스" required></label>
       <label class="f">주간/야간<select id="ns-shift">${SHIFTS.map(s=>`<option>${s}</option>`).join("")}</select></label>
       <label class="f">시작<input type="date" id="ns-start" required></label><label class="f">끝<input type="date" id="ns-end"></label>
       <label class="f">내용<input id="ns-label" placeholder="예: 가벽 설치"></label><button class="btn primary" type="submit">추가</button></form>
-    <form class="addform three" id="addMile" style="margin-top:8px"><label class="f">마일스톤<input id="nm-label" placeholder="예: 오픈" required></label>
-      <label class="f">날짜<input type="date" id="nm-date" required></label><button class="btn" type="submit">마일스톤 추가</button></form></div>`;
+    <form class="addform three" id="addMile" style="margin-top:8px"><label class="f">주요 일정<input id="nm-label" placeholder="예: 오픈" required></label>
+      <label class="f">날짜<input type="date" id="nm-date" required></label><button class="btn" type="submit">주요 일정 추가</button></form></details>`;
 }
 function bindSched(){
+  const keep=()=>{ try{ localStorage.setItem("mb-schedview",ui.schedView); localStorage.setItem("mb-schedhide",JSON.stringify([...ui.schedHide])); }catch(e){} };
+  document.querySelectorAll("[data-sview]").forEach(b=>b.onclick=()=>{ ui.schedView=b.dataset.sview; keep(); render(); });
+  document.querySelectorAll("[data-sv]").forEach(b=>b.onclick=()=>{ const v=b.dataset.sv; ui.schedHide.has(v)?ui.schedHide.delete(v):ui.schedHide.add(v); keep(); render(); });
+  document.querySelectorAll("[data-gb]").forEach(b=>b.onclick=()=>{ ui.schedSel=ui.schedSel===b.dataset.gb?null:b.dataset.gb; const g=$("#gwrap"), sl=g&&g.scrollLeft; render(); const g2=$("#gwrap"); if(g2) g2.scrollLeft=sl; });
+  const bx=$("[data-gbx]"); if(bx) bx.onclick=()=>{ ui.schedSel=null; const g=$("#gwrap"), sl=g&&g.scrollLeft; render(); const g2=$("#gwrap"); if(g2) g2.scrollLeft=sl; };
+  const det=$("details.sedit"); if(det) det.ontoggle=()=>{ ui.schedEdit=det.open; };
   document.querySelectorAll("tr[data-sid]").forEach(tr=>{ const x=()=>state.sched.find(s=>s.id===tr.dataset.sid);
     tr.querySelectorAll("[data-sf]").forEach(el=>el.onchange=()=>save("sched",{...x(),[el.dataset.sf]:el.value.trim()}));
-    tr.querySelector("[data-sdel]").onclick=()=>remove("sched",x().id); });
+    tr.querySelector("[data-sdel]").onclick=()=>{ if(ui.confirmDel===x().id){ ui.confirmDel=null; remove("sched",x().id); } else { ui.confirmDel=x().id; toast("한 번 더 누르면 지워져요"); } }; });
+  document.querySelectorAll("[data-vnote]").forEach(el=>el.onchange=()=>{ const cfg=state.settings.find(x=>x.id==="cfg-sched")||{id:"cfg-sched"}; save("settings",{...cfg,notes:{...(cfg.notes||{}),[el.dataset.vnote]:el.value.trim()}}); });
   $("#addSched").onsubmit=e=>{e.preventDefault(); const start=$("#ns-start").value;
     save("sched",{id:uid("s"),kind:"bar",vendor:$("#ns-vendor").value.trim(),shift:$("#ns-shift").value,start,end:$("#ns-end").value||start,label:$("#ns-label").value.trim()}); toast("추가했어요");};
   $("#addMile").onsubmit=e=>{e.preventDefault(); save("sched",{id:uid("s"),kind:"milestone",date:$("#nm-date").value,label:$("#nm-label").value.trim()}); toast("추가했어요");};
+  // 공정표: 오늘이 기간 안이면 오늘 쪽으로 밀어 둬요
+  const g=$("#gwrap"), t=g&&g.querySelector(".gh.today"); if(g&&t&&!g.dataset.done&&!ui.schedSel){ g.scrollLeft=Math.max(0,t.offsetLeft-160); }
 }
 // 한 번만: 받은 공정표(11/9~12/3, 큐비크스·NGD, 11/9 제작물 발주)를 넣어 둬요
 function seedSched(){
