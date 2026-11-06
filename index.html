@@ -329,7 +329,20 @@ tr[data-grow]{cursor:pointer}
 .plan .mkpop .it img{width:44px;height:44px;flex:0 0 44px;object-fit:cover}
 .mkpop .it.big{flex-direction:column;align-items:stretch;gap:4px}
 .plan .mkpop .it.big img{width:100%;height:170px;flex:none;object-fit:contain;cursor:zoom-in}
-.mkpop .pill.ok{background:var(--okbg);color:var(--ok)}
+.mkpop .pill.ok,.pit .pill.ok{background:var(--okbg);color:var(--ok)}
+.plan .mk.faded{opacity:.45}
+.plan.editing .pg,.plan.editing .pgb{opacity:.35;pointer-events:none}
+.plan .pgb{z-index:1}
+.pweek{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;font-size:10.5px;text-align:center}
+.pweek span{background:var(--soft);border-radius:4px;padding:2px 1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pweek b{display:block;font-size:10px;color:var(--muted)}
+.pweek .on{outline:2px solid var(--accent)}
+.pweek .gap{background:var(--badbg);color:var(--bad)}
+.pitems{display:flex;flex-direction:column;gap:6px}
+.pit{display:flex;gap:8px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:5px;cursor:pointer;width:100%}
+.pit:hover{background:var(--soft)}
+.pit img,.pit .noimg{width:44px;height:44px;flex:0 0 44px;border-radius:6px;object-fit:cover;background:var(--soft);display:grid;place-items:center}
+.pit-t{min-width:0;line-height:1.3}
 .mkpop .x{position:absolute;top:4px;right:6px}
 .drop.thumb{position:relative}
 .drop.thumb .phcnt{position:absolute;right:1px;bottom:1px;background:var(--panel);color:var(--ink);font-size:10px;line-height:14px;padding:0 4px;border-radius:6px}
@@ -1158,15 +1171,37 @@ const loadingOrEmpty=(col,msg)=> !loaded[col] ? `<div class="empty">불러오는
 
 /* ----- plan ----- */
 function countBy(floor){const c={};state.markers.filter(m=>!floor||m.floor===floor).forEach(m=>{c[m.type]=(c[m.type]||0)+(Number(m.qty)||1);});return c;}
+// 배치도 옆: 도면 점과 연결된 물품 (물품 탭에서 고치면 바로 바뀌어요)
+function planItemsHTML(cf){
+  const its=state.items.filter(i=>i.link&&TYPES[i.link]);
+  if(!its.length) return "";
+  const byT=Object.keys(TYPES).map(k=>[k,its.filter(i=>i.link===k)]).filter(x=>x[1].length);
+  return `<h4 style="margin:16px 0 6px">연결된 물품</h4><div class="pitems">${byT.map(([k,L])=>L.map(i=>{ const need=Number(i.qty||0), placed=cf[k]||0;
+    return `<button class="pit" data-pit="${i.id}" type="button">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="noimg"><span class="dot" style="background:${tcolor(k)}"></span></span>`}
+      <span class="pit-t"><b>${esc(i.name||"")}</b>${i.chosen?` <span class="pill ok">최종</span>`:""}<br><span class="small muted">${esc(i.status||"")} · 도면 ${placed}${need?` / 필요 ${need}`:""}${need&&placed<need?` <span style="color:var(--bad)">· ${need-placed} 부족</span>`:""}</span></span></button>`; }).join("")).join("")}</div>`;
+}
 function planHTML(){
   const ms=state.markers.filter(m=>m.floor===ui.floor);
   const cf=countBy(ui.floor), ca=countBy();
   const sel=state.markers.find(m=>m.id===ui.sel);
   const chips=Object.entries(TYPES).map(([k,t])=>`<button class="chip" data-vis="${k}" aria-pressed="${!ui.hidden.has(k)}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}<span class="num muted">${cf[k]||0}</span></button>`).join("");
   const addChips=Object.entries(TYPES).map(([k,t])=>`<button class="chip add" data-add="${k}" aria-pressed="${ui.addType===k}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</button>`).join("");
+  // 인력: 고른 요일에 그 자리에서 일하는 사람 (인력 탭과 같은 계산)
+  const d=ui.staffDay, cov=loaded.staff&&ms.some(m=>m.type==="staff")?coverage().res:null;
+  const whoAt=m=>{ if(!cov||m.type!=="staff") return null; const c=cov[m.id]&&cov[m.id][d];
+    if(!cov[m.id]) return {txt:"매일 자리 아님",faded:true}; if(!c||c.kind==="gap") return {txt:"빈자리",gap:true}; return {txt:pname(c.who)+(c.kind==="cover"?" (대타)":"")}; };
   const marks=ms.filter(m=>!ui.hidden.has(m.type)).map(m=>{
-    const q=Number(m.qty)||1; const txt=m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));
-    return `<button class="mk ${TYPES[m.type]&&TYPES[m.type].dark?"dark-text":""} ${ui.sel===m.id?"sel":""}" data-id="${m.id}" style="left:${m.x}%;top:${m.y}%;background:${tcolor(m.type)}" aria-label="${esc((TYPES[m.type]||{}).name)} ${esc(m.label)}">${esc(txt)}<span class="lbl">${esc(m.label||"")}</span></button>`;}).join("");
+    const q=Number(m.qty)||1, w=whoAt(m); let txt=m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));
+    if(w&&w.gap) txt="!";
+    const lbl=(m.label||"")+(w&&!ui.hidden.has("L-who")?` · ${w.txt}`:"");
+    return `<button class="mk ${TYPES[m.type]&&TYPES[m.type].dark?"dark-text":""} ${ui.sel===m.id?"sel":""} ${w&&w.faded?"faded":""}" data-id="${m.id}" style="left:${m.x}%;top:${m.y}%;background:${w&&w.gap?"var(--bad)":tcolor(m.type)}" aria-label="${esc((TYPES[m.type]||{}).name)} ${esc(lbl)}">${esc(txt)}<span class="lbl">${esc(lbl)}</span></button>`;}).join("");
+  // 그래픽: 그래픽 탭에서 그린 벽 선과 번호를 그대로 겹쳐 보여요 (고치는 건 그래픽 탭에서)
+  const gs=ui.hidden.has("L-gfx")?[]:state.graphics.filter(g=>g.floor===ui.floor&&!ui.hidden.has("g-"+g.type)), gn=gnum(), gsel=gs.find(g=>g.id===ui.planG);
+  const glines=gs.length?`<svg class="glines pg" viewBox="0 0 100 100" preserveAspectRatio="none">${gs.map(g=>`<line x1="${g.x1}" y1="${g.y1}" x2="${g.x2}" y2="${g.y2}" class="gl ${ui.planG===g.id?"sel":""}" style="stroke:${gcolor(g.type)}" vector-effect="non-scaling-stroke"/>`).join("")}</svg>`:"";
+  const gbad=gs.map(g=>`<button class="mk gbadge pgb ${ui.planG===g.id?"sel":""}" data-pg="${g.id}" style="left:${(g.x1+g.x2)/2}%;top:${(g.y1+g.y2)/2}%;background:${gcolor(g.type)}" aria-label="그래픽 ${gn[g.id]}번 ${esc(g.label||"")}">${gn[g.id]}<span class="lbl">${esc(g.label||"")}</span></button>`).join("");
+  const layerChips=`<button class="chip" data-vis="L-gfx" aria-pressed="${!ui.hidden.has("L-gfx")}"><span class="dot" style="background:var(--brand)"></span>그래픽<span class="num muted">${state.graphics.filter(g=>g.floor===ui.floor).length}</span></button>`
+    +(cov?`<button class="chip" data-vis="L-who" aria-pressed="${!ui.hidden.has("L-who")}"><span class="dot" style="background:${tcolor("staff")}"></span>근무자 이름</button>`:"");
+  const dayseg=cov?`<div class="row small noprint"><span class="muted" style="margin-right:4px">근무 요일</span><div class="seg daypick" role="group" aria-label="요일">${DAYS.map((x,i)=>`<button data-pday="${i}" aria-pressed="${d===i}">${x}</button>`).join("")}</div>${(()=>{ const gaps=ms.filter(m=>{const w=whoAt(m); return w&&w.gap;}).length; return gaps?`<span class="pill" style="background:var(--badbg);color:var(--bad)">빈자리 ${gaps}</span>`:`<span class="small muted">빈자리 없음</span>`; })()}</div>`:"";
   const editor = sel ? `
     <div class="panel"><h3>선택한 항목</h3>
       <div style="display:flex;flex-direction:column;gap:8px">
@@ -1183,6 +1218,7 @@ function planHTML(){
       </div></div></div>` : `
     <div class="panel"><h3>${ui.floor==="4F"?"4층":"3층"} 배치 수량</h3>
       <div class="legend">${Object.entries(TYPES).map(([k,t])=>`<div class="li"><span><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</span><span class="num">${cf[k]||0}<span class="muted small"> / 전체 ${ca[k]||0}</span></span></div>`).join("")}</div>
+      ${planItemsHTML(cf)}
       <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"점을 끌어서 옮기고, 아래 '추가'에서 새 항목을 찍어요. 다 했으면 '편집 끝내기'를 눌러 주세요.":"점을 누르면 이름·수량을 볼 수 있어요. 위치를 옮기려면 '위치 편집'을 눌러요."} 수량이 2 이상이면 점 안에 숫자로 보여요.</p></div>`;
   return `
   <div class="row noprint" style="justify-content:space-between;margin-bottom:12px">
@@ -1192,9 +1228,9 @@ function planHTML(){
   </div>
   <div class="plan-grid">
     <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
-      <div class="row small noprint"><span class="muted" style="margin-right:4px">보기</span>${chips}</div>
+      <div class="row small noprint"><span class="muted" style="margin-right:4px">보기</span>${chips}${layerChips}</div>${dayseg}
       <div class="plan-scroll"><div class="plan ${ui.planEdit?"editing":"locked"} ${ui.planEdit&&ui.addType?"adding":""} ${ui.labels?"":"nolabels"}" id="plan">
-        <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${marks}${sel&&!ui.planEdit&&sel.floor===ui.floor?mkPop(sel):""}</div></div>
+        <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${glines}${gbad}${marks}${sel&&!ui.planEdit&&sel.floor===ui.floor?mkPop(sel,whoAt(sel),cov):""}${gsel&&!sel&&!ui.planEdit?gPop(gsel,gn[gsel.id],true):""}</div></div>
       ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}${ui.addType?`<span class="muted">도면을 누르면 <b>${TYPES[ui.addType].name}</b>이 추가돼요.</span>`:""}</div>`:""}
       ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted noprint">이 층에는 아직 표시한 항목이 없어요. '위치 편집'을 누른 뒤 '추가'에서 종류를 고르고 도면을 눌러 보세요.</div>`)}
     </div>
@@ -1208,22 +1244,28 @@ function bindPlan(){
   $("#lblToggle").onchange=e=>{ui.labels=e.target.checked;render();};
   $("#planEditBtn").onclick=()=>{ui.planEdit=!ui.planEdit; ui.addType=null; ui.confirmDel=null; if(!ui.planEdit) toast("위치를 잠갔어요"); render();};
   const plan=$("#plan");
-  const px=plan.querySelector("[data-popx]"); if(px) px.onclick=()=>{ui.sel=null;render();};
+  const px=plan.querySelector("[data-popx]"); if(px) px.onclick=()=>{ui.sel=null;ui.planG=null;render();};
+  document.querySelectorAll("[data-pday]").forEach(b=>b.onclick=()=>{ ui.staffDay=+b.dataset.pday; render(); });
+  document.querySelectorAll("[data-pit]").forEach(b=>b.onclick=()=>{ const i=state.items.find(x=>x.id===b.dataset.pit); if(!i) return;
+    ui.tab="items"; ui.openItem=i.id; ui.hiItem=i.link; try{localStorage.setItem("mb-tab","items")}catch(e){}; render(); goRow(`tr[data-id="${i.id}"]`); });
+  { const pg=plan.querySelector("[data-popgo]"); if(pg) pg.onclick=()=>{ ui.gSel=ui.planG; ui.planG=null; ui.tab="gfx"; try{localStorage.setItem("mb-tab","gfx")}catch(e){}; render(); goRow(`[data-grow="${ui.gSel}"]`); };
+    const pz=plan.querySelector("[data-popzoom]"); if(pz) pz.onclick=()=>{ const g=state.graphics.find(x=>x.id===ui.planG); if(g) zoomGfx(g); }; }
   fitPop(plan);
   plan.querySelectorAll("[data-itzoom]").forEach(im=>im.onclick=()=>{ const i=state.items.find(x=>x.id===im.dataset.itzoom); if(!i) return;
     const ph=(i.photos||[]).find(p=>p.thumb===i.image); zoomImg(i.image,i.name||"",ph&&ph.fileId); });
   plan.addEventListener("pointerdown",e=>{
     if(e.target.closest(".mkpop")) return; /* 정보 창 안을 누를 땐 그대로 */
-    const mk=e.target.closest(".mk"); const r=plan.getBoundingClientRect();
+    const gb=e.target.closest("[data-pg]"); if(gb&&!ui.planEdit){ ui.planG=ui.planG===gb.dataset.pg?null:gb.dataset.pg; ui.sel=null; render(); return; }
+    const mk=e.target.closest(".mk:not([data-pg])"); const r=plan.getBoundingClientRect();
     if(!mk){
-      if(!ui.planEdit||!ui.addType){ if(ui.sel){ui.sel=null;render();} return; }
+      if(!ui.planEdit||!ui.addType){ if(ui.sel||ui.planG){ui.sel=null;ui.planG=null;render();} return; }
       const x=+((e.clientX-r.left)/r.width*100).toFixed(2), y=+((e.clientY-r.top)/r.height*100).toFixed(2);
       const m={id:uid("m"),floor:ui.floor,type:ui.addType,x,y,label:TYPES[ui.addType].name,qty:1,note:""};
       if(ui.addType==="sticker") m.glyph="→";
       ui.sel=m.id; save("markers",m); return;
     }
     const m=state.markers.find(z=>z.id===mk.dataset.id); if(!m) return;
-    if(!ui.planEdit){ ui.sel=ui.sel===m.id?null:m.id; ui.confirmDel=null; render(); return; } // 잠금 중엔 누르기만 (못 옮김)
+    if(!ui.planEdit){ ui.sel=ui.sel===m.id?null:m.id; ui.planG=null; ui.confirmDel=null; render(); return; } // 잠금 중엔 누르기만 (못 옮김)
     e.preventDefault(); mk.setPointerCapture(e.pointerId);
     const sx=e.clientX, sy=e.clientY; let moved=false, nx=m.x, ny=m.y;
     const mv=ev=>{ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>4) moved=true; if(!moved) return;
@@ -1257,19 +1299,21 @@ function fitPop(box){ const pop=box&&box.querySelector(".mkpop"); if(!pop) retur
   if(r.left<v.left+4) dx=v.left+4-r.left; else if(r.right>v.right-4) dx=v.right-4-r.right;
   if(dy) pop.style.marginTop=dy+"px"; if(dx) pop.style.marginLeft=dx+"px"; }
 function popPos(x,y){ return `left:${x}%;top:${y}%;transform:translate(${x<30?"-14px":x>70?"calc(-100% + 14px)":"-50%"},${y>48?"calc(-100% - 18px)":"18px"})`; }
-function mkPop(m){
+function mkPop(m,who,cov){
   const t=TYPES[m.type]||{}, q=Number(m.qty)||1;
+  const week=cov&&cov[m.id]?`<div class="pweek">${DAYS.map((x,i)=>{ const c=cov[m.id][i], g=!c||c.kind==="gap";
+    return `<span class="${i===ui.staffDay?"on":""} ${g?"gap":""}"><b>${x}</b>${g?"빈자리":esc(pname(c.who))}</span>`; }).join("")}</div>`:"";
   const its=state.items.filter(i=>i.link===m.type).sort((a,b)=>(!!b.image-!!a.image)||(!!b.chosen-!!a.chosen)).slice(0,3); /* 사진 있는(최종 선택된) 물품 먼저 */
   return `<div class="mkpop" style="${popPos(m.x,m.y)}" role="dialog" aria-label="${esc(m.label||t.name||"")}">
     <button class="x" data-popx aria-label="닫기">×</button>
     <div class="mkpop-h"><span class="dot" style="background:${tcolor(m.type)}"></span><span class="small muted">${esc(t.name||"")}</span></div>
     <b>${esc(m.label||t.name||"")}</b>
-    <div class="small">수량 <b class="num">${q}</b>${m.type==="sticker"&&m.glyph?` · 방향 ${esc(m.glyph)}`:""}</div>
+    ${who?`<div class="small">${DAYS[ui.staffDay]}요일 근무 <b style="${who.gap?"color:var(--bad)":""}">${esc(who.txt)}</b></div>${week}`:`<div class="small">수량 <b class="num">${q}</b>${m.type==="sticker"&&m.glyph?` · 방향 ${esc(m.glyph)}`:""}</div>`}
     ${m.note?`<div class="small muted">${esc(m.note)}</div>`:""}
     ${its.map((i,k)=>`<div class="it ${i.image&&k===0?"big":""}">${i.image?`<img src="${esc(i.image)}" alt="${esc(i.name||"")} 사진" referrerpolicy="no-referrer" data-itzoom="${i.id}" title="눌러서 크게 보기">`:""}<div><div><b>${esc(i.name||"")}</b>${i.chosen?` <span class="pill ok">최종 선택</span>`:""}</div><div class="small muted">${esc(i.status||"")}${i.kind?` · ${esc(i.kind)}`:""}${i.price&&i.kind!==OWNED?` · ${won(Number(i.price))}원`:""}${(i.photos||[]).length>1?` · 사진 ${i.photos.length}장`:""}</div></div></div>`).join("")}
   </div>`;
 }
-function gPop(g,n){
+function gPop(g,n,fromPlan){
   const sum=gSummary(g);
   return `<div class="mkpop" style="${popPos((g.x1+g.x2)/2,(g.y1+g.y2)/2)}" role="dialog" aria-label="${esc(g.label||"")}">
     <button class="x" data-popx aria-label="닫기">×</button>
@@ -1278,7 +1322,7 @@ function gPop(g,n){
     ${sum?`<div class="gsum">${sum}</div>`:g.size?`<div class="small">크기 <b class="num">${esc(g.size)}</b></div>`:""}
     ${g.image?`<img src="${esc(g.image)}" alt="" data-popzoom style="cursor:zoom-in">`:""}
     ${g.note?`<div class="gnote small">${esc(g.note)}</div>`:""}
-    <button class="btn small" data-popgo type="button">목록에서 자세히</button>
+    <button class="btn small" data-popgo type="button">${fromPlan?"그래픽 탭에서 보기":"목록에서 자세히"}</button>
   </div>`;
 }
 /* ----- shared mini map ----- */
