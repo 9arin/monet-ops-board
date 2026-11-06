@@ -16,7 +16,7 @@
   --ok:#2f7d4f; --warn:#b7791f; --bad:#c0392b; --okbg:#e3f1e8; --warnbg:#fbf0dc; --badbg:#f9e3e0;
   --t-staff:#2e9a52; --t-stanchion:#d93a2f; --t-pop:#e2b007; --t-desk:#ef8a1f; --t-chair:#222222;
   --t-exhibit:#c2287a; --t-sticker:#2f6fdb; --t-caution:#14968c; --t-note:#7a8583;
-  --plan-filter:none; --scrim:rgba(20,26,25,.88);
+  --plan-filter:none; --scrim:rgba(20,26,25,.88); --scrim-ink:#ffffff; --shadow:rgba(20,30,28,.18);
   --f-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --f-num:"IBM Plex Mono",ui-monospace,monospace;
 }
@@ -26,14 +26,14 @@
   --ok:#6cc48d; --warn:#e3b55a; --bad:#ef7a6c; --okbg:#1d3326; --warnbg:#3a2f18; --badbg:#3d1f1b;
   --t-staff:#4fc77a; --t-stanchion:#ff6b5e; --t-pop:#f4cf3a; --t-desk:#ffa24a; --t-chair:#e7ecea;
   --t-exhibit:#f05aa8; --t-sticker:#6ea0ff; --t-caution:#3cc7bb; --t-note:#9aa6a3;
-  --plan-filter:invert(.9) hue-rotate(180deg); color-scheme:dark}}
+  --plan-filter:invert(.9) hue-rotate(180deg); --shadow:rgba(0,0,0,.55); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#141a19; --panel:#1c2423; --ink:#e7ecea; --muted:#9aa6a3; --line:#2f3a38; --soft:#242e2c;
   --accent:#e07a62; --accent-ink:#1a0f0b; --brand:#cfe0db;
   --ok:#6cc48d; --warn:#e3b55a; --bad:#ef7a6c; --okbg:#1d3326; --warnbg:#3a2f18; --badbg:#3d1f1b;
   --t-staff:#4fc77a; --t-stanchion:#ff6b5e; --t-pop:#f4cf3a; --t-desk:#ffa24a; --t-chair:#e7ecea;
   --t-exhibit:#f05aa8; --t-sticker:#6ea0ff; --t-caution:#3cc7bb; --t-note:#9aa6a3;
-  --plan-filter:invert(.9) hue-rotate(180deg); color-scheme:dark}
+  --plan-filter:invert(.9) hue-rotate(180deg); --shadow:rgba(0,0,0,.55); color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.5;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px}
@@ -278,6 +278,23 @@ table.sched .slbl{position:relative;white-space:nowrap;font-size:11px;font-weigh
 .gfile{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:6px;align-items:center;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:4px 6px}
 .gfile .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr[data-grow]{cursor:pointer}
+.mkpop{position:absolute;z-index:30;width:250px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px var(--shadow);padding:10px 12px;cursor:default;touch-action:auto;user-select:text;display:flex;flex-direction:column;gap:6px;font-size:13px;text-align:left}
+.mkpop-h{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mkpop-h b{font-size:14px}
+.plan .mkpop img{position:static;inset:auto;filter:none;pointer-events:auto;width:100%;height:auto;max-height:130px;object-fit:contain;background:var(--soft);border-radius:6px;display:block}
+.mkpop .it{display:flex;gap:8px;align-items:center}
+.plan .mkpop .it img{width:44px;height:44px;flex:0 0 44px;object-fit:cover}
+.mkpop .x{position:absolute;top:4px;right:6px}
+.drop.thumb{position:relative}
+.drop.thumb .phcnt{position:absolute;right:1px;bottom:1px;background:var(--panel);color:var(--ink);font-size:10px;line-height:14px;padding:0 4px;border-radius:6px}
+.drop.thumb .addph{font-size:11px;line-height:1.2;text-align:center}
+.iphotos{margin-bottom:12px}
+.phgrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.ph{position:relative;width:110px;display:flex;flex-direction:column;gap:4px;align-items:center}
+.ph img{width:110px;height:110px;object-fit:cover;border-radius:8px;cursor:zoom-in;background:var(--soft);display:block}
+.ph .x{position:absolute;top:2px;right:2px;background:var(--panel)}
+.phadd{width:110px;height:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px}
+@media print{.mkpop{display:none}}
 .gfl{margin:16px 0 8px}.gfl:first-child{margin-top:0}
 .gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px}
 .gcard{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;background:var(--panel);min-width:0}
@@ -303,7 +320,7 @@ tr[data-grow]{cursor:pointer}
 .gnote{background:var(--warnbg);color:var(--warn);border-radius:6px;padding:6px 8px}
 .gart{font-size:13px}.gart th,.gart td{padding:4px 6px}.gart td:first-child,.gart td:last-child{white-space:nowrap}
 .glist{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
-.lightbox{position:fixed;inset:0;z-index:100;background:var(--scrim);color:var(--accent-ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;cursor:zoom-out}
+.lightbox{position:fixed;inset:0;z-index:100;background:var(--scrim);color:var(--scrim-ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;cursor:zoom-out}
 .lightbox img{max-width:100%;max-height:calc(100vh - 90px);object-fit:contain;background:var(--panel);border-radius:6px}
 @media print{.gcard{break-inside:avoid}.gcard-img span{display:none}}
 tr.rowsel td{background:var(--warnbg)}
@@ -1131,7 +1148,7 @@ function planHTML(){
     <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
       <div class="row small noprint"><span class="muted" style="margin-right:4px">보기</span>${chips}</div>
       <div class="plan-scroll"><div class="plan ${ui.planEdit?"editing":"locked"} ${ui.planEdit&&ui.addType?"adding":""} ${ui.labels?"":"nolabels"}" id="plan">
-        <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${marks}</div></div>
+        <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${marks}${sel&&!ui.planEdit&&sel.floor===ui.floor?mkPop(sel):""}</div></div>
       ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}${ui.addType?`<span class="muted">도면을 누르면 <b>${TYPES[ui.addType].name}</b>이 추가돼요.</span>`:""}</div>`:""}
       ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted noprint">이 층에는 아직 표시한 항목이 없어요. '위치 편집'을 누른 뒤 '추가'에서 종류를 고르고 도면을 눌러 보세요.</div>`)}
     </div>
@@ -1145,7 +1162,9 @@ function bindPlan(){
   $("#lblToggle").onchange=e=>{ui.labels=e.target.checked;render();};
   $("#planEditBtn").onclick=()=>{ui.planEdit=!ui.planEdit; ui.addType=null; ui.confirmDel=null; if(!ui.planEdit) toast("위치를 잠갔어요"); render();};
   const plan=$("#plan");
+  const px=plan.querySelector("[data-popx]"); if(px) px.onclick=()=>{ui.sel=null;render();};
   plan.addEventListener("pointerdown",e=>{
+    if(e.target.closest(".mkpop")) return; /* 정보 창 안을 누를 땐 그대로 */
     const mk=e.target.closest(".mk"); const r=plan.getBoundingClientRect();
     if(!mk){
       if(!ui.planEdit||!ui.addType){ if(ui.sel){ui.sel=null;render();} return; }
@@ -1178,6 +1197,31 @@ function bindPlan(){
   if($("#e-del")) $("#e-del").onclick=()=>{ if(ui.confirmDel===sel.id){ui.confirmDel=null;ui.sel=null;remove("markers",sel.id);} else {ui.confirmDel=sel.id;render();} };
 }
 
+/* 도면에서 점을 누르면 그 자리에 뜨는 작은 정보 창 */
+function popPos(x,y){ return `left:${x}%;top:${y}%;transform:translate(${x<30?"-14px":x>70?"calc(-100% + 14px)":"-50%"},${y>48?"calc(-100% - 18px)":"18px"})`; }
+function mkPop(m){
+  const t=TYPES[m.type]||{}, its=state.items.filter(i=>i.link===m.type).slice(0,3), q=Number(m.qty)||1;
+  return `<div class="mkpop" style="${popPos(m.x,m.y)}" role="dialog" aria-label="${esc(m.label||t.name||"")}">
+    <button class="x" data-popx aria-label="닫기">×</button>
+    <div class="mkpop-h"><span class="dot" style="background:${tcolor(m.type)}"></span><span class="small muted">${esc(t.name||"")}</span></div>
+    <b>${esc(m.label||t.name||"")}</b>
+    <div class="small">수량 <b class="num">${q}</b>${m.type==="sticker"&&m.glyph?` · 방향 ${esc(m.glyph)}`:""}</div>
+    ${m.note?`<div class="small muted">${esc(m.note)}</div>`:""}
+    ${its.map(i=>`<div class="it">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:""}<div><div>${esc(i.name||"")}</div><div class="small muted">${esc(i.status||"")}${i.kind?` · ${esc(i.kind)}`:""}${i.price&&i.kind!==OWNED?` · ${won(Number(i.price))}원`:""}</div></div></div>`).join("")}
+  </div>`;
+}
+function gPop(g,n){
+  const sum=gSummary(g);
+  return `<div class="mkpop" style="${popPos((g.x1+g.x2)/2,(g.y1+g.y2)/2)}" role="dialog" aria-label="${esc(g.label||"")}">
+    <button class="x" data-popx aria-label="닫기">×</button>
+    <div class="mkpop-h"><span class="gnum num" style="background:${gcolor(g.type)}">${n}</span><b>${esc(g.label||"")}</b></div>
+    <div class="small muted">${esc((GTYPES[g.type]||{}).name||"")} · ${esc(g.status||"내용 정리")}</div>
+    ${sum?`<div class="gsum">${sum}</div>`:g.size?`<div class="small">크기 <b class="num">${esc(g.size)}</b></div>`:""}
+    ${g.image?`<img src="${esc(g.image)}" alt="" data-popzoom style="cursor:zoom-in">`:""}
+    ${g.note?`<div class="gnote small">${esc(g.note)}</div>`:""}
+    <button class="btn small" data-popgo type="button">목록에서 자세히</button>
+  </div>`;
+}
 /* ----- shared mini map ----- */
 function markerText(m){const q=Number(m.qty)||1; return m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));}
 function floorSeg(){return `<div class="seg" role="group" aria-label="층 선택"><button data-floor="4F" aria-pressed="${ui.floor==="4F"}">4층</button><button data-floor="3F" aria-pressed="${ui.floor==="3F"}">3층</button></div>`;}
@@ -1519,9 +1563,15 @@ function quotesHTML(sum){
     ${cards?`<div class="qgrid">${cards}</div>`:""}
     <p class="small muted" style="margin:8px 0 0">자동으로 읽은 내용은 꼭 한 번 확인해 주세요. 틀린 칸은 눌러서 바로 고치면 돼요. 견적서마다 라벨이 생기고, 아래 물품 표에서 '견적' 칸으로 묶을 수 있어요.</p></div>`;
 }
+function photosHTML(i){
+  const ps=i.photos||[];
+  return `<div class="iphotos"><b class="small">물품 사진</b> <span class="small muted">실물·현장 사진을 여러 장 올릴 수 있어요. 누르면 크게 보여요.</span>
+    <div class="phgrid">${ps.map(p=>`<div class="ph" data-ph="${p.id}"><img src="${esc(p.thumb)}" alt="" data-phzoom><button class="x" data-phdel aria-label="사진 삭제">×</button>${i.image===p.thumb?`<span class="small pill s-done">대표 사진</span>`:`<button class="linkbtn small" data-phmain type="button">대표로</button>`}</div>`).join("")}
+      <div class="drop phadd" data-phadd><b>+ 사진 올리기</b><span class="small muted">끌어다 놓거나 눌러서</span></div></div></div>`;
+}
 function candsHTML(i){
   const cs=i.cands||[];
-  return `<div class="drop" data-cdrop="${i.id}"><div class="row candadd"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요"><input class="cand-in" data-cnote placeholder="메모 (선택)"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
+  return `${photosHTML(i)}<div class="drop" data-cdrop="${i.id}"><div class="row candadd"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요"><input class="cand-in" data-cnote placeholder="메모 (선택)"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
     ${cs.length?`<div class="cands">${cs.map(c=>`<div class="cand ${i.chosen===c.id?"chosen":""}" data-c="${c.id}">
       <div class="drop cimg" data-cimg title="사진을 끌어다 놓거나 눌러서 고르기">${c.image?`<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="cimg-hint">사진 바꾸기</span>`:`<div class="noimg small muted">${c.loading?"불러오는 중…":"사진 없음<br>끌어다 놓거나 눌러서 넣기"}</div>`}</div>
       <div class="t">${esc(c.title||c.url)}</div>
@@ -1546,7 +1596,7 @@ function itemsHTML(){
   const NC=14;
   const body = rows.length? `<div class="tbl-wrap"><table><thead><tr><th>사진</th><th>품목</th><th>견적</th><th>구분</th><th class="r">수량</th><th class="r">도면</th><th class="r">단가(원)</th><th class="r">금액(원)</th><th>업체</th><th>필요일</th><th>상태</th><th>메모</th><th>후보</th><th></th></tr></thead><tbody>
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
-      return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 고르기">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:"+"}</div></td>
+      return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
       ${i.kind===OWNED?`<td class="muted small">필요 없음</td>`:`<td style="min-width:120px"><select data-f="quote" class="qsel" style="--qc:${qq?qcolor(qq):"transparent"}"><option value="">없음</option>${state.quotes.map(x=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(x.vendor||"이름 없는 견적")}</option>`).join("")}</select></td>`}
       <td><select data-f="kind">${ITEM_KIND.map(k=>`<option ${i.kind===k?"selected":""}>${k}</option>`).join("")}</select></td>
@@ -1558,7 +1608,7 @@ function itemsHTML(){
       <td style="min-width:130px"><input data-f="due" type="date" value="${esc(i.due||"")}"></td>
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
       <td style="min-width:160px"><input data-f="note" value="${esc(i.note||"")}"></td>
-      <td><button class="btn small" data-open aria-expanded="${open}">${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:"링크"} ${open?"▴":"▾"}</button></td>
+      <td><button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button></td>
       <td><button class="x" data-del aria-label="삭제">${ui.confirmDel===i.id?"삭제?":"×"}</button></td></tr>
       ${open?`<tr class="cand-row noprint" data-id="${i.id}"><td colspan="${NC}">${candsHTML(i)}</td></tr>`:""}`;}).join("")}
     </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:"이 라벨에 묶인 물품이 없어요."}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
@@ -1608,6 +1658,24 @@ async function addQuoteFiles(files){
     save("quotes",{...cur,...fill,fileId:fid,scan},true);
   }
 }
+/* 물품 사진: 작은 미리보기는 물품에, 원본(큰 사진은 줄여서)은 파일로 */
+async function addItemPhotos(itemId,files,main){
+  const imgs=[...files].filter(f=>/^image\//.test(f.type)); if(!imgs.length){ toast("사진 파일만 넣을 수 있어요."); return; }
+  const add=[];
+  for(const f of imgs){ toast(`사진 올리는 중… ${add.length+1}/${imgs.length}`);
+    const [thumb,fileId]=await Promise.all([shrinkImage(f,360,.8).then(readURL),storeFile(f)]);
+    if(fileId) add.push({id:uid("ph"),thumb,fileId,at:ymd(new Date())}); }
+  const it=curItem(itemId); if(!it||!add.length) return;
+  save("items",{...it,photos:[...(it.photos||[]),...add],image:(main||!it.image)?add[0].thumb:it.image});
+  toast(`사진 ${add.length}장 올렸어요`);
+}
+function zoomImg(src,label,fileId){
+  const box=document.createElement("div"); box.className="lightbox"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","크게 보기");
+  box.innerHTML=`<img src="${esc(src)}" alt=""><div class="row"><span class="small">${esc(label||"")}</span><button class="btn" type="button">닫기</button></div>`;
+  const close=()=>{ box.remove(); document.removeEventListener("keydown",k); }; const k=e=>{ if(e.key==="Escape") close(); };
+  box.onclick=close; document.addEventListener("keydown",k); document.body.appendChild(box);
+  if(fileId) fileBlob(fileId).then(b=>{ if(b&&box.isConnected) box.querySelector("img").src=URL.createObjectURL(b); }).catch(()=>{});
+}
 async function setThumb(itemId,file){
   if(!/^image\//.test(file.type)){ toast("사진 파일만 넣을 수 있어요."); return; }
   const it=curItem(itemId); if(!it) return;
@@ -1645,7 +1713,7 @@ function bindItems(){
       save("items",{...cur,...patch}); });
     tr.querySelector("[data-del]").onclick=()=>{ if(ui.confirmDel===it().id){ui.confirmDel=null;remove("items",it().id);} else {ui.confirmDel=it().id;render();} };
     tr.querySelector("[data-open]").onclick=()=>{ui.openItem=ui.openItem===it().id?null:it().id;render(); const ci=document.querySelector(".cand-row [data-cin]"); if(ci) ci.focus();};
-    dropZone(tr.querySelector("[data-thumb]"),{onFiles:fs=>setThumb(tr.dataset.id,fs[0]),onText:t=>{ if(/^https?:\/\//.test(t)) save("items",{...it(),image:t}); },accept:"image/*"}); // 다른 사이트 사진을 끌어와도 돼요
+    dropZone(tr.querySelector("[data-thumb]"),{onFiles:fs=>addItemPhotos(tr.dataset.id,fs,true),onText:t=>{ if(/^https?:\/\//.test(t)) save("items",{...it(),image:t}); },accept:"image/*"}); // 다른 사이트 사진을 끌어와도 돼요
   });
   document.querySelectorAll("tr.cand-row").forEach(tr=>{
     const id=tr.dataset.id, inp=tr.querySelector("[data-cin]");
@@ -1654,6 +1722,14 @@ function bindItems(){
     tr.querySelector("[data-cadd]").onclick=go;
     [inp,note].forEach(el=>el.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); go(); } });
     dropZone(tr.querySelector("[data-cdrop]"),{onText:t=>{ inp.value=t; note.focus(); }}); // 끌어온 링크는 칸에 넣고 메모로
+    dropZone(tr.querySelector("[data-phadd]"),{accept:"image/*",onFiles:fs=>addItemPhotos(id,fs,false)});
+    tr.querySelectorAll("[data-ph]").forEach(el=>{ const pid=el.dataset.ph, ph=()=>(curItem(id).photos||[]).find(x=>x.id===pid);
+      el.querySelector("[data-phzoom]").onclick=()=>{ const p=ph(); if(p) zoomImg(p.thumb,curItem(id).name,p.fileId); };
+      const mn=el.querySelector("[data-phmain]"); if(mn) mn.onclick=()=>{ const it=curItem(id); save("items",{...it,image:ph().thumb}); };
+      el.querySelector("[data-phdel]").onclick=()=>{ const it=curItem(id), p=ph(); if(!p||!confirm("이 사진을 지울까요?")) return;
+        const rest=(it.photos||[]).filter(x=>x.id!==pid); if(p.fileId) remove("files",p.fileId);
+        save("items",{...it,photos:rest,image:it.image===p.thumb?((rest[0]||{}).thumb||""):it.image}); };
+    });
     tr.querySelectorAll(".cand").forEach(card=>{ const cid=card.dataset.c;
       card.querySelector("[data-cprice]").onchange=e=>updCand(id,cid,{price:e.target.value.replace(/[^\d]/g,"")});
       card.querySelector("[data-cmemo]").onchange=e=>updCand(id,cid,{memo:e.target.value.trim()});
@@ -1708,12 +1784,8 @@ function gMini(g){
     <span class="small">${g.floor==="4F"?"4층":"3층"} 위치</span></div>`;
 }
 function zoomGfx(g){
-  const box=document.createElement("div"); box.className="lightbox"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","도면 크게 보기");
-  box.innerHTML=`<img src="${esc(g.image)}" alt=""><div class="row"><span class="small">${esc(g.label||"")}</span><button class="btn" type="button">닫기</button></div>`;
-  const close=()=>{ box.remove(); document.removeEventListener("keydown",esc1); }; const esc1=e=>{ if(e.key==="Escape") close(); };
-  box.onclick=close; document.addEventListener("keydown",esc1); document.body.appendChild(box);
   const f=(g.files||[]).slice(-1)[0]; /* 원본이 사진이면 선명한 원본으로 바꿔 보여 줘요 */
-  if(f&&(/^image\//.test(f.type||"")||/\.(jpe?g|png|webp|gif)$/i.test(f.name||""))) fileBlob(f.fileId).then(b=>{ if(b&&box.isConnected) box.querySelector("img").src=URL.createObjectURL(b); }).catch(()=>{});
+  zoomImg(g.image,g.label,f&&(/^image\//.test(f.type||"")||/\.(jpe?g|png|webp|gif)$/i.test(f.name||""))?f.fileId:null);
 }
 function gfxHTML(){
   const gs=state.graphics.filter(g=>g.floor===ui.floor), num=gnum(), sel=state.graphics.find(g=>g.id===ui.gSel);
@@ -1763,7 +1835,7 @@ function gfxHTML(){
   <div class="plan-grid"><div style="display:flex;flex-direction:column;gap:10px;min-width:0">
     <div class="row small noprint"><span class="muted" style="margin-right:4px">보기</span>${chips}</div>
     <div class="plan-scroll"><div class="plan ${ui.planEdit?"editing":"locked"} ${ui.planEdit&&ui.gAdd?"adding":""} ${ui.labels?"":"nolabels"}" id="gplan">
-      <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도"><svg class="glines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>${badges}${handles}${start}</div></div>
+      <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도"><svg class="glines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>${badges}${handles}${start}${sel&&!ui.planEdit&&sel.floor===ui.floor?gPop(sel,num[sel.id]):""}</div></div>
     ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}${ui.gAdd?`<span class="muted">${ui.gStart?"끝점을 누르세요.":"시작점을 누르세요."}</span>`:""}</div>`:""}
   </div><aside class="side">${editor}</aside></div>
   <div class="panel" style="margin-top:16px"><h3>그래픽 목록</h3>${table}</div>`;
@@ -1779,14 +1851,18 @@ function bindGfx(){
   document.querySelectorAll("[data-grow]").forEach(tr=>tr.onclick=()=>{const g=state.graphics.find(x=>x.id===tr.dataset.grow); if(!g) return; ui.gSel=g.id; ui.floor=g.floor; render(); window.scrollTo({top:0,behavior:"smooth"});});
   const plan=$("#gplan");
   const pt=e=>{const r=plan.getBoundingClientRect(); return {x:+Math.min(99.5,Math.max(.5,(e.clientX-r.left)/r.width*100)).toFixed(2),y:+Math.min(99.5,Math.max(.5,(e.clientY-r.top)/r.height*100)).toFixed(2)};};
+  { const px=plan.querySelector("[data-popx]"); if(px) px.onclick=()=>{ui.gSel=null;render();};
+    const pz=plan.querySelector("[data-popzoom]"); if(pz) pz.onclick=()=>{ const g=state.graphics.find(x=>x.id===ui.gSel); if(g) zoomGfx(g); };
+    const pg=plan.querySelector("[data-popgo]"); if(pg) pg.onclick=()=>goRow(`[data-grow="${ui.gSel}"]`); }
   plan.addEventListener("pointerdown",e=>{
+    if(e.target.closest(".mkpop")) return;
     const h=e.target.closest(".ghandle[data-h]"), b=e.target.closest("[data-g]");
     if(h&&ui.planEdit){ // 끝점 끌기
       e.preventDefault(); h.setPointerCapture(e.pointerId); const g=state.graphics.find(x=>x.id===ui.gSel), k=h.dataset.h; let p=null;
       const mv=ev=>{p=pt(ev); h.style.left=p.x+"%"; h.style.top=p.y+"%";};
       h.addEventListener("pointermove",mv); h.addEventListener("pointerup",()=>{h.removeEventListener("pointermove",mv); if(p) save("graphics",{...g,["x"+k]:p.x,["y"+k]:p.y});},{once:true}); return; }
     if(b){ const g=state.graphics.find(x=>x.id===b.dataset.g); if(!g) return;
-      if(!ui.planEdit){ ui.gSel=ui.gSel===g.id?null:g.id; ui.confirmDel=null; render(); if(ui.gSel) goRow(`tr[data-grow="${g.id}"]`); return; }
+      if(!ui.planEdit){ ui.gSel=ui.gSel===g.id?null:g.id; ui.confirmDel=null; render(); return; }
       e.preventDefault(); b.setPointerCapture(e.pointerId); const s=pt(e); let moved=false, d={x:0,y:0};
       const mv=ev=>{const p=pt(ev); d={x:p.x-s.x,y:p.y-s.y}; if(Math.abs(d.x)+Math.abs(d.y)>.5) moved=true; if(moved){ b.style.left=(g.x1+g.x2)/2+d.x+"%"; b.style.top=(g.y1+g.y2)/2+d.y+"%"; }};
       b.addEventListener("pointermove",mv);
