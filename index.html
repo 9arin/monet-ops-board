@@ -282,8 +282,21 @@ tr[data-grow]{cursor:pointer}
 .gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px}
 .gcard{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;background:var(--panel);min-width:0}
 .gcard.rowsel{outline:2px solid var(--accent);outline-offset:-1px}
-.gcard-img{all:unset;cursor:zoom-in;display:block;position:relative;border-radius:8px;overflow:hidden;background:var(--soft)}
-.gcard-img img{width:100%;height:220px;object-fit:contain;display:block}
+.gcard-img{all:unset;cursor:zoom-in;display:block;position:relative;border-radius:8px;overflow:hidden;background:var(--soft);flex:1 1 0;min-width:0}
+.gvis{display:flex;gap:8px;align-items:stretch}
+.gmini{position:relative;flex:0 0 34%;aspect-ratio:1600/1075;align-self:center;overflow:hidden;border-radius:8px;border:1px solid var(--line);background:var(--soft)}
+.gvis .gmini:only-child{flex-basis:50%}
+.gmini-in{position:absolute}
+.gmini-in img{position:absolute;inset:0;width:100%;height:100%;filter:var(--plan-filter)}
+.gmini-in svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.gmini-in line{stroke-width:5;stroke-linecap:round}
+.gmini>span{position:absolute;left:4px;bottom:4px;background:var(--panel);color:var(--ink);padding:0 6px;border-radius:6px;border:1px solid var(--line)}
+.gsum{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;font-size:14px}
+.gtotal{font-size:16px}
+.gsz b{font-size:15px}
+.gart-no{font-weight:700;font-size:14px;width:1%}
+.gart-sz{white-space:nowrap;width:1%}
+.gcard-img img{width:100%;height:200px;object-fit:contain;display:block}
 .gcard-img span{position:absolute;right:6px;bottom:6px;background:var(--panel);color:var(--ink);padding:2px 8px;border-radius:6px;border:1px solid var(--line)}
 .gcard-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .gnum{min-width:22px;height:22px;padding:0 5px;border-radius:11px;display:inline-grid;place-items:center;color:var(--accent-ink);font-size:12px}
@@ -417,7 +430,7 @@ async function save(col,obj,quiet){ // quiet: 입력 중이면 화면 새로 그
   const i=state[col].findIndex(x=>x.id===obj.id);
   if(i>=0) state[col][i]=obj; else state[col].push(obj);
   (quiet||typing())?scheduleRender():render(); // 글자 치는 중엔 화면을 다시 그리지 않아요 (커서 유지)
-  if(!db||guest) return;
+  if(!db||(guest&&col!=="graphics")) return; /* 손님은 그래픽 내용만 저장돼요 */
   const key=col+"/"+obj.id; const {id,...data}=obj;
   unsaved[key]={col,obj}; pending[key]=data; if(inflight[key]) return;
   inflight[key]=true;
@@ -1017,8 +1030,7 @@ function renderInner(){
   else if(ui.tab==="sched") v.innerHTML=schedHTML(), bindSched();
   else if(ui.tab==="docs") v.innerHTML=docsHTML(), bindDocs();
   else v.innerHTML=tasksHTML(), bindTasks();
-  if(guest){ v.querySelectorAll("#planEditBtn,#g-img,#g-del,[data-gfdel],.gimg-l").forEach(e=>e.remove());
-    v.querySelectorAll("#g-type,#g-label,#g-content,#g-size,#g-status,#g-note").forEach(e=>e.disabled=true); }
+  if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
 }
 function renderStats(){
   if(guest){ $("#stats").innerHTML=""; return; }
@@ -1673,8 +1685,27 @@ function gContent(c){
   const ls=String(c||"").split(/\n+/).map(x=>x.trim()).filter(Boolean);
   if(!ls.length) return `<p class="small muted" style="margin:0">들어갈 내용 미정</p>`;
   const m=ls.map(l=>l.match(ART_RE));
-  if(m.every(Boolean)) return `<div class="tbl-wrap"><table class="gart"><thead><tr><th>번호</th><th>작가</th><th>작품</th><th>크기</th></tr></thead><tbody>${m.map(x=>`<tr><td class="num">${esc(x[1])}</td><td>${esc(x[2])}</td><td>${esc(x[3])}</td><td class="num">${esc(x[4]||"")}</td></tr>`).join("")}</tbody></table></div>`;
+  if(m.every(Boolean)) return `<div class="tbl-wrap"><table class="gart"><thead><tr><th>번호</th><th>크기</th><th>작품</th></tr></thead><tbody>${m.map(x=>{ const [sz,...rest]=String(x[4]||"").split(/\s+/);
+    return `<tr><td class="num gart-no">${esc(x[1])}</td><td class="gart-sz"><b class="num">${esc(sz||"")}</b> <span class="muted">${esc(rest.join(" "))}</span></td><td><span class="small muted">${esc(x[2])}</span> · ${esc(x[3])}</td></tr>`; }).join("")}</tbody></table></div>`;
   return `<ul class="glist">${ls.map(l=>`<li>${esc(l)}</li>`).join("")}</ul>`;
+}
+/* 크기별 개수: 'A1 ×4 · A2 ×3 · 총 9점' + 벽 크기 */
+function gSummary(g){
+  const ls=String(g.content||"").split(/\n+/).map(x=>x.trim()).filter(Boolean), m=ls.map(l=>l.match(ART_RE));
+  const out=[];
+  if(ls.length&&m.every(Boolean)){ const c={}; m.forEach(x=>{ const k=(String(x[4]||"").split(/\s+/)[0])||"크기 미정"; c[k]=(c[k]||0)+1; });
+    out.push(`<b class="gtotal">총 ${m.length}점</b>`); Object.keys(c).sort().forEach(k=>out.push(`<span class="gsz"><b class="num">${esc(k)}</b> ×${c[k]}</span>`)); }
+  const wall=String(g.size||"").match(/벽\s*([\d,]+)/);
+  if(wall) out.push(`<span class="gsz muted">벽 폭 <b class="num">${esc(wall[1])}</b></span>`);
+  else if(g.size&&!out.length) out.push(`<span class="gsz"><b class="num">${esc(g.size)}</b></span>`);
+  return out.join("");
+}
+/* 도면에서 이 그래픽 자리 (선 주변을 크게) */
+function gMini(g){
+  const mx=(g.x1+g.x2)/2, my=(g.y1+g.y2)/2, Z=3, cl=v=>Math.max(-100*(Z-1),Math.min(0,v));
+  return `<div class="gmini" aria-label="${g.floor==="4F"?"4층":"3층"} 도면 위치"><div class="gmini-in" style="width:${Z*100}%;height:${Z*100}%;left:${cl(50-mx*Z)}%;top:${cl(50-my*Z)}%">
+    <img src="${PLAN[g.floor]}" alt=""><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="${g.x1}" y1="${g.y1}" x2="${g.x2}" y2="${g.y2}" style="stroke:${gcolor(g.type)}" vector-effect="non-scaling-stroke"/></svg></div>
+    <span class="small">${g.floor==="4F"?"4층":"3층"} 위치</span></div>`;
 }
 function zoomGfx(g){
   const box=document.createElement("div"); box.className="lightbox"; box.setAttribute("role","dialog"); box.setAttribute("aria-label","도면 크게 보기");
@@ -1708,16 +1739,16 @@ function gfxHTML(){
       ${ui.planEdit?`<button class="btn danger" id="g-del">${ui.confirmDel===sel.id?"한 번 더 누르면 삭제":"삭제"}</button>`:""}</div></div></div>`
     :`<div class="panel"><h3>${ui.floor==="4F"?"4층":"3층"} 그래픽</h3>
     <div class="legend">${Object.entries(GTYPES).map(([k,t])=>`<div class="li"><span><span class="dot" style="background:${gcolor(k)}"></span>${t.name}</span><span class="num">${cnt(k)}<span class="muted small"> / 전체 ${state.graphics.filter(g=>g.type===k).length}</span></span></div>`).join("")}</div>
-    <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"아래 '추가'에서 종류를 고르고, 도면에서 시작점과 끝점을 차례로 누르면 선이 그어져요. 번호를 끌면 선이 통째로, 끝의 네모를 끌면 길이가 바뀌어요.":guest?"번호를 누르면 무엇이 들어가는지 볼 수 있어요. 시안은 '받기'로 내려받아요.":"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 위치를 바꾸려면 '위치 편집'을 눌러요."}</p></div>`;
+    <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"아래 '추가'에서 종류를 고르고, 도면에서 시작점과 끝점을 차례로 누르면 선이 그어져요. 번호를 끌면 선이 통째로, 끝의 네모를 끌면 길이가 바뀌어요.":guest?"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 시안 파일도 올릴 수 있어요.":"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 위치를 바꾸려면 '위치 편집'을 눌러요."}</p></div>`;
   const all=state.graphics.slice().sort((a,b)=>a.floor===b.floor?a.id.localeCompare(b.id):a.floor==="4F"?-1:1);
   const stp=g=>`<span class="pill ${g.status==="설치 완료"?"s-done":g.status&&g.status!=="내용 정리"?"s-mid":"s-need"}">${esc(g.status||"내용 정리")}</span>`;
   const tname=g=>esc((GTYPES[g.type]||{}).name||"");
   const full=all.filter(g=>g.image||g.content||(g.files||[]).length), bare=all.filter(g=>!full.includes(g));
-  const card=g=>{ const f=(g.files||[]).slice(-1)[0];
+  const card=g=>{ const f=(g.files||[]).slice(-1)[0], sum=gSummary(g);
     return `<article class="gcard ${ui.gSel===g.id?"rowsel":""}" data-grow="${g.id}">
-    ${g.image?`<button class="gcard-img" type="button" data-gzoom="${g.id}" aria-label="도면 크게 보기"><img src="${esc(g.image)}" alt="${esc(g.label||"")} 도면"><span class="small">크게 보기</span></button>`:""}
     <div class="gcard-h"><span class="gnum num" style="background:${gcolor(g.type)}">${num[g.id]}</span><b>${esc(g.label||"")}</b>${stp(g)}</div>
-    <div class="small muted">${g.floor==="4F"?"4층":"3층"} · ${tname(g)}${g.size?` · ${esc(g.size)}`:""}</div>
+    ${sum?`<div class="gsum">${sum}</div>`:""}
+    <div class="gvis">${g.image?`<button class="gcard-img" type="button" data-gzoom="${g.id}" aria-label="입면도 크게 보기"><img src="${esc(g.image)}" alt="${esc(g.label||"")} 입면도"><span class="small">크게 보기</span></button>`:""}${gMini(g)}</div>
     ${g.note?`<div class="gnote small">${esc(g.note)}</div>`:""}
     ${gContent(g.content)}
     ${f?`<div class="row small" style="justify-content:space-between"><span class="muted">${esc(f.name)}</span><button class="btn small" type="button" data-gdl-row="${g.id}">V${f.v} 받기</button></div>`:""}
@@ -1735,28 +1766,9 @@ function gfxHTML(){
       <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도"><svg class="glines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>${badges}${handles}${start}</div></div>
     ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}${ui.gAdd?`<span class="muted">${ui.gStart?"끝점을 누르세요.":"시작점을 누르세요."}</span>`:""}</div>`:""}
   </div><aside class="side">${editor}</aside></div>
-  <div class="panel" style="margin-top:16px"><h3>그래픽 목록</h3>${table}</div>${guest?"":guestBox()}`;
-}
-/* 손님 비밀번호: 이 비밀번호로 들어오면 그래픽만 보여요 (DB에서도 그래픽만 읽을 수 있음) */
-function guestBox(){
-  return `<div class="panel noprint" style="margin-top:16px"><h3>손님 비밀번호 <span class="small muted" id="guestState">${ui.guestOn==null?"":ui.guestOn?"· 켜짐":"· 꺼짐"}</span></h3>
-    <p class="small muted" style="margin:0 0 8px">이 비밀번호로 들어온 사람은 그래픽만 볼 수 있어요. 고치거나 지울 수 없고, 인력·물품·급여 등은 보이지 않아요.</p>
-    <div class="row"><input type="password" id="guestPw" placeholder="새 손님 비밀번호" autocomplete="new-password" style="max-width:200px">
-      <button class="btn small" id="guestSet" type="button">정하기</button><button class="btn small" id="guestOff" type="button">끄기</button></div></div>`;
-}
-function bindGuestBox(){
-  const set=$("#guestSet"); if(!set||!db) return;
-  const show=()=>{ const el=$("#guestState"); if(el) el.textContent=ui.guestOn?"· 켜짐":"· 꺼짐"; };
-  if(ui.guestOn===undefined){ ui.guestOn=null; db.rpc("guest_on").then(r=>{ if(!r.error){ ui.guestOn=!!r.data; show(); } }); }
-  set.onclick=async()=>{ const pw=$("#guestPw").value; if(!pw){ toast("비밀번호를 넣어 주세요"); return; }
-    const {error}=await db.rpc("set_guest_key",{h:await sha256hex(pw)});
-    if(error){ toast("저장하지 못했어요"); console.error(error); return; }
-    $("#guestPw").value=""; ui.guestOn=true; show(); toast("손님 비밀번호를 정했어요"); };
-  $("#guestOff").onclick=async()=>{ const {error}=await db.rpc("set_guest_key",{h:""});
-    if(error){ toast("끄지 못했어요"); return; } ui.guestOn=false; show(); toast("손님 비밀번호를 껐어요"); };
+  <div class="panel" style="margin-top:16px"><h3>그래픽 목록</h3>${table}</div>`;
 }
 function bindGfx(){
-  bindGuestBox();
   document.querySelectorAll("[data-floor]").forEach(b=>b.onclick=()=>{ui.floor=b.dataset.floor;ui.gSel=null;ui.gStart=null;try{localStorage.setItem("mb-floor",ui.floor)}catch(e){};render();});
   document.querySelectorAll("[data-vis]").forEach(b=>b.onclick=()=>{const k=b.dataset.vis;ui.hidden.has(k)?ui.hidden.delete(k):ui.hidden.add(k);render();});
   document.querySelectorAll("[data-gadd]").forEach(b=>b.onclick=()=>{ui.gAdd=ui.gAdd===b.dataset.gadd?null:b.dataset.gadd;ui.gStart=null;render();});
