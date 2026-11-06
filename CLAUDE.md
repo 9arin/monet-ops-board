@@ -14,6 +14,7 @@ Static single-page app served by GitHub Pages from a PUBLIC repo (no build step)
 - `img/4F.jpg`, `img/3F.jpg`: floor plans (1600×1075).
 - `supabase/1_setup.sql`: table `board_docs(col, id, data jsonb)`, `board_members` allowlist, `is_member()`, RLS, realtime. Already applied.
 - `supabase/2_team_key.sql`: `board_secret` (sha256 of team password), `has_board_key()`, `can_board()`, policies for anon+authenticated. Already applied.
+- `supabase/3_guest_key.sql`, `4_guest_edit.sql`: guest password (`board_guest`, `x-guest-key` header) → graphics only: read g- rows + their files, edit g- / upload f-, no delete. Board has no UI to change it; `5_guest_password.sql` is run in the Supabase SQL editor (user types the password). Client: `guest` flag, `startGuestMode()`.
 
 ## Data model
 One row per document: `col` ∈ markers | items | staff | tasks, `id` (e.g. `m-…`, `i-…`, `p-R1`, `t-…`), `data` jsonb with the fields the UI uses. Adding a field needs no SQL change. Virtual collections by id prefix (no SQL): `q-` quotes / `f-` files (base64, encrypted when `meta.enc`) in items, `cfg-` settings in staff, `g-` graphics (wall lines) in markers — see `VCOL`. Staffing: daily positions = staff markers on the plan (capped at `DAILY_ALBA`=11, plus the manager); `syncRoster()` sizes each zone and writes exact off-days. Adding a new collection: add to `COLS` and to the `check` constraint (give the user the `alter table` statement to run in Supabase SQL Editor).
