@@ -1015,10 +1015,13 @@ function parseQuote(text){
 }
 
 /* ---------- 상품 링크 → 사진 · 가격 (r.jina.ai 읽기 서비스 사용) ---------- */
+const blockedTitle=t=>/^\s*(access denied|forbidden|just a moment|attention required|robot|captcha|403|접근이 (차단|거부))/i.test(t||"");
+const isCoupang=u=>/(^|\.)coupang\.com$|^link\.coupang\.com$|^coupa\.ng$/i.test((()=>{try{return new URL(u).hostname}catch(e){return ""}})());
 async function fetchPreview(url){
   const res=await fetch("https://r.jina.ai/"+url,{headers:{"X-Return-Format":"html"}});
   if(!res.ok) throw new Error("preview "+res.status);
   const doc=new DOMParser().parseFromString(await res.text(),"text/html");
+  if(blockedTitle(doc.title)) throw new Error("blocked"); // 쇼핑몰이 자동 읽기를 막은 화면 (쿠팡 등)
   const meta=(...ns)=>{for(const n of ns){const el=doc.querySelector(`meta[property="${n}"],meta[name="${n}"],meta[itemprop="${n}"]`); if(el&&el.getAttribute("content")) return el.getAttribute("content").trim();} return "";};
   let price=meta("product:price:amount","og:price:amount","price");
   if(!price){ const find=o=>{ if(!o||typeof o!=="object") return ""; if(o.offers){const of=[].concat(o.offers)[0]; if(of&&(of.price||of.lowPrice)) return of.price||of.lowPrice;}
@@ -1725,11 +1728,12 @@ function candsHTML(i){
   return `<div class="row idelrow"><button class="btn small danger" data-idel type="button">이 물품 삭제</button></div>${photosHTML(i)}${shopHTML(i)}<div class="drop" data-cdrop="${i.id}"><div class="row candadd"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요"><input class="cand-in" data-cnote placeholder="메모 (선택)"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
     ${cs.length?`<div class="cands">${cs.map(c=>`<div class="cand ${i.chosen===c.id?"chosen":""}" data-c="${c.id}">
       <div class="drop cimg" data-cimg title="사진을 끌어다 놓거나 눌러서 고르기">${c.image?`<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="cimg-hint">사진 바꾸기</span>`:`<div class="noimg small muted">${c.loading?"불러오는 중…":"사진 없음<br>끌어다 놓거나 눌러서 넣기"}</div>`}</div>
-      <div class="t">${esc(c.title||c.url)}</div>
+      ${c.title&&!blockedTitle(c.title)?`<div class="t">${esc(c.title)}</div>`:`<label class="qrow">이름<input data-ctitle value="" placeholder="${c.loading?"…":"상품 이름 직접 입력"}"></label>`}
+      ${!c.loading&&isCoupang(c.url)&&(!c.image||!c.price)?`<p class="small muted" style="margin:0">쿠팡은 자동으로 못 읽어요. 쿠팡 화면의 상품 사진을 위 칸으로 끌어다 놓고 가격을 적어 주세요. 위 '쇼핑몰에서 찾기'에서 같은 상품을 담으면 사진·가격이 같이 들어가요.</p>`:""}
       <div class="small muted">${esc(c.site||"")}</div>
       <label class="qrow">가격<input class="num" data-cprice value="${esc(c.price||"")}" inputmode="numeric" placeholder="${c.loading?"…":"직접 입력"}"></label>
       <label class="qrow">메모<input data-cmemo value="${esc(c.memo||"")}" placeholder="예: 색상 화이트, 배송 3일"></label>
-      ${c.title?`<button class="linkbtn small" data-csim type="button" style="align-self:flex-start">비슷한 상품 가격 보기</button>`:""}
+      ${c.title&&!blockedTitle(c.title)?`<button class="linkbtn small" data-csim type="button" style="align-self:flex-start">비슷한 상품 가격 보기</button>`:""}
       <div class="row" style="justify-content:space-between"><a class="small" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">열기</a>
         <span class="row"><button class="x" data-cdel aria-label="후보 삭제">×</button>${i.chosen===c.id?`<button class="btn" data-cunpick type="button">선택 해제</button>`:`<button class="btn primary" data-cpick type="button">이걸로 선택</button>`}</span></div>
     </div>`).join("")}</div>`:`<p class="small muted" style="margin:8px 0 0">쇼핑몰 링크를 넣으면 사진과 가격을 불러와요. 여러 개를 넣고 비교한 뒤 '이걸로 선택'을 누르면 물품 표에 사진·가격·업체가 들어가요. 가격을 못 읽는 쇼핑몰은 직접 적어 주세요.</p>`}`;
@@ -1877,7 +1881,8 @@ async function addCand(itemId,raw,memo){
   save("items",{...it,cands:[...(it.cands||[]),c]});
   try{ const p=await fetchPreview(url); updCand(itemId,c.id,{...p,price:p.price,loading:false},true);
     if(!p.price) toast("가격을 못 읽었어요. 가격 칸에 직접 적어 주세요."); }
-  catch(e){ console.error(e); updCand(itemId,c.id,{loading:false,title:url},true); toast("이 링크는 정보를 못 불러왔어요. 가격을 직접 적어 주세요."); }
+  catch(e){ console.error(e); updCand(itemId,c.id,{loading:false,title:""},true);
+    toast(isCoupang(url)?"쿠팡이 자동 읽기를 막아서 사진·가격을 못 가져왔어요. 후보 카드에 직접 넣어 주세요.":"이 링크는 정보를 못 불러왔어요. 가격을 직접 적어 주세요."); }
 }
 async function addQuoteFiles(files){
   for(const file of files){
@@ -1989,6 +1994,7 @@ function bindItems(){
         save("items",{...it,photos:rest,image:it.image===p.thumb?((rest[0]||{}).thumb||""):it.image}); };
     });
     tr.querySelectorAll(".cand[data-c]").forEach(card=>{ const cid=card.dataset.c;
+      const ct=card.querySelector("[data-ctitle]"); if(ct) ct.onchange=e=>{ const v=e.target.value.trim(); if(v) updCand(id,cid,{title:v}); };
       card.querySelector("[data-cprice]").onchange=e=>updCand(id,cid,{price:e.target.value.replace(/[^\d]/g,"")});
       card.querySelector("[data-cmemo]").onchange=e=>updCand(id,cid,{memo:e.target.value.trim()});
       const sm=card.querySelector("[data-csim]"); if(sm) sm.onclick=()=>{ const c=(curItem(id).cands||[]).find(x=>x.id===cid); shopSearch(id,shopQuery(c.title),{title:c.title,price:c.price}); tr.querySelector(".shop").scrollIntoView({block:"nearest"}); };
