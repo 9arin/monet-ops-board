@@ -1756,9 +1756,9 @@ function candsHTML(i){
     </div>`).join("")}</div>`:`<p class="small muted" style="margin:8px 0 0">쇼핑몰 링크를 넣으면 사진과 가격을 불러와요. 여러 개를 넣고 비교한 뒤 '이걸로 선택'을 누르면 물품 표에 사진·가격·업체가 들어가요. 가격을 못 읽는 쇼핑몰은 직접 적어 주세요.</p>`}`;
 }
 // 물품 표 정렬 (이 기기에 기억): 제목 칸을 누르거나 '정렬' 고르기. 같은 칸을 다시 누르면 반대로.
-const ISORT=[["order","등록순"],["name","가나다순"],["amt","금액"],["price","단가"],["qty","수량"],["due","필요일"],["status","상태"],["kind","구분"],["vendor","업체"]];
+const ISORT=[["order","등록순"],["name","가나다순"],["amt","금액"],["price","단가"],["qty","수량"],["status","상태"],["kind","구분"],["vendor","업체"]];
 const CSORT=[["","넣은 순"],["low","낮은 가격"],["high","높은 가격"],["name","이름"]];
-try{ ui.itemSort=JSON.parse(lsGet("mb-isort")||"null")||{k:"order",d:1}; }catch(e){ ui.itemSort={k:"order",d:1}; }
+try{ ui.itemSort=JSON.parse(lsGet("mb-isort")||"null")||{k:"order",d:1}; if(ui.itemSort.k==="due") ui.itemSort={k:"order",d:1}; }catch(e){ ui.itemSort={k:"order",d:1}; }
 ui.candSort=lsGet("mb-csort")||"";
 function setItemSort(k){ const S=ui.itemSort; ui.itemSort=S.k===k?{k,d:-S.d}:{k,d:/^(qty|price|amt)$/.test(k)?-1:1}; lsSet("mb-isort",JSON.stringify(ui.itemSort)); render(); }
 function sortItems(rows,qtyOf,amt){
@@ -1787,7 +1787,7 @@ function itemsHTML(){
   for(const x of [...ui.isel]) if(!all.some(i=>i.id===x)) ui.isel.delete(x);
   const nsel=ui.isel.size, allOn=rows.length&&rows.every(i=>ui.isel.has(i.id));
   const selbar=nsel?`<div class="row selbar noprint"><b><span class="num">${nsel}</span>개 선택</b><button class="btn small danger" id="isel-del" type="button">선택한 물품 삭제</button><button class="linkbtn small" id="isel-none" type="button">선택 해제</button></div>`:"";
-  const body = rows.length? `${selbar}<div class="tbl-wrap"><table><thead><tr><th class="noprint"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}<th>견적</th>${th("kind","구분")}${th("qty","수량","r")}<th class="r">도면</th>${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}${th("due","필요일")}${th("status","상태")}<th>메모</th><th>후보</th><th></th></tr></thead><tbody>
+  const body = rows.length? `${selbar}<div class="tbl-wrap"><table><thead><tr><th class="noprint"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}<th>견적</th>${th("kind","구분")}${th("qty","수량","r")}<th class="r">도면</th>${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}<th>필요일</th>${th("status","상태")}<th>메모</th><th>후보</th><th></th></tr></thead><tbody>
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
       return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="noprint"><input type="checkbox" data-isel aria-label="선택" ${ui.isel.has(i.id)?"checked":""}></td><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
