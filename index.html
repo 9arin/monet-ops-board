@@ -474,7 +474,9 @@ function applySlotCfg(){ // 인력 탭에서 바꾼 자리 이름·시간 (DB st
 }
 const ITEM_KIND = ["구매","대여","제작","협조 요청","보유"];
 const OWNED="보유"; // 이미 가진 물품: 견적·단가 없음
-const ITEM_STATUS = ["필요","견적","주문","입고","설치 완료","반납 완료"];
+const ITEM_STATUS = ["필요","견적","주문","입고","준비 완료","설치 완료","반납 완료"];
+const ITEM_DONE = ["입고","준비 완료","설치 완료","반납 완료"]; // 손 안 써도 되는 상태
+const PRE_STATUS = ["","필요","견적","주문"]; // 보유로 바꾸면 이 상태는 "준비 완료"로
 const STAFF_STATUS = ["모집 중","면접","확정"];
 const TASK_CATS = ["확정 필요","채용·계약","물품","교육","현장 세팅","행정"];
 const COLS = ["markers","items","staff","tasks"];
@@ -1112,7 +1114,7 @@ function renderStats(){
   if(guest){ $("#stats").innerHTML=""; return; }
   const st=alba(), it=state.items, tk=state.tasks;
   const conf=st.filter(p=>p.status==="확정").length;
-  const itemsOpen=it.filter(i=>!["입고","설치 완료","반납 완료"].includes(i.status)).length;
+  const itemsOpen=it.filter(i=>!ITEM_DONE.includes(i.status)).length;
   const tOpen=tk.filter(t=>!t.done).length;
   const today=new Date().toISOString().slice(0,10);
   const next=tk.filter(t=>!t.done&&t.due).sort((a,b)=>a.due.localeCompare(b.due))[0];
@@ -1695,7 +1697,7 @@ function itemsHTML(){
   const amt=i=>i.kind===OWNED?0:Number(i.qty||(i.link?counts[i.link]:0)||0)*Number(i.price||0);
   const sum=pred=>all.filter(pred).reduce((s,i)=>s+amt(i),0);
   const total=k=>base.filter(i=>i.kind===k).reduce((s,i)=>s+amt(i),0);
-  const scls=s=>["입고","설치 완료","반납 완료"].includes(s)?"s-done":(s==="필요"?"s-need":"s-mid");
+  const scls=s=>ITEM_DONE.includes(s)?"s-done":(s==="필요"?"s-need":"s-mid");
   const NC=14;
   const body = rows.length? `<div class="tbl-wrap"><table><thead><tr><th>사진</th><th>품목</th><th>견적</th><th>구분</th><th class="r">수량</th><th class="r">도면</th><th class="r">단가(원)</th><th class="r">금액(원)</th><th>업체</th><th>필요일</th><th>상태</th><th>메모</th><th>후보</th><th></th></tr></thead><tbody>
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
@@ -1811,7 +1813,7 @@ function bindItems(){
   document.querySelectorAll("tr[data-id]:not(.cand-row)").forEach(tr=>{
     const it=()=>curItem(tr.dataset.id);
     tr.querySelectorAll("[data-f]").forEach(el=>el.onchange=()=>{ const k=el.dataset.f, v=el.value.trim(), cur=it(), patch={[k]:v};
-      if(k==="kind"&&v===OWNED) patch.quote=""; // 보유는 견적 없음
+      if(k==="kind"&&v===OWNED){ patch.quote=""; if(PRE_STATUS.includes(cur.status||"")) patch.status="준비 완료"; } // 보유는 견적 없고 이미 준비됨
       if(k==="quote"&&v&&!cur.vendor){ const q=state.quotes.find(x=>x.id===v); if(q&&q.vendor) patch.vendor=q.vendor; } // 견적 고르면 업체도 채움
       save("items",{...cur,...patch}); });
     tr.querySelector("[data-del]").onclick=()=>{ if(ui.confirmDel===it().id){ui.confirmDel=null;remove("items",it().id);} else {ui.confirmDel=it().id;render();} };
@@ -1850,7 +1852,7 @@ function bindItems(){
   $("#addItem").onsubmit=e=>{e.preventDefault(); const n=$("#ni-name").value.trim(); if(!n) return;
     const max=Math.max(0,...state.items.map(i=>i.order||0)); const f=ui.quoteFilter&&ui.quoteFilter!=="none"?ui.quoteFilter:"";
     const q=state.quotes.find(x=>x.id===f);
-    save("items",{id:uid("i"),order:max+1,name:n,kind:$("#ni-kind").value,qty:$("#ni-qty").value,link:$("#ni-link").value,price:"",vendor:q?q.vendor||"":"",quote:f,due:"",status:"필요",note:""}); toast("추가했어요");};
+    save("items",{id:uid("i"),order:max+1,name:n,kind:$("#ni-kind").value,qty:$("#ni-qty").value,link:$("#ni-link").value,price:"",vendor:q?q.vendor||"":"",quote:f,due:"",status:$("#ni-kind").value===OWNED?"준비 완료":"필요",note:""}); toast("추가했어요");};
 }
 
 /* ----- graphics ----- */
