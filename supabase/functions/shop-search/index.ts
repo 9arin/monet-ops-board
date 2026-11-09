@@ -1,6 +1,7 @@
-// 물품 찾기: 네이버 쇼핑 · 쿠팡에서 상품을 찾아 사진 · 가격 · 링크를 돌려줘요.
+// 물품 찾기: 국내 쇼핑몰(쿠팡 · 11번가 · 스마트스토어 등)에서 상품을 찾아 사진 · 가격 · 링크를 돌려줘요.
+// (네이버 쇼핑 검색 API는 2026-07-31 종료 → SerpApi 구글 쇼핑 한국 검색 사용)
 // 열쇠(API 키)는 Supabase Edge Function Secrets 에만 있어요 (코드 · 보드에는 없음):
-//   NAVER_CLIENT_ID, NAVER_CLIENT_SECRET   — 네이버 개발자 센터 '검색' API
+//   SERPAPI_KEY                            — serpapi.com (무료 월 250회)
 //   COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY — 쿠팡 파트너스 Open API (있을 때만)
 // 보드에 들어온 사람만 쓸 수 있어요 (can_board 확인).
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -15,20 +16,27 @@ const json = (b: unknown, status = 200) =>
 
 type Item = { src: string; id: string; title: string; price: number; image: string; url: string; mall: string; rocket?: boolean; brand?: string; cat?: string };
 
-const strip = (s: string) => s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;/g, "'").trim();
-
-async function naver(q: string, n: number): Promise<Item[]> {
-  const id = Deno.env.get("NAVER_CLIENT_ID"), secret = Deno.env.get("NAVER_CLIENT_SECRET");
-  if (!id || !secret) throw new Error("no-key");
-  const u = `https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(q)}&display=${n}&sort=sim&exclude=used:rental`;
-  const r = await fetch(u, { headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret } });
-  if (!r.ok) throw new Error("naver " + r.status);
-  const d = await r.json();
-  return (d.items || []).map((x: Record<string, string>) => ({
-    src: "naver", id: x.productId, title: strip(x.title || ""), price: Number(x.lprice) || 0, image: x.image || "",
-    url: x.link || "", mall: x.mallName || "네이버", brand: x.brand || x.maker || "",
-    cat: [x.category1, x.category2, x.category3, x.category4].filter(Boolean).join(" > "),
-  }));
+// SerpApi는 횟수를 세니까 같은 검색은 6시간 동안 기억해 둬요.
+const sCache = new Map<string, { t: number; items: Item[] }>();
+async function shop(q: string, n: number): Promise<Item[]> {
+  const key = Deno.env.get("SERPAPI_KEY");
+  if (!key) throw new Error("no-key");
+  const hit = sCache.get(q);
+  if (hit && Date.now() - hit.t < 6 * 3600_000) return hit.items.slice(0, n);
+  const u = `https://serpapi.com/search.json?engine=google_shopping&q=${encodeURIComponent(q)}&gl=kr&hl=ko&google_domain=google.co.kr&location=South+Korea&api_key=${key}`;
+  const r = await fetch(u);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) {
+    if (/hasn't returned any results/i.test(d.error || "")) return [];
+    throw new Error("serpapi " + r.status + " " + String(d.error || "").slice(0, 120));
+  }
+  const items: Item[] = (d.shopping_results || []).map((x: Record<string, unknown>) => ({
+    src: "shop", id: String(x.product_id || x.position || ""), title: String(x.title || ""),
+    price: Math.round(Number(x.extracted_price) || 0), image: String(x.thumbnail || x.serpapi_thumbnail || ""),
+    url: String(x.link || x.product_link || ""), mall: String(x.source || ""),
+  })).filter((x: Item) => x.url);
+  sCache.set(q, { t: Date.now(), items });
+  return items.slice(0, n);
 }
 
 // 쿠팡 파트너스는 1시간 호출 횟수 제한이 있어서 같은 검색은 1시간 동안 기억해 둬요.
@@ -81,6 +89,6 @@ Deno.serve(async (req) => {
     try { return { ok: true, items: await f(q, n) }; }
     catch (e) { const m = String((e as Error).message || e); return { ok: false, error: m === "no-key" ? "no-key" : m.slice(0, 200), items: [] }; }
   };
-  const [nv, cp] = await Promise.all([run(naver), run(coupang)]);
-  return json({ q, naver: nv, coupang: cp });
+  const [sh, cp] = await Promise.all([run(shop), run(coupang)]);
+  return json({ q, shop: sh, coupang: cp });
 });

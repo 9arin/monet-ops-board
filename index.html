@@ -1782,7 +1782,9 @@ function itemsHTML(){
 }
 const curItem=id=>state.items.find(x=>x.id===id);
 function updCand(itemId,cid,patch,quiet){ const it=curItem(itemId); if(!it) return; save("items",{...it,cands:(it.cands||[]).map(c=>c.id===cid?{...c,...patch}:c)},quiet); }
-/* ---------- 쇼핑몰에서 찾기: 네이버 쇼핑 · 쿠팡 (Supabase 중계 기능 shop-search, 열쇠는 Supabase에만) ---------- */
+/* ---------- 쇼핑몰에서 찾기: 국내 쇼핑몰 (SerpApi 구글 쇼핑 한국 + 쿠팡 파트너스, Supabase 중계 기능 shop-search, 열쇠는 Supabase에만) ---------- */
+const shopGroup=x=>x.src==="coupang"||/쿠팡|coupang/i.test(x.mall||"")?"coupang":/네이버|naver|스마트스토어/i.test(x.mall||"")?"naver":"etc";
+const SHOP_G={coupang:"쿠팡",naver:"네이버",etc:"그 외"};
 const SHOP_N=20;
 ui.shop={}; // 물품 id → {q, sim(비교 기준 후보), loading, res, err, src, sort}
 const shopQuery=t=>String(t||"").replace(/\[[^\]]*\]|【[^】]*】/g," ").replace(/[^\p{L}\p{N}\s.\-]/gu," ").replace(/\s+/g," ").trim().split(" ").slice(0,6).join(" ");
@@ -1809,10 +1811,10 @@ function priceStats(list,ref){
 function shopHTML(i){
   const S=ui.shop[i.id]||{}, q=S.q||shopQuery(i.name)||i.name||"";
   let out=`<div class="shop"><form class="row shopform" data-sform><input data-sq value="${esc(q)}" placeholder="물품 이름을 자세히 (예: 철제 접이식 의자 쿠션 블랙)" aria-label="찾을 물품"><button class="btn primary" type="submit">${S.loading?"찾는 중…":"쇼핑몰에서 찾기"}</button></form>`;
-  if(!S.q){ return out+`<p class="small muted" style="margin:6px 0 0">이름을 자세히 적을수록 잘 찾아요. 네이버 쇼핑·쿠팡에서 사진·가격·구매 링크를 가져오고, 마음에 드는 걸 '후보로 담기' 하면 아래 후보에 들어가요.</p></div>`; }
+  if(!S.q){ return out+`<p class="small muted" style="margin:6px 0 0">이름을 자세히 적을수록 잘 찾아요. 쿠팡·11번가·네이버 스마트스토어 등 국내 쇼핑몰에서 사진·가격·구매 링크를 가져오고, 마음에 드는 걸 '후보로 담기' 하면 아래 후보에 들어가요.</p></div>`; }
   if(S.loading) return out+`<p class="small muted" style="margin:8px 0 0">'${esc(S.q)}' 찾는 중…</p></div>`;
   if(S.err) return out+`<p class="small" style="margin:8px 0 0">${esc(S.err)} ${shopLinks(S.q)}</p></div>`;
-  const R=S.res||{}, nv=R.naver||{items:[]}, cp=R.coupang||{items:[]};
+  const R=S.res||{}, nv=R.shop||{items:[]}, cp=R.coupang||{items:[]};
   const all=[...(nv.items||[]),...(cp.items||[])];
   const ref=S.sim?Number(S.sim.price)||0:0, st=priceStats(all,ref), qty=Number(i.qty||(i.link?countBy()[i.link]:0)||0);
   const why=(name,x)=>x.ok?"":`<span class="small muted">${name}: ${x.error==="no-key"?"열쇠 등록 전이라 못 찾았어요":"이번엔 못 불러왔어요"}</span>`;
@@ -1821,27 +1823,27 @@ function shopHTML(i){
       ${qty?`<span>× ${qty}개 ≈ <b class="num">${won(st.med*qty)}</b>원</span>`:""}<span class="muted">${st.n}개 상품 기준${st.cut?` · 가격 차이가 너무 큰 ${st.cut}개는 뺐어요`:""} · 배송비 별도</span>
       ${i.kind!==OWNED?`<button class="btn small" data-sprice="${st.min}" type="button">최저가를 단가로</button><button class="btn small" data-sprice="${st.med}" type="button">가운데값을 단가로</button>`:""}</div>`:"";
   let list=all.map((x,k)=>({...x,k}));
-  if(S.src) list=list.filter(x=>x.src===S.src);
+  if(S.src) list=list.filter(x=>shopGroup(x)===S.src);
   if(S.sort==="low") list.sort((a,b)=>(a.price||9e15)-(b.price||9e15)); else if(S.sort==="high") list.sort((a,b)=>b.price-a.price);
   else list.sort((a,b)=>a.k-b.k); // 관련도 순 (원래 순서)
   const have=new Set((i.cands||[]).map(c=>c.url));
-  const bar=`<div class="shopbar small"><div class="seg" role="group" aria-label="쇼핑몰">${[["","전체",all.length],["naver","네이버",(nv.items||[]).length],["coupang","쿠팡",(cp.items||[]).length]].map(([k,n,c])=>`<button type="button" data-ssrc="${k}" aria-pressed="${(S.src||"")===k}">${n} <span class="num">${c}</span></button>`).join("")}</div>
+  const bar=`<div class="shopbar small"><div class="seg" role="group" aria-label="쇼핑몰">${[["","전체",all.length]].concat(Object.entries(SHOP_G).map(([k,n])=>[k,n,all.filter(x=>shopGroup(x)===k).length]).filter(z=>z[2])).map(([k,n,c])=>`<button type="button" data-ssrc="${k}" aria-pressed="${(S.src||"")===k}">${n} <span class="num">${c}</span></button>`).join("")}</div>
     <div class="seg" role="group" aria-label="정렬">${[["","관련도"],["low","낮은 가격"],["high","높은 가격"]].map(([k,n])=>`<button type="button" data-ssort="${k}" aria-pressed="${(S.sort||"")===k}">${n}</button>`).join("")}</div>
-    ${why("네이버",nv)} ${why("쿠팡",cp)} ${shopLinks(S.q)}</div>`;
+    ${why("쇼핑 검색",nv)} ${cp.ok||cp.error==="no-key"?"":why("쿠팡",cp)} ${shopLinks(S.q)}</div>`;
   const cards=list.length?`<div class="cands">${list.map(x=>`<div class="cand shopr" data-sk="${x.k}">
       ${x.image?`<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="noimg small muted">사진 없음</div>`}
       <div class="t" title="${esc(x.title)}">${esc(x.title)}</div>
-      <div class="small muted"><span class="pill src">${x.src==="coupang"?"쿠팡":"네이버"}</span> ${esc(x.mall||"")}${x.rocket?" · 로켓배송":""}</div>
+      <div class="small muted"><span class="pill src">${SHOP_G[shopGroup(x)]}</span> ${esc(x.mall||"")}${x.rocket?" · 로켓배송":""}</div>
       <div class="pr"><b class="num">${x.price?won(x.price):"–"}</b>${x.price?"원":""}</div>
       <div class="row" style="justify-content:space-between"><span class="row"><a class="small" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">열기</a><button class="linkbtn small" data-ssim type="button">비슷한 가격</button></span>
         ${have.has(x.url)?`<span class="small muted">담았어요</span>`:`<button class="btn primary small" data-sadd type="button">후보로 담기</button>`}</div></div>`).join("")}</div>`
     :`<p class="small muted" style="margin:8px 0 0">찾은 상품이 없어요. 이름을 조금 바꿔서 다시 찾아보세요.</p>`;
-  const disc=(cp.items||[]).length?`<p class="small muted" style="margin:6px 0 0">쿠팡 파트너스 활동을 통해 일정액의 수수료를 제공받을 수 있습니다.</p>`:"";
+  const disc=(cp.items||[]).length||all.some(x=>x.src==="coupang")?`<p class="small muted" style="margin:6px 0 0">쿠팡 파트너스 활동을 통해 일정액의 수수료를 제공받을 수 있습니다.</p>`:"";
   return out+head+stat+bar+cards+disc+`</div>`;
 }
-function shopItemOf(itemId,k){ const R=(ui.shop[itemId]||{}).res||{}; return [...((R.naver||{}).items||[]),...((R.coupang||{}).items||[])][k]; }
+function shopItemOf(itemId,k){ const R=(ui.shop[itemId]||{}).res||{}; return [...((R.shop||{}).items||[]),...((R.coupang||{}).items||[])][k]; }
 function addCandFrom(itemId,x){ const it=curItem(itemId); if(!it||!x) return; if((it.cands||[]).some(c=>c.url===x.url)){ toast("이미 후보에 있어요"); return; }
-  save("items",{...it,cands:[...(it.cands||[]),{id:uid("c"),url:x.url,title:x.title,image:x.image||"",price:x.price?String(x.price):"",site:x.mall||(x.src==="coupang"?"쿠팡":"네이버"),memo:x.rocket?"쿠팡 로켓배송":"",loading:false}]});
+  save("items",{...it,cands:[...(it.cands||[]),{id:uid("c"),url:x.url,title:x.title,image:x.image||"",price:x.price?String(x.price):"",site:x.mall||SHOP_G[shopGroup(x)],memo:x.rocket?"쿠팡 로켓배송":"",loading:false}]});
   toast("후보에 담았어요"); }
 function bindShop(tr,id){
   const f=tr.querySelector("[data-sform]"); if(!f) return; const inp=f.querySelector("[data-sq]");
