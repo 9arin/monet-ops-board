@@ -1782,12 +1782,12 @@ function itemsHTML(){
   const sum=pred=>all.filter(pred).reduce((s,i)=>s+amt(i),0);
   const total=k=>base.filter(i=>i.kind===k).reduce((s,i)=>s+amt(i),0);
   const scls=s=>ITEM_DONE.includes(s)?"s-done":(s==="필요"?"s-need":"s-mid");
-  const NC=15;
+  const NC=14;
   if(!ui.isel) ui.isel=new Set();
   for(const x of [...ui.isel]) if(!all.some(i=>i.id===x)) ui.isel.delete(x);
   const nsel=ui.isel.size, allOn=rows.length&&rows.every(i=>ui.isel.has(i.id));
   const selbar=nsel?`<div class="row selbar noprint"><b><span class="num">${nsel}</span>개 선택</b><button class="btn small danger" id="isel-del" type="button">선택한 물품 삭제</button><button class="linkbtn small" id="isel-none" type="button">선택 해제</button></div>`:"";
-  const body = rows.length? `${selbar}<div class="tbl-wrap"><table><thead><tr><th class="noprint"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}<th>견적</th>${th("kind","구분")}${th("qty","수량","r")}<th class="r">도면</th>${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}<th>필요일</th>${th("status","상태")}<th>메모</th><th>후보</th><th></th></tr></thead><tbody>
+  const body = rows.length? `${selbar}<div class="tbl-wrap"><table><thead><tr><th class="noprint"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}<th>견적</th>${th("kind","구분")}${th("qty","수량","r")}<th class="r">도면</th>${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}${th("status","상태")}<th>메모</th><th>후보</th><th></th></tr></thead><tbody>
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
       return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="noprint"><input type="checkbox" data-isel aria-label="선택" ${ui.isel.has(i.id)?"checked":""}></td><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
@@ -1798,7 +1798,6 @@ function itemsHTML(){
       ${i.kind===OWNED?`<td class="r muted">–</td><td class="r muted">–</td>`:`<td class="r" style="width:110px"><input class="num" data-f="price" type="number" min="0" value="${esc(i.price||"")}" style="text-align:right"></td>
       <td class="r num">${won(q*Number(i.price||0))}</td>`}
       <td style="min-width:100px"><input data-f="vendor" value="${esc(i.vendor||"")}"></td>
-      <td style="min-width:130px"><input data-f="due" type="date" value="${esc(i.due||"")}"></td>
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
       <td style="min-width:160px"><input data-f="note" value="${esc(i.note||"")}"></td>
       <td><button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button></td>
