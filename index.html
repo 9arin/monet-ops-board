@@ -181,6 +181,16 @@ tr.cand-row>td>*{position:sticky;left:10px;max-width:min(960px,calc(100vw - 96px
 .candadd [data-cin]{flex:2;min-width:0}
 .candadd [data-cnote]{flex:1;min-width:0}
 @media (max-width:640px){.candadd{flex-wrap:wrap}.candadd [data-cin],.candadd [data-cnote]{flex:1 1 100%}}
+.shop{margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed var(--line)}
+.shopform{flex-wrap:nowrap}
+.shopform [data-sq]{flex:1;min-width:0}
+.shopstat{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.shopstat b{font-size:15px}
+.shopbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.shopr .t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}
+.shopr .pr{font-size:15px}
+.src{border:1px solid var(--line);color:var(--muted)}
+@media (max-width:640px){.shopform{flex-wrap:wrap}.shopform [data-sq]{flex:1 1 100%}}
 .drop.cimg{padding:0;border-width:1px;position:relative;overflow:hidden}
 .drop.cimg img{display:block}
 .cimg-hint{position:absolute;left:0;right:0;bottom:0;background:var(--ink);color:var(--bg);font-size:11px;text-align:center;opacity:0;transition:opacity .15s}
@@ -1707,13 +1717,14 @@ function photosHTML(i){
 }
 function candsHTML(i){
   const cs=i.cands||[];
-  return `${photosHTML(i)}<div class="drop" data-cdrop="${i.id}"><div class="row candadd"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요"><input class="cand-in" data-cnote placeholder="메모 (선택)"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
+  return `${photosHTML(i)}${shopHTML(i)}<div class="drop" data-cdrop="${i.id}"><div class="row candadd"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요"><input class="cand-in" data-cnote placeholder="메모 (선택)"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
     ${cs.length?`<div class="cands">${cs.map(c=>`<div class="cand ${i.chosen===c.id?"chosen":""}" data-c="${c.id}">
       <div class="drop cimg" data-cimg title="사진을 끌어다 놓거나 눌러서 고르기">${c.image?`<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="cimg-hint">사진 바꾸기</span>`:`<div class="noimg small muted">${c.loading?"불러오는 중…":"사진 없음<br>끌어다 놓거나 눌러서 넣기"}</div>`}</div>
       <div class="t">${esc(c.title||c.url)}</div>
       <div class="small muted">${esc(c.site||"")}</div>
       <label class="qrow">가격<input class="num" data-cprice value="${esc(c.price||"")}" inputmode="numeric" placeholder="${c.loading?"…":"직접 입력"}"></label>
       <label class="qrow">메모<input data-cmemo value="${esc(c.memo||"")}" placeholder="예: 색상 화이트, 배송 3일"></label>
+      ${c.title?`<button class="linkbtn small" data-csim type="button" style="align-self:flex-start">비슷한 상품 가격 보기</button>`:""}
       <div class="row" style="justify-content:space-between"><a class="small" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">열기</a>
         <span class="row"><button class="x" data-cdel aria-label="후보 삭제">×</button>${i.chosen===c.id?`<button class="btn" data-cunpick type="button">선택 해제</button>`:`<button class="btn primary" data-cpick type="button">이걸로 선택</button>`}</span></div>
     </div>`).join("")}</div>`:`<p class="small muted" style="margin:8px 0 0">쇼핑몰 링크를 넣으면 사진과 가격을 불러와요. 여러 개를 넣고 비교한 뒤 '이걸로 선택'을 누르면 물품 표에 사진·가격·업체가 들어가요. 가격을 못 읽는 쇼핑몰은 직접 적어 주세요.</p>`}`;
@@ -1771,6 +1782,79 @@ function itemsHTML(){
 }
 const curItem=id=>state.items.find(x=>x.id===id);
 function updCand(itemId,cid,patch,quiet){ const it=curItem(itemId); if(!it) return; save("items",{...it,cands:(it.cands||[]).map(c=>c.id===cid?{...c,...patch}:c)},quiet); }
+/* ---------- 쇼핑몰에서 찾기: 네이버 쇼핑 · 쿠팡 (Supabase 중계 기능 shop-search, 열쇠는 Supabase에만) ---------- */
+const SHOP_N=20;
+ui.shop={}; // 물품 id → {q, sim(비교 기준 후보), loading, res, err, src, sort}
+const shopQuery=t=>String(t||"").replace(/\[[^\]]*\]|【[^】]*】/g," ").replace(/[^\p{L}\p{N}\s.\-]/gu," ").replace(/\s+/g," ").trim().split(" ").slice(0,6).join(" ");
+const shopLinks=q=>`<a class="small" href="https://search.shopping.naver.com/search/all?query=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">네이버 쇼핑에서 보기</a> · <a class="small" href="https://www.coupang.com/np/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer">쿠팡에서 보기</a>`;
+async function shopSearch(itemId,q,sim){
+  q=String(q||"").trim().slice(0,100); if(q.length<2){ toast("두 글자 이상 적어 주세요"); return; }
+  const prev=ui.shop[itemId]||{}; ui.shop[itemId]={q,sim:sim||null,loading:true,src:"",sort:prev.sort||""}; render();
+  let res=null, err="";
+  try{ if(!db||mode!=="db") throw new Error("offline");
+    const {data,error}=await db.functions.invoke("shop-search",{body:{q,n:SHOP_N}});
+    if(error){ const st=error.context&&error.context.status; err=st===403?"검색 권한이 없어요. 다시 로그인해 주세요.":st===404?"검색 기능이 아직 설치되지 않았어요.":"검색하지 못했어요. 잠시 후 다시 해 주세요."; console.error(error); }
+    else res=data; }
+  catch(e){ console.error(e); err="검색하지 못했어요. 인터넷 연결을 확인해 주세요."; }
+  const cur=ui.shop[itemId]; if(!cur||cur.q!==q) return; // 그 사이 다른 검색을 했으면 버려요
+  ui.shop[itemId]={...cur,loading:false,res,err}; scheduleRender();
+}
+function priceStats(list,ref){
+  let p=list.map(x=>x.price).filter(v=>v>0), cut=0;
+  if(ref>0){ const k=p.filter(v=>v>=ref/3&&v<=ref*3); cut=p.length-k.length; p=k; } // 기준보다 3배 넘게 차이 나는 건 다른 물건일 가능성이 커서 빼요
+  p.sort((a,b)=>a-b); if(!p.length) return null;
+  const at=f=>p[Math.round(f*(p.length-1))];
+  return {n:p.length,cut,min:p[0],max:p[p.length-1],med:at(.5),lo:at(.25),hi:at(.75)};
+}
+function shopHTML(i){
+  const S=ui.shop[i.id]||{}, q=S.q||shopQuery(i.name)||i.name||"";
+  let out=`<div class="shop"><form class="row shopform" data-sform><input data-sq value="${esc(q)}" placeholder="물품 이름을 자세히 (예: 철제 접이식 의자 쿠션 블랙)" aria-label="찾을 물품"><button class="btn primary" type="submit">${S.loading?"찾는 중…":"쇼핑몰에서 찾기"}</button></form>`;
+  if(!S.q){ return out+`<p class="small muted" style="margin:6px 0 0">이름을 자세히 적을수록 잘 찾아요. 네이버 쇼핑·쿠팡에서 사진·가격·구매 링크를 가져오고, 마음에 드는 걸 '후보로 담기' 하면 아래 후보에 들어가요.</p></div>`; }
+  if(S.loading) return out+`<p class="small muted" style="margin:8px 0 0">'${esc(S.q)}' 찾는 중…</p></div>`;
+  if(S.err) return out+`<p class="small" style="margin:8px 0 0">${esc(S.err)} ${shopLinks(S.q)}</p></div>`;
+  const R=S.res||{}, nv=R.naver||{items:[]}, cp=R.coupang||{items:[]};
+  const all=[...(nv.items||[]),...(cp.items||[])];
+  const ref=S.sim?Number(S.sim.price)||0:0, st=priceStats(all,ref), qty=Number(i.qty||(i.link?countBy()[i.link]:0)||0);
+  const why=(name,x)=>x.ok?"":`<span class="small muted">${name}: ${x.error==="no-key"?"열쇠 등록 전이라 못 찾았어요":"이번엔 못 불러왔어요"}</span>`;
+  const head=S.sim?`<p class="small" style="margin:10px 0 0"><b>비슷한 상품 가격</b> · 기준: ${esc(S.sim.title||"")} ${ref?`<b class="num">${won(ref)}</b>원`:""} <button class="linkbtn small" data-sclear type="button">닫기</button></p>`:"";
+  const stat=st?`<div class="shopstat small"><span>최저 <b class="num">${won(st.min)}</b>원</span><span>보통 <b class="num">${won(st.lo)}~${won(st.hi)}</b>원</span><span>가운데값 <b class="num">${won(st.med)}</b>원</span><span>최고 <b class="num">${won(st.max)}</b>원</span>
+      ${qty?`<span>× ${qty}개 ≈ <b class="num">${won(st.med*qty)}</b>원</span>`:""}<span class="muted">${st.n}개 상품 기준${st.cut?` · 가격 차이가 너무 큰 ${st.cut}개는 뺐어요`:""} · 배송비 별도</span>
+      ${i.kind!==OWNED?`<button class="btn small" data-sprice="${st.min}" type="button">최저가를 단가로</button><button class="btn small" data-sprice="${st.med}" type="button">가운데값을 단가로</button>`:""}</div>`:"";
+  let list=all.map((x,k)=>({...x,k}));
+  if(S.src) list=list.filter(x=>x.src===S.src);
+  if(S.sort==="low") list.sort((a,b)=>(a.price||9e15)-(b.price||9e15)); else if(S.sort==="high") list.sort((a,b)=>b.price-a.price);
+  else list.sort((a,b)=>a.k-b.k); // 관련도 순 (원래 순서)
+  const have=new Set((i.cands||[]).map(c=>c.url));
+  const bar=`<div class="shopbar small"><div class="seg" role="group" aria-label="쇼핑몰">${[["","전체",all.length],["naver","네이버",(nv.items||[]).length],["coupang","쿠팡",(cp.items||[]).length]].map(([k,n,c])=>`<button type="button" data-ssrc="${k}" aria-pressed="${(S.src||"")===k}">${n} <span class="num">${c}</span></button>`).join("")}</div>
+    <div class="seg" role="group" aria-label="정렬">${[["","관련도"],["low","낮은 가격"],["high","높은 가격"]].map(([k,n])=>`<button type="button" data-ssort="${k}" aria-pressed="${(S.sort||"")===k}">${n}</button>`).join("")}</div>
+    ${why("네이버",nv)} ${why("쿠팡",cp)} ${shopLinks(S.q)}</div>`;
+  const cards=list.length?`<div class="cands">${list.map(x=>`<div class="cand shopr" data-sk="${x.k}">
+      ${x.image?`<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="noimg small muted">사진 없음</div>`}
+      <div class="t" title="${esc(x.title)}">${esc(x.title)}</div>
+      <div class="small muted"><span class="pill src">${x.src==="coupang"?"쿠팡":"네이버"}</span> ${esc(x.mall||"")}${x.rocket?" · 로켓배송":""}</div>
+      <div class="pr"><b class="num">${x.price?won(x.price):"–"}</b>${x.price?"원":""}</div>
+      <div class="row" style="justify-content:space-between"><span class="row"><a class="small" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">열기</a><button class="linkbtn small" data-ssim type="button">비슷한 가격</button></span>
+        ${have.has(x.url)?`<span class="small muted">담았어요</span>`:`<button class="btn primary small" data-sadd type="button">후보로 담기</button>`}</div></div>`).join("")}</div>`
+    :`<p class="small muted" style="margin:8px 0 0">찾은 상품이 없어요. 이름을 조금 바꿔서 다시 찾아보세요.</p>`;
+  const disc=(cp.items||[]).length?`<p class="small muted" style="margin:6px 0 0">쿠팡 파트너스 활동을 통해 일정액의 수수료를 제공받을 수 있습니다.</p>`:"";
+  return out+head+stat+bar+cards+disc+`</div>`;
+}
+function shopItemOf(itemId,k){ const R=(ui.shop[itemId]||{}).res||{}; return [...((R.naver||{}).items||[]),...((R.coupang||{}).items||[])][k]; }
+function addCandFrom(itemId,x){ const it=curItem(itemId); if(!it||!x) return; if((it.cands||[]).some(c=>c.url===x.url)){ toast("이미 후보에 있어요"); return; }
+  save("items",{...it,cands:[...(it.cands||[]),{id:uid("c"),url:x.url,title:x.title,image:x.image||"",price:x.price?String(x.price):"",site:x.mall||(x.src==="coupang"?"쿠팡":"네이버"),memo:x.rocket?"쿠팡 로켓배송":"",loading:false}]});
+  toast("후보에 담았어요"); }
+function bindShop(tr,id){
+  const f=tr.querySelector("[data-sform]"); if(!f) return; const inp=f.querySelector("[data-sq]");
+  f.onsubmit=e=>{ e.preventDefault(); inp.blur(); shopSearch(id,inp.value,null); };
+  const S=()=>ui.shop[id]||{};
+  tr.querySelectorAll("[data-ssrc]").forEach(b=>b.onclick=()=>{ S().src=b.dataset.ssrc; render(); });
+  tr.querySelectorAll("[data-ssort]").forEach(b=>b.onclick=()=>{ S().sort=b.dataset.ssort; render(); });
+  const cl=tr.querySelector("[data-sclear]"); if(cl) cl.onclick=()=>{ delete ui.shop[id]; render(); };
+  tr.querySelectorAll("[data-sprice]").forEach(b=>b.onclick=()=>{ save("items",{...curItem(id),price:b.dataset.sprice}); toast("단가에 넣었어요"); });
+  tr.querySelectorAll(".shopr").forEach(card=>{ const x=()=>shopItemOf(id,+card.dataset.sk);
+    const a=card.querySelector("[data-sadd]"); if(a) a.onclick=()=>addCandFrom(id,x());
+    card.querySelector("[data-ssim]").onclick=()=>{ const r=x(); shopSearch(id,shopQuery(r.title),{title:r.title,price:r.price}); }; });
+}
 async function addCand(itemId,raw,memo){
   let url=String(raw||"").trim(); if(!url) return; if(!/^https?:\/\//i.test(url)) url="https://"+url;
   let host; try{ host=new URL(url).hostname.replace(/^www\./,""); }catch(e){ toast("링크 모양이 아니에요."); return; }
@@ -1853,6 +1937,7 @@ function bindItems(){
   });
   document.querySelectorAll("tr.cand-row").forEach(tr=>{
     const id=tr.dataset.id, inp=tr.querySelector("[data-cin]");
+    bindShop(tr,id);
     const note=tr.querySelector("[data-cnote]");
     const go=()=>{ const v=inp.value; if(!v.trim()){ toast("링크를 넣어 주세요"); return; } const m=note.value; inp.value=""; note.value=""; addCand(id,v,m); };
     tr.querySelector("[data-cadd]").onclick=go;
@@ -1866,9 +1951,10 @@ function bindItems(){
         const rest=(it.photos||[]).filter(x=>x.id!==pid); if(p.fileId) remove("files",p.fileId);
         save("items",{...it,photos:rest,image:it.image===p.thumb?((rest[0]||{}).thumb||""):it.image}); };
     });
-    tr.querySelectorAll(".cand").forEach(card=>{ const cid=card.dataset.c;
+    tr.querySelectorAll(".cand[data-c]").forEach(card=>{ const cid=card.dataset.c;
       card.querySelector("[data-cprice]").onchange=e=>updCand(id,cid,{price:e.target.value.replace(/[^\d]/g,"")});
       card.querySelector("[data-cmemo]").onchange=e=>updCand(id,cid,{memo:e.target.value.trim()});
+      const sm=card.querySelector("[data-csim]"); if(sm) sm.onclick=()=>{ const c=(curItem(id).cands||[]).find(x=>x.id===cid); shopSearch(id,shopQuery(c.title),{title:c.title,price:c.price}); tr.querySelector(".shop").scrollIntoView({block:"nearest"}); };
       dropZone(card.querySelector("[data-cimg]"),{accept:"image/*",onFiles:async fs=>{ if(!/^image\//.test(fs[0].type)){ toast("사진 파일만 넣을 수 있어요."); return; }
         const img=await readURL(await shrinkImage(fs[0],400,.8)); const cur=curItem(id); updCand(id,cid,{image:img}); if(cur&&cur.chosen===cid) save("items",{...curItem(id),image:img}); },
         onText:t=>{ if(/^https?:\/\//.test(t)) updCand(id,cid,{image:t}); }}); // 사진이 안 뜨면 직접
