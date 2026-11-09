@@ -14,6 +14,7 @@ Static single-page app served by GitHub Pages from a PUBLIC repo (no build step)
 - `img/4F.jpg`, `img/3F.jpg`: floor plans (1600×1075).
 - `supabase/1_setup.sql`: table `board_docs(col, id, data jsonb)`, `board_members` allowlist, `is_member()`, RLS, realtime. Already applied.
 - `supabase/2_team_key.sql`: `board_secret` (sha256 of team password), `has_board_key()`, `can_board()`, policies for anon+authenticated. Already applied.
+- `supabase/functions/shop-search/index.ts`: Edge Function (deployed via the dashboard editor, JWT check off — it checks `can_board()` itself). Product search for the 물품 tab: SerpApi google_shopping (gl=kr) + optional Coupang Partners API. Keys only in Supabase Edge Function Secrets (`SERPAPI_KEY`, `COUPANG_ACCESS_KEY`/`COUPANG_SECRET_KEY`); the user enters them. Naver Shopping search API ended 2026-07-31. SerpApi free = 250 searches/month; function caches 6h.
 - `supabase/3_guest_key.sql`, `4_guest_edit.sql`: guest password (`board_guest`, `x-guest-key` header) → graphics only: read g- rows + their files, edit g- / upload f-, no delete. Board has no UI to change it; `5_guest_password.sql` is run in the Supabase SQL editor (user types the password). Client: `guest` flag, `startGuestMode()`.
 
 ## Data model
