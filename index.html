@@ -153,6 +153,8 @@ td.r,th.r{text-align:right}
 .thsort:hover{color:var(--ink)}
 th.r .thsort{width:100%;text-align:right}
 .thsort .arr{margin-left:3px;color:var(--brand)}
+.sortbar{gap:8px;align-items:center;margin-bottom:10px}
+.sortbar .seg{flex-wrap:wrap}
 .sortsel{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px}
 .sortsel select{width:auto}
 .selbar{gap:10px;align-items:center;margin-bottom:8px;padding:6px 10px;border-radius:8px;background:var(--soft)}
@@ -1754,7 +1756,7 @@ function candsHTML(i){
     </div>`).join("")}</div>`:`<p class="small muted" style="margin:8px 0 0">쇼핑몰 링크를 넣으면 사진과 가격을 불러와요. 여러 개를 넣고 비교한 뒤 '이걸로 선택'을 누르면 물품 표에 사진·가격·업체가 들어가요. 가격을 못 읽는 쇼핑몰은 직접 적어 주세요.</p>`}`;
 }
 // 물품 표 정렬 (이 기기에 기억): 제목 칸을 누르거나 '정렬' 고르기. 같은 칸을 다시 누르면 반대로.
-const ISORT=[["order","등록순"],["name","품목"],["kind","구분"],["qty","수량"],["price","단가"],["amt","금액"],["vendor","업체"],["due","필요일"],["status","상태"]];
+const ISORT=[["order","등록순"],["name","가나다순"],["amt","금액"],["price","단가"],["qty","수량"],["due","필요일"],["status","상태"],["kind","구분"],["vendor","업체"]];
 const CSORT=[["","넣은 순"],["low","낮은 가격"],["high","높은 가격"],["name","이름"]];
 try{ ui.itemSort=JSON.parse(lsGet("mb-isort")||"null")||{k:"order",d:1}; }catch(e){ ui.itemSort={k:"order",d:1}; }
 ui.candSort=lsGet("mb-csort")||"";
@@ -1776,7 +1778,7 @@ function itemsHTML(){
   const amt=i=>i.kind===OWNED?0:Number(i.qty||(i.link?counts[i.link]:0)||0)*Number(i.price||0);
   const rows=sortItems(base.filter(i=>!kf||i.kind===kf),i=>Number(i.qty||(i.link?counts[i.link]:0)||0),amt);
   const IS=ui.itemSort, th=(k,label,cls)=>`<th class="${cls||""}"><button class="thsort" data-isort="${k}" type="button" aria-label="${label}로 정렬">${label}${IS.k===k?`<span class="arr">${IS.d>0?"▲":"▼"}</span>`:""}</button></th>`;
-  const sortbar=`<label class="small sortsel noprint">정렬 <select id="isort">${ISORT.map(([k,n])=>`<option value="${k}" ${IS.k===k?"selected":""}>${n}</option>`).join("")}</select><button class="btn small" id="isort-dir" type="button" title="순서 뒤집기">${IS.d>0?"▲ 오름차순":"▼ 내림차순"}</button></label>`;
+  const sortbar=`<div class="row sortbar noprint"><b class="small">정렬</b><div class="seg" role="group" aria-label="정렬">${ISORT.map(([k,n])=>`<button type="button" data-isort="${k}" aria-pressed="${IS.k===k}">${n}${IS.k===k&&(k!=="order"||IS.d<0)?` ${IS.d>0?"▲":"▼"}`:""}</button>`).join("")}</div><span class="small muted">같은 걸 한 번 더 누르면 반대로</span></div>`;
   const sum=pred=>all.filter(pred).reduce((s,i)=>s+amt(i),0);
   const total=k=>base.filter(i=>i.kind===k).reduce((s,i)=>s+amt(i),0);
   const scls=s=>ITEM_DONE.includes(s)?"s-done":(s==="필요"?"s-need":"s-mid");
@@ -1994,8 +1996,6 @@ function bindItems(){
     card.querySelector("[data-qdel]").onclick=()=>{ const x=q(); if(ui.confirmDel===x.id){ui.confirmDel=null; if(ui.quoteFilter===x.id) ui.quoteFilter=null; if(x.fileId) remove("files",x.fileId); remove("quotes",x.id);} else {ui.confirmDel=x.id;render();} };
   });
   document.querySelectorAll("[data-isort]").forEach(b=>b.onclick=()=>setItemSort(b.dataset.isort));
-  { const so=$("#isort"); if(so) so.onchange=()=>{ ui.itemSort={k:so.value,d:/^(qty|price|amt)$/.test(so.value)?-1:1}; lsSet("mb-isort",JSON.stringify(ui.itemSort)); render(); };
-    const sd=$("#isort-dir"); if(sd) sd.onclick=()=>setItemSort(ui.itemSort.k); }
   document.querySelectorAll("[data-csort]").forEach(so=>so.onchange=()=>{ ui.candSort=so.value; lsSet("mb-csort",so.value); render(); });
   const ia=$("#isel-all"); if(ia) ia.onchange=()=>{ const ids=[...document.querySelectorAll("tr[data-id]:not(.cand-row)")].map(t=>t.dataset.id); ids.forEach(x=>ia.checked?ui.isel.add(x):ui.isel.delete(x)); render(); };
   const idl=$("#isel-del"); if(idl) idl.onclick=()=>{ const ids=[...ui.isel]; if(ids.length>1&&!confirm(`선택한 물품 ${ids.length}개를 삭제할까요?`)) return; ui.isel.clear(); deleteItems(ids); };
