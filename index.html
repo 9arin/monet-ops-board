@@ -855,10 +855,16 @@ async function checkUpdate(){
 }
 
 let renderQueued=false;
+let pointerIsDown=false;
+document.addEventListener("pointerdown",()=>{pointerIsDown=true;},true);
+document.addEventListener("pointerup",()=>{pointerIsDown=false;},true);
+document.addEventListener("pointercancel",()=>{pointerIsDown=false;},true);
 function scheduleRender(){
   const a=document.activeElement;
   if(a && $("#view").contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName)){
-    if(!renderQueued){renderQueued=true; a.addEventListener("blur",()=>{renderQueued=false; setTimeout(scheduleRender,0);},{once:true});} // 다음 칸으로 옮겨 가면 계속 기다려요
+    if(!renderQueued){renderQueued=true; a.addEventListener("blur",()=>{renderQueued=false;
+      // 버튼을 누르는 중이면 손을 뗄 때까지 기다려요 (먼저 다시 그리면 버튼이 바뀌어서 클릭이 사라져요)
+      if(pointerIsDown) document.addEventListener("pointerup",()=>setTimeout(scheduleRender,0),{once:true}); else setTimeout(scheduleRender,0);},{once:true});} // 다음 칸으로 옮겨 가면 계속 기다려요
     return;
   }
   render();
@@ -1138,7 +1144,7 @@ const drafts={};
 document.addEventListener("submit",e=>{ [...(e.target.elements||[])].forEach(el=>{ if(el.id) delete drafts[el.id]; }); },true);
 document.addEventListener("submit",e=>{ const id=e.target.id; if(id) setTimeout(()=>{ const f=document.getElementById(id); if(f&&f.reset) f.reset(); },0); }); // 추가한 뒤 칸 비우기
 function render(){
-  actCache=null;
+  actCache=null; renderQueued=false; // 지금 그리니까 기다리던 '나중에 그리기'는 없던 걸로 (안 그러면 걸려서 멈춰요)
   const a=document.activeElement, fid=a&&a.id&&$("#view").contains(a)?a.id:null, sel=fid&&typeof a.selectionStart==="number"?[a.selectionStart,a.selectionEnd]:null;
   try{ renderInner(); }
   catch(e){ console.error(e); $("#view").innerHTML=`<div class="empty">이 화면을 그리다 문제가 생겼어요. 다른 탭을 눌렀다 돌아오거나 새로고침해 주세요.<br><span class="small">${esc(e.message)}</span></div>`; }
