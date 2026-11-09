@@ -249,6 +249,36 @@ table.week td{vertical-align:middle}
 th.wkd,td.wkd{text-align:center;padding:4px 2px}
 .wkcell{width:52px;min-height:38px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--muted);font-size:11px;line-height:1.25;cursor:pointer;padding:2px}
 .wkcell.on{background:var(--okbg);color:var(--ok);border-color:transparent;font-weight:600}
+.man-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.man-intro{border-left:4px solid var(--accent);padding:10px 14px;margin:12px 0;background:var(--bg);border-radius:0 10px 10px 0}
+.man-intro .eb{font-size:12px;color:var(--muted)}
+.man-intro h2{margin:2px 0 4px;font-size:22px}
+.man-intro .ln{font-size:13px;color:var(--muted);margin-top:2px}
+.man-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.man-tools input[type=search]{flex:1;min-width:180px}
+.man-toc{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}
+.man-toc button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
+.man-toc button:hover{border-color:var(--accent)}
+.man-body h2.mh1{font-size:19px;margin:26px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--line);scroll-margin-top:12px}
+.man-body h3.mh2{font-size:15px;margin:18px 0 6px;color:var(--accent);scroll-margin-top:12px}
+.man-body p{margin:6px 0;line-height:1.6}
+.man-body ul{margin:6px 0;padding-left:0;list-style:none}
+.man-body li{position:relative;padding-left:22px;margin:4px 0;line-height:1.55}
+.man-body li .bl{position:absolute;left:2px;top:0;color:var(--muted)}
+.man-note{background:var(--warnbg);border-radius:10px;padding:10px 12px;margin:10px 0;line-height:1.6}
+.man-note div+div{margin-top:4px}
+.man-note div:first-child:not(:only-child){font-weight:700}
+.man-tw{overflow-x:auto;margin:8px 0;border:1px solid var(--line);border-radius:10px}
+.man-tw table{border-collapse:collapse;width:100%;min-width:520px;font-size:13px}
+.man-tw th,.man-tw td{border-bottom:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top;line-height:1.5}
+.man-tw th{background:var(--bg);font-weight:600;white-space:nowrap}
+.man-tw td:first-child{font-weight:600;white-space:nowrap}
+.man-tw tr:last-child td{border-bottom:none}
+.man-body .tbc{background:var(--warnbg);color:var(--warn);border-radius:6px;padding:0 5px;font-size:.92em;white-space:normal}
+.man-body mark{background:var(--warnbg);color:var(--ink);border-radius:3px;padding:0 2px}
+.man-img{border:1px dashed var(--line);border-radius:10px;padding:10px;color:var(--muted);font-size:13px;margin:8px 0}
+.man-sec.hide{display:none}
+@media print{.man-tools,.man-toc,.man-head .row{display:none}}
 .docgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px}
 .doc{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .docthumb{aspect-ratio:4/3;background:var(--soft);border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--muted);font-weight:700}
@@ -482,12 +512,12 @@ const TASK_CATS = ["확정 필요","채용·계약","물품","교육","현장 �
 const COLS = ["markers","items","staff","tasks"];
 
 // DB 컬렉션은 4개 그대로 두고, id 앞글자로 나눠 담아요 (SQL 변경 없이): 견적서 q-, 파일 f- → items / 설정 cfg- → staff
-const VCOL = {quotes:{col:"items",pre:"q-"},files:{col:"items",pre:"f-"},settings:{col:"staff",pre:"cfg-"},graphics:{col:"markers",pre:"g-"},nights:{col:"tasks",pre:"n-"},sched:{col:"tasks",pre:"s-"},docs:{col:"items",pre:"d-"}};
+const VCOL = {quotes:{col:"items",pre:"q-"},files:{col:"items",pre:"f-"},settings:{col:"staff",pre:"cfg-"},graphics:{col:"markers",pre:"g-"},nights:{col:"tasks",pre:"n-"},sched:{col:"tasks",pre:"s-"},docs:{col:"items",pre:"d-"},manual:{col:"tasks",pre:"o-"}};
 const ALLC = COLS.concat(Object.keys(VCOL));
 const vcolOf=(col,id)=>{for(const [k,v] of Object.entries(VCOL)) if(v.col===col&&String(id).startsWith(v.pre)) return k; return col;};
 const dbCol=c=>VCOL[c]?VCOL[c].col:c;
-const state = {markers:[],items:[],staff:[],tasks:[],quotes:[],files:[],settings:[],graphics:[],nights:[],sched:[],docs:[]};
-const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,files:false,settings:false,graphics:false,nights:false,sched:false,docs:false};
+const state = {markers:[],items:[],staff:[],tasks:[],quotes:[],files:[],settings:[],graphics:[],nights:[],sched:[],docs:[],manual:[]};
+const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,files:false,settings:false,graphics:false,nights:false,sched:false,docs:false,manual:false};
 const ui = {tab:"plan",floor:"4F",hidden:new Set(),addType:null,sel:null,labels:true,taskFilter:"open",confirmDel:null,
   mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,rotaWeek:null,editCell:null,mustOpen:null,mustMon:null,editPos:null};
 try{const t=localStorage.getItem("mb-tab"); if(t) ui.tab=t; const f=localStorage.getItem("mb-floor"); if(f) ui.floor=f; if(localStorage.getItem("mb-map")==="0") ui.mapOpen=false;}catch(e){}
@@ -1107,6 +1137,7 @@ function renderInner(){
   else if(ui.tab==="gfx") v.innerHTML=gfxHTML(), bindGfx();
   else if(ui.tab==="sched") v.innerHTML=schedHTML(), bindSched();
   else if(ui.tab==="docs") v.innerHTML=docsHTML(), bindDocs();
+  else if(ui.tab==="manual") v.innerHTML=manHTML(), bindMan();
   else v.innerHTML=tasksHTML(), bindTasks();
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
 }
@@ -1127,7 +1158,7 @@ function renderStats(){
   ].join("");
 }
 function renderTabs(){
-  const tabs=[["plan","배치도",state.markers.length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
+  const tabs=[["plan","배치도",state.markers.length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["manual","운영",state.manual.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
   $("#tabs").innerHTML=tabs.filter(t=>!guest||t[0]==="gfx").map(([k,n,c])=>`<button role="tab" data-tab="${k}" aria-selected="${ui.tab===k}">${n}<span class="cnt">${c}</span></button>`).join("");
   $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;ui.sel=null;try{localStorage.setItem("mb-tab",ui.tab)}catch(e){};render();});
 }
@@ -2044,6 +2075,137 @@ function bindDocs(){
     el.querySelector("[data-dname]").onchange=e=>save("docs",{...d(),title:e.target.value.trim()});
     el.querySelector("[data-ddel]").onclick=()=>{ const x=d(); if(ui.confirmDel===x.id){ui.confirmDel=null; remove("files",x.fileId); remove("docs",x.id);} else {ui.confirmDel=x.id;render();} };
   });
+}
+
+/* ----- 운영 문서 (운영 시나리오 · 인력 교육) : .docx 를 올리면 웹 문서로 읽어요 ----- */
+const JSZIP="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+const manCache={};
+try{ ui.manDoc=localStorage.getItem("mb-mandoc")||null; }catch(e){ ui.manDoc=null; }
+ui.manQ="";
+async function parseDocx(file){
+  await loadScript(JSZIP);
+  const zip=await JSZip.loadAsync(await file.arrayBuffer());
+  const rd=async n=>{ const f=zip.file(n); return f?new DOMParser().parseFromString(await f.async("string"),"application/xml"):null; };
+  const [doc,sty,num]=await Promise.all([rd("word/document.xml"),rd("word/styles.xml"),rd("word/numbering.xml")]);
+  if(!doc) throw new Error("docx");
+  const kids=(el,tag)=>Array.from(el.children).filter(c=>c.tagName===tag);
+  const kid=(el,tag)=>el&&Array.from(el.children).find(c=>c.tagName===tag);
+  const val=el=>el&&el.getAttribute("w:val");
+  const sname={}; if(sty) Array.from(sty.getElementsByTagName("w:style")).forEach(st=>sname[st.getAttribute("w:styleId")]=(val(kid(st,"w:name"))||"").toLowerCase());
+  const bullet={}; // numId → 0단계 글머리표
+  if(num){ const abs={}; Array.from(num.getElementsByTagName("w:abstractNum")).forEach(a=>{ const l=kid(a,"w:lvl"); abs[a.getAttribute("w:abstractNumId")]=l?{t:val(kid(l,"w:lvlText"))||"",f:val(kid(l,"w:numFmt"))||""}:{t:"•",f:"bullet"}; });
+    Array.from(num.getElementsByTagName("w:num")).forEach(n=>{ const a=abs[val(kid(n,"w:abstractNumId"))]; if(a) bullet[n.getAttribute("w:numId")]=a.f==="bullet"?(a.t||"•"):"·"; }); }
+  const ptext=p=>{ let t=""; p.querySelectorAll("*").forEach(e=>{ if(e.tagName==="w:t") t+=e.textContent; else if(e.tagName==="w:tab") t+=" "; else if(e.tagName==="w:br"||e.tagName==="w:cr") t+="\n"; }); return t.replace(/[  ]+/g," ").trim(); };
+  const out=[];
+  const body=doc.getElementsByTagName("w:body")[0];
+  for(const el of Array.from(body.children)){
+    if(el.tagName==="w:p"){
+      const pPr=kid(el,"w:pPr"), sid=val(kid(pPr,"w:pStyle"))||"", nm=sname[sid]||sid.toLowerCase(), numPr=kid(pPr,"w:numPr");
+      const x=ptext(el), img=el.getElementsByTagName("w:drawing").length>0;
+      if(img) out.push({t:"img"});
+      if(!x) continue;
+      const h=nm.match(/heading\s*(\d)/)||sid.match(/^Heading(\d)$/);
+      if(h) out.push({t:"h"+Math.min(3,+h[1]),x});
+      else if(numPr||/list/.test(nm)) out.push({t:"li",x,b:numPr?bullet[val(kid(numPr,"w:numId"))]||"•":"•"});
+      else out.push({t:"p",x});
+    } else if(el.tagName==="w:tbl"){
+      const rows=kids(el,"w:tr").map(tr=>kids(tr,"w:tc").map(tc=>{ const span=+(val(kid(kid(tc,"w:tcPr"),"w:gridSpan"))||1);
+        const x=kids(tc,"w:p").map(ptext).filter(Boolean).join("\n"); return span>1?{x,s:span}:x; }));
+      const flat=rows.flat();
+      if(rows.length===1&&rows[0].length===1) out.push({t:"note",x:typeof flat[0]==="string"?flat[0]:flat[0].x});
+      else if(flat.some(c=>(c.x??c))) out.push({t:"tbl",rows});
+    }
+  }
+  return out;
+}
+function manSplit(blocks){ // 첫 제목 앞 = 표지
+  const i=blocks.findIndex(b=>b.t==="h1"); const head=i<0?[]:blocks.slice(0,i), body=i<0?blocks:blocks.slice(i);
+  const ps=head.filter(b=>b.t==="p").map(b=>b.x);
+  let eb="", title=ps[0]||"", sub=[]; if(ps.length>1&&/MONET|모네/i.test(ps[0])){ eb=ps[0]; title=ps[1]; sub=ps.slice(2); } else sub=ps.slice(1);
+  return {eb,title,sub,notes:head.filter(b=>b.t==="note").map(b=>b.x),body};
+}
+async function manBlocks(d){
+  if(!d||!d.jsonId) return null;
+  if(manCache[d.jsonId]) return manCache[d.jsonId];
+  if(manCache[d.jsonId+":p"]) return null;
+  manCache[d.jsonId+":p"]=1;
+  const b=await fileBlob(d.jsonId).catch(()=>null);
+  try{ manCache[d.jsonId]=b?JSON.parse(await b.text()):[]; }catch(e){ manCache[d.jsonId]=[]; }
+  delete manCache[d.jsonId+":p"]; if(ui.tab==="manual") render();
+  return manCache[d.jsonId];
+}
+const manVer=name=>{ const m=String(name||"").match(/_(\d{6})ver(\d+)/i); return m?`${m[1]} ver${m[2]}`:""; };
+function manInline(t,q){
+  let h=esc(t).replace(/\n/g,"<br>");
+  h=h.replace(/\[확인 필요[^\]]*\]/g,m=>`<span class="tbc">${m}</span>`);
+  if(q){ const re=new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"gi"); h=h.replace(/(<[^>]*>)|([^<]+)/g,(m,tag,txt)=>tag||txt.replace(re,x=>`<mark>${x}</mark>`)); }
+  return h;
+}
+function manBlockHTML(b,q){
+  if(b.t==="p") return `<p>${manInline(b.x,q)}</p>`;
+  if(b.t==="note") return `<div class="man-note">${b.x.split("\n").map(l=>`<div>${manInline(l,q)}</div>`).join("")}</div>`;
+  if(b.t==="img") return `<div class="man-img">그림이 있는 자리예요. 원본 파일에서 볼 수 있어요. <button class="btn small" data-mgo="plan">배치도 탭 보기</button></div>`;
+  if(b.t==="tbl"){ const [h,...all]=b.rows, lq=(q||"").toLowerCase(), rt=row=>row.map(c=>c.x??c).join(" ").toLowerCase();
+    const m=lq?all.filter(row=>rt(row).includes(lq)):all, r=m.length?m:all; /* 찾는 중엔 맞는 줄만 */ const cell=(c,tag)=>{ const x=typeof c==="string"?c:c.x, s=typeof c==="string"?1:c.s; return `<${tag}${s>1?` colspan="${s}"`:""}>${manInline(x,q)}</${tag}>`; };
+    return `<div class="man-tw"><table><thead><tr>${h.map(c=>cell(c,"th")).join("")}</tr></thead><tbody>${r.map(row=>`<tr>${row.map(c=>cell(c,"td")).join("")}</tr>`).join("")}</tbody></table></div>`; }
+  return "";
+}
+function manHTML(){
+  const ds=state.manual.slice().sort((a,b)=>(a.order||0)-(b.order||0)||String(a.title).localeCompare(b.title));
+  if(!ds.some(d=>d.id===ui.manDoc)) ui.manDoc=ds[0]?ds[0].id:null;
+  const d=ds.find(x=>x.id===ui.manDoc);
+  const up=`<label class="btn small">새 문서 · 새 버전 올리기<input type="file" id="manUp" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden></label>`;
+  const head=`<div class="man-head"><h3 style="margin:0">운영 문서</h3><div class="row">${up}${d&&d.fileId?`<button class="btn small" data-mdl>원본 받기 (.docx)</button>`:""}${d?`<button class="btn small" data-mprint>인쇄</button>`:""}</div></div>
+    ${ds.length>1?`<div class="seg" role="group" aria-label="문서 고르기" style="margin-top:10px;max-width:100%;overflow-x:auto">${ds.map(x=>`<button data-mdoc="${x.id}" aria-pressed="${x.id===ui.manDoc}">${esc(x.title||x.name)}</button>`).join("")}</div>`:""}`;
+  if(!d) return `<div class="panel">${head}${loadingOrEmpty("manual","운영 시나리오나 교육 문서(.docx)를 올리면 여기서 바로 읽을 수 있어요.")}</div>`;
+  const blocks=manCache[d.jsonId];
+  if(!blocks){ manBlocks(d); return `<div class="panel">${head}<div class="empty">문서를 여는 중…</div></div>`; }
+  const S=manSplit(blocks), q=(ui.manQ||"").trim();
+  // 큰 제목(h1) → 작은 제목(h2) 단위로 묶어서 검색
+  const secs=[]; let cur=null;
+  S.body.forEach(b=>{ if(b.t==="h1"||b.t==="h2"||!cur){ cur={h:b.t==="h1"||b.t==="h2"?b:null,items:[],h1:b.t==="h1"?b.x:(cur?cur.h1:"")}; secs.push(cur); if(cur.h) return; } cur.items.push(b); });
+  const txt=b=>b.x||(b.rows?b.rows.flat().map(c=>c.x??c).join(" "):"");
+  const lq=q.toLowerCase(), hit=s=>!lq||(s.h&&s.h.x.toLowerCase().includes(lq))||s.items.some(b=>txt(b).toLowerCase().includes(lq))||(s.h&&s.h.t==="h2"&&s.h1.toLowerCase().includes(lq));
+  let n=0; const shown=secs.map(s=>{ const ok=hit(s); if(ok&&q) n++; return {s,ok}; });
+  // 검색 중엔 h1 머리는 그 아래 하나라도 맞으면 보여 줘요
+  shown.forEach((o,i)=>{ if(q&&o.s.h&&o.s.h.t==="h1"&&!o.ok){ for(let j=i+1;j<shown.length&&!(shown[j].s.h&&shown[j].s.h.t==="h1");j++) if(shown[j].ok){ o.ok=true; o.headOnly=!o.s.items.some(b=>txt(b).toLowerCase().includes(lq)); break; } } });
+  const toc=S.body.filter(b=>b.t==="h1");
+  return `<div class="panel">${head}
+    <div class="man-intro">${S.eb?`<div class="eb">${esc(S.eb)}</div>`:""}<h2>${esc(S.title||d.title)}</h2>${S.sub.map(l=>`<div class="ln">${esc(l)}</div>`).join("")}
+      <div class="ln small">${manVer(d.name)?`${esc(manVer(d.name))} · `:""}올린 날 ${esc(d.at||"")}</div></div>
+    ${S.notes.map(x=>manBlockHTML({t:"note",x})).join("")}
+    <div class="man-tools"><input type="search" id="manQ" placeholder="찾기 (예: 미아, 휴게, 정전)" value="${esc(ui.manQ||"")}">${q?`<span class="small muted">${n}곳</span>`:""}</div>
+    ${q?"":`<div class="man-toc">${toc.map((b,i)=>`<button data-mtoc="${S.body.indexOf(b)}">${esc(b.x)}</button>`).join("")}</div>`}
+    <div class="man-body">${shown.map(({s,ok,headOnly})=>`<section class="man-sec ${ok?"":"hide"}">${s.h?(s.h.t==="h1"?`<h2 class="mh1" id="mh-${S.body.indexOf(s.h)}">${manInline(s.h.x,q)}</h2>`:`<h3 class="mh2" id="mh-${S.body.indexOf(s.h)}">${manInline(s.h.x,q)}</h3>`):""}
+      ${headOnly?"":(()=>{ let h="", ul=[]; const fl=()=>{ if(ul.length){ h+=`<ul>${ul.join("")}</ul>`; ul=[]; } };
+        s.items.forEach(b=>{ if(b.t==="li"){ ul.push(`<li><span class="bl">${esc(b.b||"•")}</span>${manInline(b.x,q)}</li>`); } else { fl(); h+=b.t==="h3"?`<h4>${manInline(b.x,q)}</h4>`:manBlockHTML(b,q); } }); fl(); return h; })()}</section>`).join("")}
+      ${q&&!n?`<div class="empty">"${esc(q)}"(이)가 들어간 곳이 없어요.</div>`:""}</div></div>`;
+}
+async function addManual(file){
+  if(!/\.docx$/i.test(file.name)){ toast("워드 파일(.docx)만 올릴 수 있어요."); return; }
+  toast("문서를 읽는 중…");
+  let blocks; try{ blocks=await parseDocx(file); }catch(e){ console.error(e); toast("문서를 읽지 못했어요. .docx 파일인지 확인해 주세요."); return; }
+  const S=manSplit(blocks), title=(S.title||file.name.replace(/\.docx$/i,"")).trim();
+  const old=state.manual.find(x=>x.title===title);
+  const json=new File([JSON.stringify(blocks)],"manual.json",{type:"application/json"});
+  const [jsonId,fileId]=[await storeFile(json,true),await storeFile(file,true)];
+  if(!jsonId){ return; }
+  manCache[jsonId]=blocks;
+  const doc={id:old?old.id:uid("o"),title,name:file.name,at:ymd(new Date()),jsonId,fileId:fileId||"",order:old?old.order:(Math.max(0,...state.manual.map(x=>x.order||0))+1)};
+  save("manual",doc,true);
+  if(old){ if(old.jsonId) remove("files",old.jsonId); if(old.fileId) remove("files",old.fileId); }
+  ui.manDoc=doc.id; try{localStorage.setItem("mb-mandoc",doc.id)}catch(e){}
+  toast(old?`${title} 새 버전으로 바꿨어요`:`${title} 올렸어요`); render();
+}
+function bindMan(){
+  const up=$("#manUp"); if(up) up.onchange=async e=>{ for(const f of Array.from(e.target.files||[])) await addManual(f); e.target.value=""; };
+  const d=state.manual.find(x=>x.id===ui.manDoc);
+  document.querySelectorAll("[data-mdoc]").forEach(b=>b.onclick=()=>{ ui.manDoc=b.dataset.mdoc; ui.manQ=""; try{localStorage.setItem("mb-mandoc",ui.manDoc)}catch(e){} render(); window.scrollTo({top:0}); });
+  const dl=document.querySelector("[data-mdl]"); if(dl) dl.onclick=()=>downloadFile(d.fileId,d.name);
+  const pr=document.querySelector("[data-mprint]"); if(pr) pr.onclick=()=>window.print();
+  document.querySelectorAll("[data-mtoc]").forEach(b=>b.onclick=()=>{ const h=document.getElementById("mh-"+b.dataset.mtoc); if(h) h.scrollIntoView({behavior:"smooth",block:"start"}); });
+  document.querySelectorAll("[data-mgo]").forEach(b=>b.onclick=()=>{ ui.tab=b.dataset.mgo; render(); window.scrollTo({top:0}); });
+  const qi=$("#manQ"); if(qi){ qi.oninput=()=>{ clearTimeout(qi._t); qi._t=setTimeout(()=>{ const pos=qi.selectionStart; ui.manQ=qi.value; render(); const n=$("#manQ"); if(n){ n.focus(); try{n.setSelectionRange(pos,pos);}catch(e){} } },250); }; }
 }
 
 /* ----- 일정 (시공 공정표) ----- */
