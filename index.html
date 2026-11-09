@@ -148,6 +148,8 @@ td.r,th.r{text-align:right}
 .addform.three{grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto}
 .addform.six{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,2fr) auto}
 @media (max-width:720px){.addform,.addform.three,.addform.six{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.toastbtn{background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0 0 0 6px}
+.idelrow{justify-content:flex-end;margin-bottom:8px}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;z-index:50}
 @media (prefers-reduced-motion:no-preference){.mk{transition:box-shadow .15s}}
 .auth{max-width:420px;margin:8vh auto 0;display:flex;flex-direction:column;gap:12px}
@@ -539,7 +541,7 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const won=n=>n?Number(n).toLocaleString("ko-KR"):"";
 const uid=p=>p+"-"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const tcolor=t=>`var(${(TYPES[t]||TYPES.note).c})`;
-function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2200);}
+function toast(msg){if(undoToast._done) undoToast._done(); const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2200);}
 const pending={}, inflight={};
 const unsaved={}, unremoved={}; // 서버에 아직 안 들어간 저장·삭제 (10초 새로고침이 덮어쓰지 않게)
 const typing=()=>{const a=document.activeElement; return !!a&&$("#view").contains(a)&&(a.tagName==="TEXTAREA"||(a.tagName==="INPUT"&&!/^(checkbox|radio|file|button|submit)$/.test(a.type)));};
@@ -1717,7 +1719,7 @@ function photosHTML(i){
 }
 function candsHTML(i){
   const cs=i.cands||[];
-  return `${photosHTML(i)}${shopHTML(i)}<div class="drop" data-cdrop="${i.id}"><div class="row candadd"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요"><input class="cand-in" data-cnote placeholder="메모 (선택)"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
+  return `<div class="row idelrow"><button class="btn small danger" data-idel type="button">이 물품 삭제</button></div>${photosHTML(i)}${shopHTML(i)}<div class="drop" data-cdrop="${i.id}"><div class="row candadd"><input class="cand-in" data-cin placeholder="상품 링크를 붙여넣거나 끌어다 놓으세요"><input class="cand-in" data-cnote placeholder="메모 (선택)"><button class="btn primary" data-cadd type="button">후보 추가</button></div></div>
     ${cs.length?`<div class="cands">${cs.map(c=>`<div class="cand ${i.chosen===c.id?"chosen":""}" data-c="${c.id}">
       <div class="drop cimg" data-cimg title="사진을 끌어다 놓거나 눌러서 고르기">${c.image?`<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="cimg-hint">사진 바꾸기</span>`:`<div class="noimg small muted">${c.loading?"불러오는 중…":"사진 없음<br>끌어다 놓거나 눌러서 넣기"}</div>`}</div>
       <div class="t">${esc(c.title||c.url)}</div>
@@ -1756,7 +1758,7 @@ function itemsHTML(){
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
       <td style="min-width:160px"><input data-f="note" value="${esc(i.note||"")}"></td>
       <td><button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button></td>
-      <td><button class="x" data-del aria-label="삭제">${ui.confirmDel===i.id?"삭제?":"×"}</button></td></tr>
+      <td><button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></td></tr>
       ${open?`<tr class="cand-row noprint" data-id="${i.id}"><td colspan="${NC}">${candsHTML(i)}</td></tr>`:""}`;}).join("")}
     </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:"이 라벨에 묶인 물품이 없어요."}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
   const kinds=`<div class="seg kindseg" role="group" aria-label="구분" style="margin-bottom:10px">${[["","전체"]].concat(ITEM_KIND.map(k=>[k,k])).map(([k,n])=>`<button data-kf="${k}" aria-pressed="${(kf||"")===k}">${n} <span class="num">${k?base.filter(i=>i.kind===k).length:base.length}</span></button>`).join("")}</div>`;
@@ -1881,6 +1883,24 @@ async function addQuoteFiles(files){
   }
 }
 /* 물품 사진: 작은 미리보기는 물품에, 원본(큰 사진은 줄여서)은 파일로 */
+// 물품 삭제: 바로 지우고 8초 동안 '되돌리기'를 보여줘요. 되돌리지 않으면 올린 사진 파일도 정리해요.
+function deleteItem(id){
+  const it=curItem(id); if(!it) return;
+  if(ui.openItem===id) ui.openItem=null;
+  remove("items",id);
+  undoToast(`'${it.name||"이름 없는 물품"}' 삭제했어요`,()=>save("items",it),()=>{
+    if(curItem(id)) return;
+    (it.photos||[]).forEach(p=>{ if(p.fileId) remove("files",p.fileId); });
+  });
+}
+function undoToast(msg,undo,done){
+  const t=$("#toast"); clearTimeout(toast._t); if(undoToast._done) undoToast._done();
+  t.textContent=msg+" "; const b=document.createElement("button"); b.type="button"; b.className="toastbtn"; b.textContent="되돌리기"; t.append(b); t.hidden=false;
+  const fin=()=>{ undoToast._done=null; clearTimeout(toast._t); t.hidden=true; };
+  undoToast._done=()=>{ fin(); if(done) done(); };
+  b.onclick=()=>{ fin(); undo(); toast("되돌렸어요"); };
+  toast._t=setTimeout(()=>undoToast._done&&undoToast._done(),8000);
+}
 async function addItemPhotos(itemId,files,main){
   const imgs=[...files].filter(f=>/^image\//.test(f.type)); if(!imgs.length){ toast("사진 파일만 넣을 수 있어요."); return; }
   const add=[];
@@ -1933,13 +1953,14 @@ function bindItems(){
       if(k==="kind"&&v===OWNED){ patch.quote=""; if(PRE_STATUS.includes(cur.status||"")) patch.status="준비 완료"; } // 보유는 견적 없고 이미 준비됨
       if(k==="quote"&&v&&!cur.vendor){ const q=state.quotes.find(x=>x.id===v); if(q&&q.vendor) patch.vendor=q.vendor; } // 견적 고르면 업체도 채움
       save("items",{...cur,...patch}); });
-    tr.querySelector("[data-del]").onclick=()=>{ if(ui.confirmDel===it().id){ui.confirmDel=null;remove("items",it().id);} else {ui.confirmDel=it().id;render();} };
+    tr.querySelector("[data-del]").onclick=()=>deleteItem(tr.dataset.id);
     tr.querySelector("[data-open]").onclick=()=>{ui.openItem=ui.openItem===it().id?null:it().id;render(); const ci=document.querySelector(".cand-row [data-cin]"); if(ci) ci.focus();};
     dropZone(tr.querySelector("[data-thumb]"),{onFiles:fs=>addItemPhotos(tr.dataset.id,fs,true),onText:t=>{ if(/^https?:\/\//.test(t)) save("items",{...it(),image:t}); },accept:"image/*"}); // 다른 사이트 사진을 끌어와도 돼요
   });
   document.querySelectorAll("tr.cand-row").forEach(tr=>{
     const id=tr.dataset.id, inp=tr.querySelector("[data-cin]");
     bindShop(tr,id);
+    const idel=tr.querySelector("[data-idel]"); if(idel) idel.onclick=()=>deleteItem(id);
     const note=tr.querySelector("[data-cnote]");
     const go=()=>{ const v=inp.value; if(!v.trim()){ toast("링크를 넣어 주세요"); return; } const m=note.value; inp.value=""; note.value=""; addCand(id,v,m); };
     tr.querySelector("[data-cadd]").onclick=go;
