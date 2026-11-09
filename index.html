@@ -149,6 +149,9 @@ td.r,th.r{text-align:right}
 .addform.six{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,2fr) auto}
 @media (max-width:720px){.addform,.addform.three,.addform.six{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .toastbtn{background:none;border:0;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;padding:0 0 0 6px}
+.selbar{gap:10px;align-items:center;margin-bottom:8px;padding:6px 10px;border-radius:8px;background:var(--soft)}
+.shopr{position:relative}
+.shopx{position:absolute;top:4px;right:4px;background:var(--panel);border-radius:50%;width:22px;height:22px;z-index:1}
 .idelrow{justify-content:flex-end;margin-bottom:8px}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;z-index:50}
 @media (prefers-reduced-motion:no-preference){.mk{transition:box-shadow .15s}}
@@ -1742,10 +1745,14 @@ function itemsHTML(){
   const sum=pred=>all.filter(pred).reduce((s,i)=>s+amt(i),0);
   const total=k=>base.filter(i=>i.kind===k).reduce((s,i)=>s+amt(i),0);
   const scls=s=>ITEM_DONE.includes(s)?"s-done":(s==="필요"?"s-need":"s-mid");
-  const NC=14;
-  const body = rows.length? `<div class="tbl-wrap"><table><thead><tr><th>사진</th><th>품목</th><th>견적</th><th>구분</th><th class="r">수량</th><th class="r">도면</th><th class="r">단가(원)</th><th class="r">금액(원)</th><th>업체</th><th>필요일</th><th>상태</th><th>메모</th><th>후보</th><th></th></tr></thead><tbody>
+  const NC=15;
+  if(!ui.isel) ui.isel=new Set();
+  for(const x of [...ui.isel]) if(!all.some(i=>i.id===x)) ui.isel.delete(x);
+  const nsel=ui.isel.size, allOn=rows.length&&rows.every(i=>ui.isel.has(i.id));
+  const selbar=nsel?`<div class="row selbar noprint"><b><span class="num">${nsel}</span>개 선택</b><button class="btn small danger" id="isel-del" type="button">선택한 물품 삭제</button><button class="linkbtn small" id="isel-none" type="button">선택 해제</button></div>`:"";
+  const body = rows.length? `${selbar}<div class="tbl-wrap"><table><thead><tr><th class="noprint"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th><th>품목</th><th>견적</th><th>구분</th><th class="r">수량</th><th class="r">도면</th><th class="r">단가(원)</th><th class="r">금액(원)</th><th>업체</th><th>필요일</th><th>상태</th><th>메모</th><th>후보</th><th></th></tr></thead><tbody>
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
-      return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
+      return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="noprint"><input type="checkbox" data-isel aria-label="선택" ${ui.isel.has(i.id)?"checked":""}></td><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
       ${i.kind===OWNED?`<td class="muted small">필요 없음</td>`:`<td style="min-width:120px"><select data-f="quote" class="qsel" style="--qc:${qq?qcolor(qq):"transparent"}"><option value="">없음</option>${state.quotes.map(x=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(x.vendor||"이름 없는 견적")}</option>`).join("")}</select></td>`}
       <td><select data-f="kind">${ITEM_KIND.map(k=>`<option ${i.kind===k?"selected":""}>${k}</option>`).join("")}</select></td>
@@ -1824,15 +1831,16 @@ function shopHTML(i){
   const stat=st?`<div class="shopstat small"><span>최저 <b class="num">${won(st.min)}</b>원</span><span>보통 <b class="num">${won(st.lo)}~${won(st.hi)}</b>원</span><span>가운데값 <b class="num">${won(st.med)}</b>원</span><span>최고 <b class="num">${won(st.max)}</b>원</span>
       ${qty?`<span>× ${qty}개 ≈ <b class="num">${won(st.med*qty)}</b>원</span>`:""}<span class="muted">${st.n}개 상품 기준${st.cut?` · 가격 차이가 너무 큰 ${st.cut}개는 뺐어요`:""} · 배송비 별도</span>
       ${i.kind!==OWNED?`<button class="btn small" data-sprice="${st.min}" type="button">최저가를 단가로</button><button class="btn small" data-sprice="${st.med}" type="button">가운데값을 단가로</button>`:""}</div>`:"";
-  let list=all.map((x,k)=>({...x,k}));
+  const hid=S.hide||[];
+  let list=all.map((x,k)=>({...x,k})).filter(x=>!hid.includes(x.k));
   if(S.src) list=list.filter(x=>shopGroup(x)===S.src);
   if(S.sort==="low") list.sort((a,b)=>(a.price||9e15)-(b.price||9e15)); else if(S.sort==="high") list.sort((a,b)=>b.price-a.price);
   else list.sort((a,b)=>a.k-b.k); // 관련도 순 (원래 순서)
   const have=new Set((i.cands||[]).map(c=>c.url));
   const bar=`<div class="shopbar small"><div class="seg" role="group" aria-label="쇼핑몰">${[["","전체",all.length]].concat(Object.entries(SHOP_G).map(([k,n])=>[k,n,all.filter(x=>shopGroup(x)===k).length]).filter(z=>z[2])).map(([k,n,c])=>`<button type="button" data-ssrc="${k}" aria-pressed="${(S.src||"")===k}">${n} <span class="num">${c}</span></button>`).join("")}</div>
     <div class="seg" role="group" aria-label="정렬">${[["","관련도"],["low","낮은 가격"],["high","높은 가격"]].map(([k,n])=>`<button type="button" data-ssort="${k}" aria-pressed="${(S.sort||"")===k}">${n}</button>`).join("")}</div>
-    ${why("쇼핑 검색",nv)} ${cp.ok||cp.error==="no-key"?"":why("쿠팡",cp)} ${shopLinks(S.q)}</div>`;
-  const cards=list.length?`<div class="cands">${list.map(x=>`<div class="cand shopr" data-sk="${x.k}">
+    ${why("쇼핑 검색",nv)} ${cp.ok||cp.error==="no-key"?"":why("쿠팡",cp)} ${shopLinks(S.q)}<button class="btn small" data-sreset type="button">검색 결과 지우기</button></div>`;
+  const cards=list.length?`<div class="cands">${list.map(x=>`<div class="cand shopr" data-sk="${x.k}"><button class="x shopx" data-shide type="button" aria-label="이 결과 빼기" title="이 결과 빼기">×</button>
       ${x.image?`<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<div class="noimg small muted">사진 없음</div>`}
       <div class="t" title="${esc(x.title)}">${esc(x.title)}</div>
       <div class="small muted"><span class="pill src">${SHOP_G[shopGroup(x)]}</span> ${esc(x.mall||"")}${x.rocket?" · 로켓배송":""}</div>
@@ -1854,9 +1862,11 @@ function bindShop(tr,id){
   tr.querySelectorAll("[data-ssrc]").forEach(b=>b.onclick=()=>{ S().src=b.dataset.ssrc; render(); });
   tr.querySelectorAll("[data-ssort]").forEach(b=>b.onclick=()=>{ S().sort=b.dataset.ssort; render(); });
   const cl=tr.querySelector("[data-sclear]"); if(cl) cl.onclick=()=>{ delete ui.shop[id]; render(); };
+  const rs=tr.querySelector("[data-sreset]"); if(rs) rs.onclick=()=>{ delete ui.shop[id]; render(); };
   tr.querySelectorAll("[data-sprice]").forEach(b=>b.onclick=()=>{ save("items",{...curItem(id),price:b.dataset.sprice}); toast("단가에 넣었어요"); });
   tr.querySelectorAll(".shopr").forEach(card=>{ const x=()=>shopItemOf(id,+card.dataset.sk);
     const a=card.querySelector("[data-sadd]"); if(a) a.onclick=()=>addCandFrom(id,x());
+    card.querySelector("[data-shide]").onclick=()=>{ const s=S(); s.hide=[...(s.hide||[]),+card.dataset.sk]; render(); };
     card.querySelector("[data-ssim]").onclick=()=>{ const r=x(); shopSearch(id,shopQuery(r.title),{title:r.title,price:r.price}); }; });
 }
 async function addCand(itemId,raw,memo){
@@ -1884,14 +1894,14 @@ async function addQuoteFiles(files){
 }
 /* 물품 사진: 작은 미리보기는 물품에, 원본(큰 사진은 줄여서)은 파일로 */
 // 물품 삭제: 바로 지우고 8초 동안 '되돌리기'를 보여줘요. 되돌리지 않으면 올린 사진 파일도 정리해요.
-function deleteItem(id){
-  const it=curItem(id); if(!it) return;
-  if(ui.openItem===id) ui.openItem=null;
-  remove("items",id);
-  undoToast(`'${it.name||"이름 없는 물품"}' 삭제했어요`,()=>save("items",it),()=>{
-    if(curItem(id)) return;
+function deleteItems(ids){
+  const its=ids.map(curItem).filter(Boolean); if(!its.length) return;
+  its.forEach(it=>{ if(ui.openItem===it.id) ui.openItem=null; if(ui.isel) ui.isel.delete(it.id); remove("items",it.id); });
+  const msg=its.length===1?`'${its[0].name||"이름 없는 물품"}' 삭제했어요`:`물품 ${its.length}개 삭제했어요`;
+  undoToast(msg,()=>its.forEach(it=>save("items",it)),()=>its.forEach(it=>{
+    if(curItem(it.id)) return;
     (it.photos||[]).forEach(p=>{ if(p.fileId) remove("files",p.fileId); });
-  });
+  }));
 }
 function undoToast(msg,undo,done){
   const t=$("#toast"); clearTimeout(toast._t); if(undoToast._done) undoToast._done();
@@ -1947,20 +1957,24 @@ function bindItems(){
     card.querySelector("[data-qcolor]").onclick=()=>save("quotes",{...q(),color:((q().color||0)+1)%LABEL_C.length});
     card.querySelector("[data-qdel]").onclick=()=>{ const x=q(); if(ui.confirmDel===x.id){ui.confirmDel=null; if(ui.quoteFilter===x.id) ui.quoteFilter=null; if(x.fileId) remove("files",x.fileId); remove("quotes",x.id);} else {ui.confirmDel=x.id;render();} };
   });
+  const ia=$("#isel-all"); if(ia) ia.onchange=()=>{ const ids=[...document.querySelectorAll("tr[data-id]:not(.cand-row)")].map(t=>t.dataset.id); ids.forEach(x=>ia.checked?ui.isel.add(x):ui.isel.delete(x)); render(); };
+  const idl=$("#isel-del"); if(idl) idl.onclick=()=>{ const ids=[...ui.isel]; if(ids.length>1&&!confirm(`선택한 물품 ${ids.length}개를 삭제할까요?`)) return; ui.isel.clear(); deleteItems(ids); };
+  const isn=$("#isel-none"); if(isn) isn.onclick=()=>{ ui.isel.clear(); render(); };
   document.querySelectorAll("tr[data-id]:not(.cand-row)").forEach(tr=>{
     const it=()=>curItem(tr.dataset.id);
     tr.querySelectorAll("[data-f]").forEach(el=>el.onchange=()=>{ const k=el.dataset.f, v=el.value.trim(), cur=it(), patch={[k]:v};
       if(k==="kind"&&v===OWNED){ patch.quote=""; if(PRE_STATUS.includes(cur.status||"")) patch.status="준비 완료"; } // 보유는 견적 없고 이미 준비됨
       if(k==="quote"&&v&&!cur.vendor){ const q=state.quotes.find(x=>x.id===v); if(q&&q.vendor) patch.vendor=q.vendor; } // 견적 고르면 업체도 채움
       save("items",{...cur,...patch}); });
-    tr.querySelector("[data-del]").onclick=()=>deleteItem(tr.dataset.id);
+    tr.querySelector("[data-del]").onclick=()=>deleteItems([tr.dataset.id]);
+    tr.querySelector("[data-isel]").onchange=e=>{ e.target.checked?ui.isel.add(tr.dataset.id):ui.isel.delete(tr.dataset.id); render(); };
     tr.querySelector("[data-open]").onclick=()=>{ui.openItem=ui.openItem===it().id?null:it().id;render(); const ci=document.querySelector(".cand-row [data-cin]"); if(ci) ci.focus();};
     dropZone(tr.querySelector("[data-thumb]"),{onFiles:fs=>addItemPhotos(tr.dataset.id,fs,true),onText:t=>{ if(/^https?:\/\//.test(t)) save("items",{...it(),image:t}); },accept:"image/*"}); // 다른 사이트 사진을 끌어와도 돼요
   });
   document.querySelectorAll("tr.cand-row").forEach(tr=>{
     const id=tr.dataset.id, inp=tr.querySelector("[data-cin]");
     bindShop(tr,id);
-    const idel=tr.querySelector("[data-idel]"); if(idel) idel.onclick=()=>deleteItem(id);
+    const idel=tr.querySelector("[data-idel]"); if(idel) idel.onclick=()=>deleteItems([id]);
     const note=tr.querySelector("[data-cnote]");
     const go=()=>{ const v=inp.value; if(!v.trim()){ toast("링크를 넣어 주세요"); return; } const m=note.value; inp.value=""; note.value=""; addCand(id,v,m); };
     tr.querySelector("[data-cadd]").onclick=go;
