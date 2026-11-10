@@ -1853,7 +1853,7 @@ function quotesHTML(sum){
   return `<div class="panel" style="margin-bottom:16px"><h3>견적서</h3>
     <div class="drop noprint" id="quoteDrop"><b>견적서 파일을 여기로 끌어다 놓으세요</b><br><span class="small">PDF·사진 · 눌러서 고를 수도 있어요 · 회사명, 계좌, 금액, 연락처를 자동으로 읽어요 · 파일당 ${mb(MAX_FILE)}MB까지</span></div>
     ${cards?`<div class="qgrid">${cards}</div>`:""}
-    <p class="small muted" style="margin:8px 0 0">자동으로 읽은 내용은 꼭 한 번 확인해 주세요. 틀린 칸은 눌러서 바로 고치면 돼요. 견적서마다 라벨이 생기고, 아래 물품 표에서 '견적' 칸으로 묶을 수 있어요.</p></div>`;
+    <p class="small muted" style="margin:8px 0 0">자동으로 읽은 내용은 꼭 한 번 확인해 주세요. 틀린 칸은 눌러서 바로 고치면 돼요. 견적서마다 라벨이 생기고, 아래 물품 표의 '업체' 칸에서 이 업체를 고르면 그 물품이 이 견적서로 묶여요.</p></div>`;
 }
 function photosHTML(i){
   const ps=i.photos||[];
@@ -1896,6 +1896,12 @@ function sortItems(rows,qtyOf,amt){
 // 물품이 쓰이는 버전 (전시·VIP·프라이빗 나이트, 여러 개 가능). 비어 있으면 전시
 const itemVers=i=>Array.isArray(i.vers)&&i.vers.length?i.vers:["exh"];
 try{ ui.itemVer=localStorage.getItem("mb-iver")||""; }catch(e){ ui.itemVer=""; }
+// 업체: 올린 견적서의 업체에서 고르면 그 견적서와 연결돼요 (직접 입력도 가능)
+function vendorSel(i,qq){
+  const opts=state.quotes.map(x=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(x.vendor||"이름 없는 견적")}</option>`).join("");
+  const loose=!qq&&i.vendor?`<option value="__txt" selected>${esc(i.vendor)}</option>`:"";
+  return `<select data-vq class="qsel" style="--qc:${qq?qcolor(qq):"transparent"}" title="${state.quotes.length?"올린 견적서의 업체에서 골라요":"견적서를 올리면 그 업체가 여기 나와요"}"><option value="" ${!qq&&!i.vendor?"selected":""}>업체 없음</option>${loose}${opts}<option value="__new">직접 입력…</option></select>`;
+}
 function itemsHTML(){
   const iv=ui.itemVer||"", counts=countBy(null,iv||"exh"); // '도면' 수량은 고른 버전의 배치도 기준 (전체면 전시)
   const all=state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0)).filter(i=>!iv||itemVers(i).includes(iv));
@@ -1910,23 +1916,21 @@ function itemsHTML(){
   const sum=pred=>all.filter(pred).reduce((s,i)=>s+amt(i),0);
   const total=k=>base.filter(i=>i.kind===k).reduce((s,i)=>s+amt(i),0);
   const scls=s=>ITEM_DONE.includes(s)?"s-done":(s==="필요"?"s-need":"s-mid");
-  const NC=14;
+  const NC=12;
   if(!ui.isel) ui.isel=new Set();
   for(const x of [...ui.isel]) if(!all.some(i=>i.id===x)) ui.isel.delete(x);
   const nsel=ui.isel.size, allOn=rows.length&&rows.every(i=>ui.isel.has(i.id));
   const selbar=nsel?`<div class="row selbar noprint"><b><span class="num">${nsel}</span>개 선택</b><button class="btn small danger" id="isel-del" type="button">선택한 물품 삭제</button><button class="linkbtn small" id="isel-none" type="button">선택 해제</button></div>`:"";
-  const body = rows.length? `${selbar}<div class="tbl-wrap"><table class="itbl"><thead><tr><th class="noprint ck"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}<th>견적</th>${th("kind","구분")}<th>버전</th>${th("qty","수량","r")}<th class="r">도면</th>${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}${th("status","상태")}<th>메모</th><th class="acts noprint">후보 · 삭제</th></tr></thead><tbody>
+  const body = rows.length? `${selbar}<div class="tbl-wrap"><table class="itbl"><thead><tr><th class="noprint ck"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}${th("kind","구분")}<th>버전</th>${th("qty","수량","r")}${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}${th("status","상태")}<th>메모</th><th class="acts noprint">후보 · 삭제</th></tr></thead><tbody>
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
       return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="noprint ck"><input type="checkbox" data-isel aria-label="선택" ${ui.isel.has(i.id)?"checked":""}></td><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
-      ${i.kind===OWNED?`<td class="muted small">필요 없음</td>`:`<td style="min-width:92px"><select data-f="quote" class="qsel" style="--qc:${qq?qcolor(qq):"transparent"}"><option value="">없음</option>${state.quotes.map(x=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(x.vendor||"이름 없는 견적")}</option>`).join("")}</select></td>`}
       <td><select data-f="kind">${ITEM_KIND.map(k=>`<option ${i.kind===k?"selected":""}>${k}</option>`).join("")}</select></td>
       <td><div class="vtog" role="group" aria-label="쓰이는 버전">${VER4.map(([k,n])=>`<button type="button" data-ivt="${k}" aria-pressed="${itemVers(i).includes(k)}" title="${n}">${k==="night"?"나이트":n}</button>`).join("")}</div></td>
       <td class="r" style="min-width:60px;width:60px"><input class="num" data-f="qty" type="number" min="0" value="${esc(i.qty||"")}" placeholder="${auto??""}" style="text-align:right"></td>
-      <td class="r num">${auto===null?`<span class="muted">–</span>`:`<button class="linkbtn num" data-focus="${esc(i.link)}" title="도면에서 보기">${auto}</button>`}</td>
       ${i.kind===OWNED?`<td class="r muted">–</td><td class="r muted">–</td>`:`<td class="r" style="min-width:90px;width:90px"><input class="num" data-f="price" type="number" min="0" value="${esc(i.price||"")}" style="text-align:right"></td>
       <td class="r num">${won(q*Number(i.price||0))}</td>`}
-      <td style="min-width:84px"><input data-f="vendor" value="${esc(i.vendor||"")}"></td>
+      <td style="min-width:110px">${vendorSel(i,qq)}</td>
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
       <td style="min-width:110px"><input data-f="note" value="${esc(i.note||"")}" title="${esc(i.note||"")}"></td>
       <td class="acts noprint"><button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></td></tr>
@@ -1946,7 +1950,7 @@ function itemsHTML(){
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">구매·대여 물품</h3>
       <div class="row small"><span>구매 <b class="num">${won(total("구매"))||0}</b>원</span><span>대여 <b class="num">${won(total("대여"))||0}</b>원</span><span>제작 <b class="num">${won(total("제작"))||0}</b>원</span></div></div>
     ${verbar}${kinds}${labels}${rows.length>1?sortbar:""}${body}
-    <p class="small muted" style="margin:8px 0 0">'도면' 칸은 배치도에 찍은 수량이에요. 수량을 비워 두면 도면 수량으로 금액을 계산해요. 사진 칸에 사진을 끌어다 놓을 수 있어요.</p>
+    <p class="small muted" style="margin:8px 0 0">수량을 비워 두면 배치도에 찍은 개수(수량 칸의 흐린 숫자)로 금액을 계산해요. 업체는 올린 견적서의 업체에서 고르면 그 견적서와 묶이고, 없으면 '직접 입력'으로 적어요. 사진 칸에 사진을 끌어다 놓을 수 있어요.</p>
     <form class="addform" id="addItem"><label class="f">품목<input id="ni-name" placeholder="예: 무전기 이어폰" required></label>
       <label class="f">구분<select id="ni-kind">${ITEM_KIND.map(k=>`<option ${kf===k?"selected":""}>${k}</option>`).join("")}</select></label>
       <label class="f">수량<input id="ni-qty" type="number" min="0"></label>
@@ -2135,6 +2139,10 @@ function bindItems(){
       if(k==="quote"&&v&&!cur.vendor){ const q=state.quotes.find(x=>x.id===v); if(q&&q.vendor) patch.vendor=q.vendor; } // 견적 고르면 업체도 채움
       save("items",{...cur,...patch}); });
     tr.querySelector("[data-del]").onclick=()=>deleteItems([tr.dataset.id]);
+    { const vq=tr.querySelector("[data-vq]"); if(vq) vq.onchange=()=>{ const v=vq.value, cur=it();
+      if(v==="__txt") return;
+      if(v==="__new"){ const n=(prompt("업체 이름을 적어 주세요",cur.vendor||"")||"").trim(); if(!n){ render(); return; } save("items",{...cur,quote:"",vendor:n}); return; }
+      const q=state.quotes.find(x=>x.id===v); save("items",{...cur,quote:q?q.id:"",vendor:q?(q.vendor||""):""}); }; }
     tr.querySelectorAll("[data-ivt]").forEach(b=>b.onclick=()=>{ const cur=it(), v=itemVers(cur), k=b.dataset.ivt;
       const nv=v.includes(k)?v.filter(x=>x!==k):[...v,k]; if(!nv.length){ toast("버전을 하나는 골라 주세요"); return; }
       save("items",{...cur,vers:VER4.map(x=>x[0]).filter(x=>nv.includes(x))}); });
