@@ -167,7 +167,7 @@ th.r .thsort{width:100%;text-align:right}
 .t3-stage canvas{display:block;width:100%;height:100%;touch-action:none}
 .t3-labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .t3-tag{position:absolute;transform:translate(-50%,-100%);white-space:nowrap;font-size:11.5px;font-weight:600;padding:3px 7px;border-radius:6px;background:var(--t-staff);color:var(--panel);box-shadow:0 1px 3px var(--shadow)}
-.t3-tag.cover{background:var(--warn)} .t3-tag.empty{background:var(--bad)} .t3-tag.none{background:var(--muted)}
+.t3-tag.k-cover{background:var(--warn)} .t3-tag.k-empty{background:var(--bad)} .t3-tag.k-none{background:var(--muted)}
 .t3-tag small{font-weight:500;opacity:.9;margin-left:4px}
 .t3-float{position:absolute;z-index:4;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px var(--shadow)}
 .t3-legend{left:10px;top:10px;padding:8px 10px;width:200px;max-height:calc(100% - 20px);overflow:auto}
@@ -186,12 +186,35 @@ th.r .thsort{width:100%;text-align:right}
 .t3-week div{text-align:center;font-size:11px;padding:4px 0;border-radius:5px;background:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .t3-week div b{display:block;font-size:10.5px;color:var(--muted);font-weight:500}
 .t3-week div.today{outline:2px solid var(--brand)} .t3-week div.cov{color:var(--warn);font-weight:700} .t3-week div.gap{color:var(--bad)}
+.t3-exitwalk{position:absolute;z-index:5;right:10px;top:10px}
+.t3-tour{left:50%;transform:translateX(-50%);bottom:10px;width:min(600px,calc(100% - 20px));max-height:60%;overflow:auto;padding:12px 14px;display:grid;gap:6px}
+.t3-tprog{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);font-family:var(--f-num)}
+.t3-tbar{flex:1;height:4px;border-radius:4px;background:var(--soft);overflow:hidden}
+.t3-tbar i{display:block;height:100%;background:var(--brand);transition:width .4s}
+.t3-tzone{font-size:12px;color:var(--muted);font-weight:600}
+.t3-ttitle{font-size:18px;font-weight:700;line-height:1.3}
+.t3-tdesc{margin:0;font-size:13.5px;line-height:1.6}
+.t3-tstaff{display:grid;gap:4px;padding:8px 10px;border-radius:8px;background:var(--soft)}
+.t3-tlab{font-size:11.5px;color:var(--muted)}
+.t3-trow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:13px}
+.t3-trow em{font-style:normal;color:var(--muted);font-size:12px;margin-left:auto;font-family:var(--f-num)}
+.t3-tdot{display:inline-block;flex:none;width:9px;height:9px;border-radius:50%;background:var(--t-staff)} .t3-tdot.k-cover{background:var(--warn)} .t3-tdot.k-empty{background:var(--bad)} .t3-tdot.k-none{background:var(--muted)}
+.t3-tour blockquote{margin:0;padding:6px 10px;border-left:3px solid var(--brand);font-size:14px;line-height:1.55;font-weight:500}
+.t3-tour blockquote::before{content:"스태프 안내 멘트";display:block;font-size:11px;color:var(--muted);font-weight:500;margin-bottom:2px}
+.t3-tctl{display:flex;flex-wrap:wrap;gap:6px}
+.t3-tctl .btn:disabled{opacity:.4;cursor:default}
+.t3-tctl .btn[aria-pressed="true"]{border-color:var(--brand);font-weight:600}
+.t3-tctl .t3-end{margin-left:auto}
+.t3-fade{position:absolute;inset:0;z-index:6;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .4s}
+.t3-fade.on{opacity:1}
 .t3-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px;white-space:nowrap}
 @media (max-width:640px){
   .t3-stage{height:70vh}
   .t3-legend{width:auto;left:8px;right:auto;top:8px}
   .t3-card{left:8px;right:8px;width:auto;top:auto;bottom:8px;max-height:55%}
   .t3-hint{display:none}
+  .t3-tour{left:6px;right:6px;width:auto;transform:none;bottom:6px;max-height:55%;padding:10px}
+  .t3-ttitle{font-size:16px} .t3-tdesc{font-size:13px}
 }
 .selbar{gap:10px;align-items:center;margin-bottom:8px;padding:6px 10px;border-radius:8px;background:var(--soft)}
 .shopr{position:relative}
@@ -1211,7 +1234,7 @@ function renderInner(){
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
 }
 /* ---------- 3D 보기 (board3d.js): 배치도 점·인력 배정·물품을 그대로 읽어서 그려요. 배치도에서 추가·이동하면 바로 바뀌어요 ---------- */
-const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=1"];
+const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=3"];
 let t3load=null;
 function load3d(){
   if(!t3load) t3load=T3_LIBS.reduce((p,src)=>p.then(()=>new Promise((ok,no)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=ok; sc.onerror=()=>no(new Error(src)); document.head.append(sc); })),Promise.resolve())
