@@ -691,7 +691,7 @@ async function loadAll(){
   if(guest){ setNotice(""); scheduleRender(); return; } /* 손님: 그래픽만 받아 오고, 아무것도 고치지 않아요 */
   const {data:ok}=await db.rpc("can_board");
   if(ok===false) setNotice("들어올 권한이 없어요. 팀 비밀번호가 바뀌었을 수 있어요. 로그아웃 후 다시 들어와 주세요.");
-  else { setNotice(""); [popOnStickers,syncRoster,seedGraphics,seedSched].forEach(f=>{ try{ f(); }catch(e){ console.error(f.name,e); } }); } // 하나가 실패해도 보드는 열리게
+  else { setNotice(""); [popOnStickers,oldKindsToMaker,syncRoster,seedGraphics,seedSched].forEach(f=>{ try{ f(); }catch(e){ console.error(f.name,e); } }); } // 하나가 실패해도 보드는 열리게
   scheduleRender();
 }
 // 배치도 자리 수가 바뀌면(처음 포함): 구역마다 고정 + 대체 인원을 채우고, 매일 자리가 다 차도록 휴무(연속 2일)를 짜요.
@@ -840,6 +840,8 @@ function syncRoster(){
     save("settings",{...nightCfg(),id:"cfg-night",extra:nightExtra()+1,extraFor:"v2:"+nightBase()},true); rosterChecked=false; syncRoster(); }
 }
 // 한 번만: 4층 바닥 스티커마다 신세계 POP를 바로 위에 하나씩 (처리한 스티커엔 popDone 표시, 이후 새 스티커엔 안 함)
+// 예전 구분(제작·협조 요청)은 '업체'로 바꿔요 (남은 게 있을 때만, 업체명은 비워 둠)
+function oldKindsToMaker(){ state.items.filter(i=>i.kind==="제작"||i.kind==="협조 요청").forEach(i=>save("items",{...i,kind:MAKER},true)); }
 function popOnStickers(){
   const st=state.markers.filter(m=>m.floor==="4F"&&m.type==="sticker"&&mver(m)==="exh");
   if(!st.length||st.some(m=>m.popDone)) return;
