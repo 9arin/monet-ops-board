@@ -10,6 +10,7 @@ Static single-page app served by GitHub Pages from a PUBLIC repo (no build step)
   - Boot section "boot (Supabase)": two ways in — team password (sent as `x-board-key` header, sha256 of the password sent as header, hash stored in localStorage `mb-teamkey-h`, 10s polling) or admin magic-link (realtime channel). `can_board()` RPC checks access.
   - `coverage()` computes per-day slot coverage (main / cover / ②③ merge / gap).
   - `render()` dispatches per tab; `mapCard()` draws mini floor plans; marker x/y are % of the plan image.
+- `board3d.js`: 3D tab (three.js r128 + OrbitControls from CDN, loaded lazily by `load3d()` in index.html, cache-bust `?v=` in `T3_LIBS`). Reads live data via `data3d()` (markers, items, `coverage()` week/slots) on every board render, rebuilds only when markers change. Wall boxes (`WALLS`) were traced from the floor plans; `MPP` = metres per plan pixel.
 - `config.js`: `window.BOARD_CONFIG = {SUPABASE_URL, SUPABASE_KEY}` (publishable key only — never a secret/service_role key).
 - `img/4F.jpg`, `img/3F.jpg`: floor plans (1600×1075).
 - `supabase/1_setup.sql`: table `board_docs(col, id, data jsonb)`, `board_members` allowlist, `is_member()`, RLS, realtime. Already applied.

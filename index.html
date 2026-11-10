@@ -157,6 +157,42 @@ th.r .thsort{width:100%;text-align:right}
 .sortbar .seg{flex-wrap:wrap}
 .sortsel{display:inline-flex;align-items:center;gap:6px;margin:0 0 8px}
 .sortsel select{width:auto}
+/* 3D 보기 */
+.t3-host{padding:0;overflow:hidden}
+.t3-host>p{padding:16px}
+.t3-bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.t3-ctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.t3-tools .btn[aria-pressed="true"]{background:var(--brand);color:var(--panel);border-color:var(--brand)}
+.t3-stage{position:relative;height:min(74vh,760px);min-height:420px;background:var(--soft)}
+.t3-stage canvas{display:block;width:100%;height:100%;touch-action:none}
+.t3-labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.t3-tag{position:absolute;transform:translate(-50%,-100%);white-space:nowrap;font-size:11.5px;font-weight:600;padding:3px 7px;border-radius:6px;background:var(--t-staff);color:var(--panel);box-shadow:0 1px 3px var(--shadow)}
+.t3-tag.cover{background:var(--warn)} .t3-tag.empty{background:var(--bad)} .t3-tag.none{background:var(--muted)}
+.t3-tag small{font-weight:500;opacity:.9;margin-left:4px}
+.t3-float{position:absolute;z-index:4;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px var(--shadow)}
+.t3-legend{left:10px;top:10px;padding:8px 10px;width:200px;max-height:calc(100% - 20px);overflow:auto}
+.t3-legend summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);padding:2px 0 6px}
+.t3-lg{display:grid;gap:2px}
+.t3-lg button{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:8px;font:inherit;font-size:13px;text-align:left;padding:5px 6px;border:0;border-radius:6px;background:transparent;color:var(--ink);cursor:pointer}
+.t3-lg button:hover{background:var(--soft)} .t3-lg button[aria-pressed="false"]{opacity:.4}
+.t3-lg em{font-style:normal;color:var(--muted);font-size:12px;font-family:var(--f-num)}
+.t3-sw{width:14px;height:14px;border-radius:4px}
+.t3-card{right:10px;top:10px;width:290px;max-height:calc(100% - 20px);overflow:auto;padding:12px 14px}
+.t3-card .x{position:absolute;right:8px;top:6px;font-size:18px}
+.t3-title{font-size:16px;font-weight:700;margin:0 24px 2px 0}
+.t3-kv{display:grid;grid-template-columns:70px 1fr;gap:4px 10px;font-size:13px;margin:10px 0}
+.t3-kv dt{color:var(--muted)} .t3-kv dd{margin:0}
+.t3-week{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin:4px 0 10px}
+.t3-week div{text-align:center;font-size:11px;padding:4px 0;border-radius:5px;background:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t3-week div b{display:block;font-size:10.5px;color:var(--muted);font-weight:500}
+.t3-week div.today{outline:2px solid var(--brand)} .t3-week div.cov{color:var(--warn);font-weight:700} .t3-week div.gap{color:var(--bad)}
+.t3-hint{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px;white-space:nowrap}
+@media (max-width:640px){
+  .t3-stage{height:70vh}
+  .t3-legend{width:auto;left:8px;right:auto;top:8px}
+  .t3-card{left:8px;right:8px;width:auto;top:auto;bottom:8px;max-height:55%}
+  .t3-hint{display:none}
+}
 .selbar{gap:10px;align-items:center;margin-bottom:8px;padding:6px 10px;border-radius:8px;background:var(--soft)}
 .shopr{position:relative}
 .shopx{position:absolute;top:4px;right:4px;background:var(--panel);border-radius:50%;width:22px;height:22px;z-index:1}
@@ -1164,6 +1200,7 @@ function renderInner(){
   applySlotCfg(); renderStats(); renderTabs();
   const v=$("#view");
   if(ui.tab==="plan") v.innerHTML=planHTML(), bindPlan();
+  else if(ui.tab==="3d") v.innerHTML=`<div class="panel t3-host" id="t3host"><p class="small muted" style="margin:0">3D 화면을 불러오는 중…</p></div>`, bind3d();
   else if(ui.tab==="staff") v.innerHTML=staffHTML(), bindStaff();
   else if(ui.tab==="items") v.innerHTML=itemsHTML(), bindItems();
   else if(ui.tab==="gfx") v.innerHTML=gfxHTML(), bindGfx();
@@ -1172,6 +1209,29 @@ function renderInner(){
   else if(ui.tab==="manual") v.innerHTML=manHTML(), bindMan();
   else v.innerHTML=tasksHTML(), bindTasks();
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
+}
+/* ---------- 3D 보기 (board3d.js): 배치도 점·인력 배정·물품을 그대로 읽어서 그려요. 배치도에서 추가·이동하면 바로 바뀌어요 ---------- */
+const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=1"];
+let t3load=null;
+function load3d(){
+  if(!t3load) t3load=T3_LIBS.reduce((p,src)=>p.then(()=>new Promise((ok,no)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=ok; sc.onerror=()=>no(new Error(src)); document.head.append(sc); })),Promise.resolve())
+    .catch(e=>{ t3load=null; throw e; });
+  return t3load;
+}
+function data3d(){
+  const cov=coverage(), week={}, slots={};
+  cov.pos.forEach(x=>{ if(!x.marker) return;
+    week[x.id]=cov.res[x.id].map(r=>r&&r.who?{c:pname(r.who),k:r.kind}:{c:"",k:"gap"});
+    slots[x.id]=x.slot?{name:x.slot.name,time:x.slot.time,brk:x.slot.brk,cover:x.slot.cover}:{name:x.label}; });
+  return {markers:state.markers.filter(m=>m.type!=="note"&&(m.floor==="4F"||m.floor==="3F")), items:state.items, types:TYPES, days:DAYS, week, slots};
+}
+function bind3d(){
+  const host=$("#t3host");
+  load3d().then(()=>{ if(ui.tab!=="3d"||!document.body.contains(host)) return;
+    host.textContent="";
+    try{ window.Board3D.mount(host,{data:data3d, openPlan:m=>{ ui.tab="plan"; ui.floor=m.floor; ui.sel=m.id; lsSet("mb-tab","plan"); lsSet("mb-floor",m.floor); render(); }}); }
+    catch(e){ console.error(e); host.innerHTML=`<p class="small">3D 화면을 그리지 못했어요. 이 기기·브라우저가 3D(WebGL)를 지원하지 않을 수 있어요.</p>`; }
+  }).catch(e=>{ console.error(e); host.innerHTML=`<p class="small">3D 화면을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.</p>`; });
 }
 function renderStats(){
   if(guest){ $("#stats").innerHTML=""; return; }
@@ -1190,7 +1250,7 @@ function renderStats(){
   ].join("");
 }
 function renderTabs(){
-  const tabs=[["plan","배치도",state.markers.length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["manual","운영",state.manual.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
+  const tabs=[["plan","배치도",state.markers.length],["3d","3D",state.markers.filter(m=>m.type!=="note").length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["manual","운영",state.manual.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
   $("#tabs").innerHTML=tabs.filter(t=>!guest||t[0]==="gfx").map(([k,n,c])=>`<button role="tab" data-tab="${k}" aria-selected="${ui.tab===k}">${n}<span class="cnt">${c}</span></button>`).join("");
   $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;ui.sel=null;try{localStorage.setItem("mb-tab",ui.tab)}catch(e){};render();});
 }
