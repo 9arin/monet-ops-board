@@ -316,6 +316,7 @@ function buildToolbar(){
     if(ui.tour) stopTour(); select(null); setFloor(k); if(ui.walk) startWalk(); else setView("iso"); }));
   const d=el("div","t3-ctl"); d.append(el("span","small muted","요일"), segBtns((D?D.days:["월","화","수","목","금","토","일"]).map((n,i)=>[i,n]),ui.day,k=>{
     ui.day=k; refreshStaff(); buildToolbar(); if(ui.tour) caption(); else if(ui.sel) showCard(ui.sel); draw(); }));
+  let vs=null; if(D&&D.vers&&ui.floor!=="3F"){ vs=el("div","t3-ctl"); vs.append(el("span","small muted","4층 버전"), segBtns(D.vers,D.ver4,k=>{ if(ui.tour) stopTour(); select(null); D.setVer4(k); })); }
   const v=el("div","t3-ctl t3-tools");
   const btn=(t,fn,pressed,cls)=>{ const b=el("button","btn small"+(cls?" "+cls:""),t); b.type="button"; if(pressed!=null) b.setAttribute("aria-pressed",String(pressed)); b.onclick=fn; v.append(b); return b; };
   if(!ui.tour) btn("관람객 시점으로 걷기",startTour,null,"primary");
@@ -323,7 +324,7 @@ function buildToolbar(){
   btn("실제 천장 높이",()=>{ ui.full=!ui.full; lsSet("m3d-full",ui.full?"1":"0"); updateHeights(); buildToolbar(); draw(); },ui.full||ui.walk);
   btn("도면",()=>{ ui.plan=!ui.plan; lsSet("m3d-plan",ui.plan?"1":"0"); updateHeights(); buildToolbar(); draw(); },ui.plan);
   btn("이름표",()=>{ ui.tags=!ui.tags; lsSet("m3d-tags",ui.tags?"1":"0"); buildToolbar(); draw(); },ui.tags);
-  toolbar.append(f,d,v);
+  toolbar.append(f); if(vs) toolbar.append(vs); toolbar.append(d,v);
 }
 function buildLegend(){
   legend.textContent=""; if(!D) return;

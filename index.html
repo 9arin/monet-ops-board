@@ -216,6 +216,13 @@ th.r .thsort{width:100%;text-align:right}
   .t3-tour{left:6px;right:6px;width:auto;transform:none;bottom:6px;max-height:55%;padding:10px}
   .t3-ttitle{font-size:16px} .t3-tdesc{font-size:13px}
 }
+.ver4seg{margin-left:6px}
+.verbar{gap:8px;align-items:center;margin-bottom:10px}
+.vtog{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.vtog button{font:inherit;font-size:11.5px;padding:3px 6px;border:0;background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap}
+.vtog button+button{border-left:1px solid var(--line)}
+.vtog button[aria-pressed="true"]{background:var(--brand);color:var(--panel);font-weight:600}
+.vernote{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:12px;padding:10px 12px;border-left:4px solid var(--accent)}
 .selbar{gap:10px;align-items:center;margin-bottom:8px;padding:6px 10px;border-radius:8px;background:var(--soft)}
 .shopr{position:relative}
 .shopx{position:absolute;top:4px;right:4px;background:var(--panel);border-radius:50%;width:22px;height:22px;z-index:1}
@@ -822,7 +829,7 @@ function syncRoster(){
 }
 // 한 번만: 4층 바닥 스티커마다 신세계 POP를 바로 위에 하나씩 (처리한 스티커엔 popDone 표시, 이후 새 스티커엔 안 함)
 function popOnStickers(){
-  const st=state.markers.filter(m=>m.floor==="4F"&&m.type==="sticker");
+  const st=state.markers.filter(m=>m.floor==="4F"&&m.type==="sticker"&&mver(m)==="exh");
   if(!st.length||st.some(m=>m.popDone)) return;
   st.forEach(m=>{
     if(!state.markers.some(x=>x.id==="m-pop-"+m.id)) save("markers",{id:"m-pop-"+m.id,floor:"4F",type:"pop",x:m.x,y:Math.max(1,+(m.y-3).toFixed(2)),label:"신세계 POP",qty:1,note:"바닥 스티커 위"});
@@ -1171,7 +1178,7 @@ const OLDG=GROUPS.concat([{id:"x4",floor:"4층"},{id:"x3",floor:"3층"}]); // �
 const pgroup=p=>{ const g=p.group||(SLOT[p.slot]||{}).group; if(ALLG.some(x=>x.id===g)) return g; const o=OLDG.find(x=>x.id===g); return o?(o.floor==="3층"?"fl3":"fl4"):g; };
 const needFor=P=>Math.ceil(P*7/WORK_DAYS); // 자리 P개를 주 5일 근무로 매일 채우는 인원
 function positions(){
-  const ms=state.markers.filter(m=>m.type==="staff"&&!/매니저|관리자/.test(m.label||""));
+  const ms=opMarkers().filter(m=>m.type==="staff"&&!/매니저|관리자/.test(m.label||""));
   const ps=ms.length?ms.map(m=>{const s=(m.slotId&&SLOT[m.slotId])||slotForLabel(m.label); /* 이름을 바꿔도 원래 자리 시간 유지 */ return {id:m.id,label:m.label||"이름 없는 자리",slot:s||null,group:m.floor==="3F"?"fl3":"fl4",marker:true};})
     :Object.values(SLOT).filter(s=>!s.optional).map(s=>({id:s.id,label:s.name,slot:s,group:(GROUPS.find(g=>g.id===s.group)||{}).floor==="3층"?"fl3":"fl4"}));
   const gi=id=>ALLG.findIndex(g=>g.id===id), si=s=>s?Object.keys(SLOT).indexOf(s.id):99;
@@ -1234,7 +1241,7 @@ function renderInner(){
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
 }
 /* ---------- 3D 보기 (board3d.js): 배치도 점·인력 배정·물품을 그대로 읽어서 그려요. 배치도에서 추가·이동하면 바로 바뀌어요 ---------- */
-const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=3"];
+const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=4"];
 let t3load=null;
 function load3d(){
   if(!t3load) t3load=T3_LIBS.reduce((p,src)=>p.then(()=>new Promise((ok,no)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=ok; sc.onerror=()=>no(new Error(src)); document.head.append(sc); })),Promise.resolve())
@@ -1246,7 +1253,7 @@ function data3d(){
   cov.pos.forEach(x=>{ if(!x.marker) return;
     week[x.id]=cov.res[x.id].map(r=>r&&r.who?{c:pname(r.who),k:r.kind}:{c:"",k:"gap"});
     slots[x.id]=x.slot?{name:x.slot.name,time:x.slot.time,brk:x.slot.brk,cover:x.slot.cover}:{name:x.label}; });
-  return {markers:state.markers.filter(m=>m.type!=="note"&&(m.floor==="4F"||m.floor==="3F")), items:state.items, types:TYPES, days:DAYS, week, slots};
+  return {markers:viewMarkers().filter(m=>m.type!=="note"&&(m.floor==="4F"||m.floor==="3F")), items:state.items, types:TYPES, days:DAYS, week, slots, ver4:ui.ver4, vers:VER4, setVer4:v=>{ ui.ver4=v; try{localStorage.setItem("mb-ver4",v)}catch(e){}; render(); }};
 }
 function bind3d(){
   const host=$("#t3host");
@@ -1273,7 +1280,7 @@ function renderStats(){
   ].join("");
 }
 function renderTabs(){
-  const tabs=[["plan","배치도",state.markers.length],["3d","3D",state.markers.filter(m=>m.type!=="note").length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["manual","운영",state.manual.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
+  const tabs=[["plan","배치도",viewMarkers().length],["3d","3D",viewMarkers().filter(m=>m.type!=="note").length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["manual","운영",state.manual.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
   $("#tabs").innerHTML=tabs.filter(t=>!guest||t[0]==="gfx").map(([k,n,c])=>`<button role="tab" data-tab="${k}" aria-selected="${ui.tab===k}">${n}<span class="cnt">${c}</span></button>`).join("");
   $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;ui.sel=null;try{localStorage.setItem("mb-tab",ui.tab)}catch(e){};render();});
 }
@@ -1318,7 +1325,23 @@ function printAll(pick){
 const loadingOrEmpty=(col,msg)=> !loaded[col] ? `<div class="empty">불러오는 중…</div>` : `<div class="empty">${msg}</div>`;
 
 /* ----- plan ----- */
-function countBy(floor){const c={};state.markers.filter(m=>!floor||m.floor===floor).forEach(m=>{c[m.type]=(c[m.type]||0)+(Number(m.qty)||1);});return c;}
+// 4층 배치 버전: 전시(기본·지금 운영) / VIP / 프라이빗 나이트. 점의 ver가 없으면 전시. 3층은 버전 없음.
+const VER4=[["exh","전시"],["vip","VIP"],["night","프라이빗 나이트"]];
+try{ ui.ver4=localStorage.getItem("mb-ver4")||"exh"; }catch(e){ ui.ver4="exh"; }
+if(!VER4.some(v=>v[0]===ui.ver4)) ui.ver4="exh";
+const mver=m=>m.ver||"exh";
+const inVer=(m,v)=>m.floor!=="4F"||mver(m)===(v||"exh");
+const opMarkers=()=>state.markers.filter(m=>inVer(m,"exh")); // 인력 배정·물품 수량은 전시 버전 기준
+const viewMarkers=()=>state.markers.filter(m=>inVer(m,ui.ver4)); // 배치도·3D에서 지금 고른 버전
+const verName=v=>(VER4.find(x=>x[0]===v)||VER4[0])[1];
+function ver4Seg(){ return `<div class="seg ver4seg" role="group" aria-label="4층 배치 버전">${VER4.map(([k,n])=>`<button data-ver4="${k}" aria-pressed="${ui.ver4===k}">${n} <span class="num muted">${state.markers.filter(m=>m.floor==="4F"&&mver(m)===k).length}</span></button>`).join("")}</div>`; }
+function bindVer4(){ document.querySelectorAll("[data-ver4]").forEach(b=>b.onclick=()=>{ ui.ver4=b.dataset.ver4; ui.sel=null; try{localStorage.setItem("mb-ver4",ui.ver4)}catch(e){}; render(); }); }
+function copyVer4(from,to){
+  const src=state.markers.filter(m=>m.floor==="4F"&&mver(m)===from); if(!src.length) return;
+  src.forEach(m=>{ const {id,popDone,...rest}=m; const n={...rest,id:uid("m"),ver:to}; if(to==="exh") delete n.ver; save("markers",n); });
+  toast(`${verName(from)} 버전 ${src.length}개를 ${verName(to)} 버전으로 복사했어요`);
+}
+function countBy(floor,ver){const c={};state.markers.filter(m=>(!floor||m.floor===floor)&&inVer(m,ver)).forEach(m=>{c[m.type]=(c[m.type]||0)+(Number(m.qty)||1);});return c;}
 // 배치도 옆: 도면 점과 연결된 물품 (물품 탭에서 고치면 바로 바뀌어요)
 function planItemsHTML(cf){
   const its=state.items.filter(i=>i.link&&TYPES[i.link]);
@@ -1329,13 +1352,13 @@ function planItemsHTML(cf){
       <span class="pit-t"><b>${esc(i.name||"")}</b>${i.chosen?` <span class="pill ok">최종</span>`:""}<br><span class="small muted">${esc(i.status||"")} · 도면 ${placed}${need?` / 필요 ${need}`:""}${need&&placed<need?` <span style="color:var(--bad)">· ${need-placed} 부족</span>`:""}</span></span></button>`; }).join("")).join("")}</div>`;
 }
 function planHTML(){
-  const ms=state.markers.filter(m=>m.floor===ui.floor);
-  const cf=countBy(ui.floor), ca=countBy();
+  const ms=viewMarkers().filter(m=>m.floor===ui.floor);
+  const cf=countBy(ui.floor,ui.ver4), ca=countBy(null,ui.ver4);
   const sel=state.markers.find(m=>m.id===ui.sel);
   const chips=Object.entries(TYPES).map(([k,t])=>`<button class="chip" data-vis="${k}" aria-pressed="${!ui.hidden.has(k)}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}<span class="num muted">${cf[k]||0}</span></button>`).join("");
   const addChips=Object.entries(TYPES).map(([k,t])=>`<button class="chip add" data-add="${k}" aria-pressed="${ui.addType===k}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</button>`).join("");
   // 인력: 고른 요일에 그 자리에서 일하는 사람 (인력 탭과 같은 계산)
-  const d=ui.staffDay, cov=loaded.staff&&ms.some(m=>m.type==="staff")?coverage().res:null;
+  const d=ui.staffDay, cov=loaded.staff&&ms.some(m=>m.type==="staff")&&!(ui.floor==="4F"&&ui.ver4!=="exh")?coverage().res:null; // 근무자 배정은 전시 버전만
   const whoAt=m=>{ if(!cov||m.type!=="staff") return null; const c=cov[m.id]&&cov[m.id][d];
     if(!cov[m.id]) return {txt:"매일 자리 아님",faded:true}; if(!c||c.kind==="gap") return {txt:"빈자리",gap:true}; return {txt:pname(c.who)+(c.kind==="cover"?" (대타)":"")}; };
   const marks=ms.filter(m=>!ui.hidden.has(m.type)).map(m=>{
@@ -1370,10 +1393,13 @@ function planHTML(){
       <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"점을 끌어서 옮기고, 아래 '추가'에서 새 항목을 찍어요. 다 했으면 '편집 끝내기'를 눌러 주세요.":"점을 누르면 이름·수량을 볼 수 있어요. 위치를 옮기려면 '위치 편집'을 눌러요."} 수량이 2 이상이면 점 안에 숫자로 보여요.</p></div>`;
   return `
   <div class="row noprint" style="justify-content:space-between;margin-bottom:12px">
-    <div class="seg" role="group" aria-label="층 선택"><button data-floor="4F" aria-pressed="${ui.floor==="4F"}">4층</button><button data-floor="3F" aria-pressed="${ui.floor==="3F"}">3층</button></div>
+    <div class="row"><div class="seg" role="group" aria-label="층 선택"><button data-floor="4F" aria-pressed="${ui.floor==="4F"}">4층</button><button data-floor="3F" aria-pressed="${ui.floor==="3F"}">3층</button></div>${ui.floor==="4F"?ver4Seg():""}</div>
     <div class="row"><label class="row small muted"><input type="checkbox" id="lblToggle" ${ui.labels?"checked":""}> 이름 표시</label>
       <button class="btn ${ui.planEdit?"primary":""}" id="planEditBtn">${ui.planEdit?"편집 끝내기":"위치 편집"}</button></div>
   </div>
+  ${ui.floor==="4F"&&ui.ver4!=="exh"?(()=>{ const n=ms.length, others=VER4.filter(v=>v[0]!==ui.ver4&&state.markers.some(m=>m.floor==="4F"&&mver(m)===v[0]));
+    return `<div class="panel vernote noprint"><b>4층 ${verName(ui.ver4)} 버전</b> <span class="small muted">${n?`점 ${n}개 · 여기서 고친 건 이 버전에만 반영돼요. 근무자 배정·물품 수량 계산은 전시 버전 기준이에요.`:"아직 비어 있어요. 다른 버전을 복사해서 고치거나, '위치 편집'에서 새로 찍어 주세요."}</span>
+      ${others.map(([k,nm])=>`<button class="btn small" data-vcopy="${k}" type="button">${nm} 버전 복사해 오기</button>`).join("")}</div>`; })():""}
   <div class="plan-grid">
     <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
       <div class="row small noprint"><span class="muted" style="margin-right:4px">보기</span>${chips}${layerChips}</div>${dayseg}
@@ -1386,6 +1412,11 @@ function planHTML(){
   </div>`;
 }
 function bindPlan(){
+  bindVer4();
+  document.querySelectorAll("[data-vcopy]").forEach(b=>b.onclick=()=>{ const from=b.dataset.vcopy, to=ui.ver4;
+    const has=state.markers.filter(m=>m.floor==="4F"&&mver(m)===to).length;
+    if(has&&!confirm(`${verName(to)} 버전에 이미 ${has}개가 있어요. ${verName(from)} 버전을 그 위에 더해서 복사할까요?`)) return;
+    copyVer4(from,to); });
   document.querySelectorAll("[data-floor]").forEach(b=>b.onclick=()=>{ui.floor=b.dataset.floor;ui.sel=null;try{localStorage.setItem("mb-floor",ui.floor)}catch(e){};render();});
   document.querySelectorAll("[data-vis]").forEach(b=>b.onclick=()=>{const k=b.dataset.vis;ui.hidden.has(k)?ui.hidden.delete(k):ui.hidden.add(k);render();});
   document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{ui.addType=ui.addType===b.dataset.add?null:b.dataset.add;render();});
@@ -1409,6 +1440,7 @@ function bindPlan(){
       if(!ui.planEdit||!ui.addType){ if(ui.sel||ui.planG){ui.sel=null;ui.planG=null;render();} return; }
       const x=+((e.clientX-r.left)/r.width*100).toFixed(2), y=+((e.clientY-r.top)/r.height*100).toFixed(2);
       const m={id:uid("m"),floor:ui.floor,type:ui.addType,x,y,label:TYPES[ui.addType].name,qty:1,note:""};
+      if(ui.floor==="4F"&&ui.ver4!=="exh") m.ver=ui.ver4; // 지금 고른 4층 버전에 추가
       if(ui.addType==="sticker") m.glyph="→";
       ui.sel=m.id; save("markers",m); return;
     }
@@ -1698,7 +1730,7 @@ function bindRota(){
 }
 function staffMap(res,extra){
   const d=ui.staffDay;
-  const pins=state.markers.filter(m=>m.floor===ui.floor&&m.type==="staff").map(m=>{
+  const pins=opMarkers().filter(m=>m.floor===ui.floor&&m.type==="staff").map(m=>{
     let who="", gap=false, faded=false; const c=res[m.id]&&res[m.id][d];
     if(!res[m.id]){ who="매일 자리 아님"; faded=true; }
     else if(!c||c.kind==="gap"){ who="빈자리"; gap=true; }
@@ -1852,12 +1884,16 @@ function sortItems(rows,qtyOf,amt){
     const c=typeof a.v==="number"&&typeof b.v==="number"?a.v-b.v:String(a.v).localeCompare(String(b.v),"ko",{numeric:true});
     return c?c*d:a.n-b.n; }).map(x=>x.i);
 }
+// 물품이 쓰이는 버전 (전시·VIP·프라이빗 나이트, 여러 개 가능). 비어 있으면 전시
+const itemVers=i=>Array.isArray(i.vers)&&i.vers.length?i.vers:["exh"];
+try{ ui.itemVer=localStorage.getItem("mb-iver")||""; }catch(e){ ui.itemVer=""; }
 function itemsHTML(){
-  const counts=countBy();
-  const all=state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0));
+  const iv=ui.itemVer||"", counts=countBy(null,iv||"exh"); // '도면' 수량은 고른 버전의 배치도 기준 (전체면 전시)
+  const all=state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0)).filter(i=>!iv||itemVers(i).includes(iv));
   const qOf=i=>state.quotes.find(q=>q.id===i.quote);
   const f=ui.quoteFilter;
   const base=all.filter(i=>!f||(f==="none"?!qOf(i):i.quote===f)), kf=ui.kindFilter;
+  const verbar=`<div class="row verbar noprint"><b class="small">버전</b><div class="seg" role="group" aria-label="버전">${[["","전체"]].concat(VER4).map(([k,n])=>`<button type="button" data-iver="${k}" aria-pressed="${iv===k}">${n} <span class="num">${k?state.items.filter(i=>itemVers(i).includes(k)).length:state.items.length}</span></button>`).join("")}</div>${iv?`<span class="small muted">'도면' 수량은 4층 ${verName(iv)} 배치도 기준이에요.</span>`:""}</div>`;
   const amt=i=>i.kind===OWNED?0:Number(i.qty||(i.link?counts[i.link]:0)||0)*Number(i.price||0);
   const rows=sortItems(base.filter(i=>!kf||i.kind===kf),i=>Number(i.qty||(i.link?counts[i.link]:0)||0),amt);
   const IS=ui.itemSort, th=(k,label,cls)=>`<th class="${cls||""}"><button class="thsort" data-isort="${k}" type="button" aria-label="${label}로 정렬">${label}${IS.k===k?`<span class="arr">${IS.d>0?"▲":"▼"}</span>`:""}</button></th>`;
@@ -1865,17 +1901,18 @@ function itemsHTML(){
   const sum=pred=>all.filter(pred).reduce((s,i)=>s+amt(i),0);
   const total=k=>base.filter(i=>i.kind===k).reduce((s,i)=>s+amt(i),0);
   const scls=s=>ITEM_DONE.includes(s)?"s-done":(s==="필요"?"s-need":"s-mid");
-  const NC=14;
+  const NC=15;
   if(!ui.isel) ui.isel=new Set();
   for(const x of [...ui.isel]) if(!all.some(i=>i.id===x)) ui.isel.delete(x);
   const nsel=ui.isel.size, allOn=rows.length&&rows.every(i=>ui.isel.has(i.id));
   const selbar=nsel?`<div class="row selbar noprint"><b><span class="num">${nsel}</span>개 선택</b><button class="btn small danger" id="isel-del" type="button">선택한 물품 삭제</button><button class="linkbtn small" id="isel-none" type="button">선택 해제</button></div>`:"";
-  const body = rows.length? `${selbar}<div class="tbl-wrap"><table><thead><tr><th class="noprint"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}<th>견적</th>${th("kind","구분")}${th("qty","수량","r")}<th class="r">도면</th>${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}${th("status","상태")}<th>메모</th><th>후보</th><th></th></tr></thead><tbody>
+  const body = rows.length? `${selbar}<div class="tbl-wrap"><table><thead><tr><th class="noprint"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}<th>견적</th>${th("kind","구분")}<th>버전</th>${th("qty","수량","r")}<th class="r">도면</th>${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}${th("status","상태")}<th>메모</th><th>후보</th><th></th></tr></thead><tbody>
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
       return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="noprint"><input type="checkbox" data-isel aria-label="선택" ${ui.isel.has(i.id)?"checked":""}></td><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
       ${i.kind===OWNED?`<td class="muted small">필요 없음</td>`:`<td style="min-width:120px"><select data-f="quote" class="qsel" style="--qc:${qq?qcolor(qq):"transparent"}"><option value="">없음</option>${state.quotes.map(x=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(x.vendor||"이름 없는 견적")}</option>`).join("")}</select></td>`}
       <td><select data-f="kind">${ITEM_KIND.map(k=>`<option ${i.kind===k?"selected":""}>${k}</option>`).join("")}</select></td>
+      <td><div class="vtog" role="group" aria-label="쓰이는 버전">${VER4.map(([k,n])=>`<button type="button" data-ivt="${k}" aria-pressed="${itemVers(i).includes(k)}" title="${n}">${k==="night"?"나이트":n}</button>`).join("")}</div></td>
       <td class="r" style="width:80px"><input class="num" data-f="qty" type="number" min="0" value="${esc(i.qty||"")}" placeholder="${auto??""}" style="text-align:right"></td>
       <td class="r num">${auto===null?`<span class="muted">–</span>`:`<button class="linkbtn num" data-focus="${esc(i.link)}" title="도면에서 보기">${auto}</button>`}</td>
       ${i.kind===OWNED?`<td class="r muted">–</td><td class="r muted">–</td>`:`<td class="r" style="width:110px"><input class="num" data-f="price" type="number" min="0" value="${esc(i.price||"")}" style="text-align:right"></td>
@@ -1892,15 +1929,15 @@ function itemsHTML(){
     ${state.quotes.map(q=>`<button class="chip" data-qf-filter="${q.id}" aria-pressed="${f===q.id}"><span class="dot" style="background:${qcolor(q)}"></span>${esc(q.vendor||"이름 없는 견적")} <span class="num muted">${all.filter(i=>i.quote===q.id).length}</span></button>`).join("")}
     ${state.quotes.length?`<button class="chip" data-qf-filter="none" aria-pressed="${f==="none"}">견적 없음 <span class="num muted">${all.filter(i=>!qOf(i)).length}</span></button>`:""}</div>`;
   const linked=[...new Set(all.map(i=>i.link).filter(Boolean))];
-  const pins=state.markers.filter(m=>m.floor===ui.floor&&linked.includes(m.type)).map(m=>({id:m.id,x:m.x,y:m.y,color:tcolor(m.type),dark:TYPES[m.type]&&TYPES[m.type].dark,
+  const pins=state.markers.filter(m=>inVer(m,ui.itemVer||"exh")&&m.floor===ui.floor&&linked.includes(m.type)).map(m=>({id:m.id,x:m.x,y:m.y,color:tcolor(m.type),dark:TYPES[m.type]&&TYPES[m.type].dark,
     text:markerText(m),label:`${m.label}${(Number(m.qty)||1)>1?" ×"+m.qty:""}`,faded:ui.itemFocus&&m.type!==ui.itemFocus}));
-  const cf=countBy(ui.floor);
+  const cf=countBy(ui.floor,ui.itemVer||"exh");
   const chips=`<button class="chip" data-ifocus="" aria-pressed="${!ui.itemFocus}">전체</button>`+linked.map(k=>`<button class="chip" data-ifocus="${k}" aria-pressed="${ui.itemFocus===k}"><span class="dot" style="background:${tcolor(k)}"></span>${TYPES[k]?TYPES[k].name:k}<span class="num muted">${cf[k]||0}</span></button>`).join("");
   const map=mapCard("물품 위치",chips,pins,"도면의 점을 누르면 아래 표의 그 물품 줄로 내려가요. 표의 '도면' 숫자를 누르면 그 물품만 도면에서 진하게 보여요.");
   return `${map}${quotesHTML(sum)}<div class="panel">
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">구매·대여 물품</h3>
       <div class="row small"><span>구매 <b class="num">${won(total("구매"))||0}</b>원</span><span>대여 <b class="num">${won(total("대여"))||0}</b>원</span><span>제작 <b class="num">${won(total("제작"))||0}</b>원</span></div></div>
-    ${kinds}${labels}${rows.length>1?sortbar:""}${body}
+    ${verbar}${kinds}${labels}${rows.length>1?sortbar:""}${body}
     <p class="small muted" style="margin:8px 0 0">'도면' 칸은 배치도에 찍은 수량이에요. 수량을 비워 두면 도면 수량으로 금액을 계산해요. 사진 칸에 사진을 끌어다 놓을 수 있어요.</p>
     <form class="addform" id="addItem"><label class="f">품목<input id="ni-name" placeholder="예: 무전기 이어폰" required></label>
       <label class="f">구분<select id="ni-kind">${ITEM_KIND.map(k=>`<option ${kf===k?"selected":""}>${k}</option>`).join("")}</select></label>
@@ -2067,7 +2104,7 @@ function bindItems(){
   document.querySelectorAll("[data-qf-filter]").forEach(b=>b.onclick=()=>{ui.quoteFilter=b.dataset.qfFilter||null;render();});
   document.querySelectorAll("[data-focus]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.focus; ui.itemFocus=k;
-    if(!state.markers.some(m=>m.floor===ui.floor&&m.type===k)){const o=state.markers.find(m=>m.type===k); if(o) ui.floor=o.floor;}
+    if(!opMarkers().some(m=>m.floor===ui.floor&&m.type===k)){const o=opMarkers().find(m=>m.type===k); if(o) ui.floor=o.floor;}
     ui.mapOpen=true; render(); const mc=document.querySelector(".mapcard"); if(mc) mc.scrollIntoView({behavior:"smooth",block:"start"});});
   dropZone($("#quoteDrop"),{onFiles:addQuoteFiles,accept:"application/pdf,image/*"});
   document.querySelectorAll(".qcard").forEach(card=>{
@@ -2078,6 +2115,7 @@ function bindItems(){
     card.querySelector("[data-qdel]").onclick=()=>{ const x=q(); if(ui.confirmDel===x.id){ui.confirmDel=null; if(ui.quoteFilter===x.id) ui.quoteFilter=null; if(x.fileId) remove("files",x.fileId); remove("quotes",x.id);} else {ui.confirmDel=x.id;render();} };
   });
   document.querySelectorAll("[data-isort]").forEach(b=>b.onclick=()=>setItemSort(b.dataset.isort));
+  document.querySelectorAll("[data-iver]").forEach(b=>b.onclick=()=>{ ui.itemVer=b.dataset.iver; try{localStorage.setItem("mb-iver",ui.itemVer)}catch(e){}; render(); });
   document.querySelectorAll("[data-csort]").forEach(so=>so.onchange=()=>{ ui.candSort=so.value; lsSet("mb-csort",so.value); render(); });
   const ia=$("#isel-all"); if(ia) ia.onchange=()=>{ const ids=[...document.querySelectorAll("tr[data-id]:not(.cand-row)")].map(t=>t.dataset.id); ids.forEach(x=>ia.checked?ui.isel.add(x):ui.isel.delete(x)); render(); };
   const idl=$("#isel-del"); if(idl) idl.onclick=()=>{ const ids=[...ui.isel]; if(ids.length>1&&!confirm(`선택한 물품 ${ids.length}개를 삭제할까요?`)) return; ui.isel.clear(); deleteItems(ids); };
@@ -2089,6 +2127,9 @@ function bindItems(){
       if(k==="quote"&&v&&!cur.vendor){ const q=state.quotes.find(x=>x.id===v); if(q&&q.vendor) patch.vendor=q.vendor; } // 견적 고르면 업체도 채움
       save("items",{...cur,...patch}); });
     tr.querySelector("[data-del]").onclick=()=>deleteItems([tr.dataset.id]);
+    tr.querySelectorAll("[data-ivt]").forEach(b=>b.onclick=()=>{ const cur=it(), v=itemVers(cur), k=b.dataset.ivt;
+      const nv=v.includes(k)?v.filter(x=>x!==k):[...v,k]; if(!nv.length){ toast("버전을 하나는 골라 주세요"); return; }
+      save("items",{...cur,vers:VER4.map(x=>x[0]).filter(x=>nv.includes(x))}); });
     tr.querySelector("[data-isel]").onchange=e=>{ e.target.checked?ui.isel.add(tr.dataset.id):ui.isel.delete(tr.dataset.id); render(); };
     tr.querySelector("[data-open]").onclick=()=>{ui.openItem=ui.openItem===it().id?null:it().id;render(); const ci=document.querySelector(".cand-row [data-cin]"); if(ci) ci.focus();};
     dropZone(tr.querySelector("[data-thumb]"),{onFiles:fs=>addItemPhotos(tr.dataset.id,fs,true),onText:t=>{ if(/^https?:\/\//.test(t)) save("items",{...it(),image:t}); },accept:"image/*"}); // 다른 사이트 사진을 끌어와도 돼요
@@ -2129,7 +2170,7 @@ function bindItems(){
   $("#addItem").onsubmit=e=>{e.preventDefault(); const n=$("#ni-name").value.trim(); if(!n) return;
     const max=Math.max(0,...state.items.map(i=>i.order||0)); const f=ui.quoteFilter&&ui.quoteFilter!=="none"?ui.quoteFilter:"";
     const q=state.quotes.find(x=>x.id===f);
-    save("items",{id:uid("i"),order:max+1,name:n,kind:$("#ni-kind").value,qty:$("#ni-qty").value,link:$("#ni-link").value,price:"",vendor:q?q.vendor||"":"",quote:f,due:"",status:$("#ni-kind").value===OWNED?"준비 완료":"필요",note:""}); toast("추가했어요");};
+    save("items",{id:uid("i"),order:max+1,name:n,kind:$("#ni-kind").value,qty:$("#ni-qty").value,link:$("#ni-link").value,price:"",vendor:q?q.vendor||"":"",quote:f,due:"",status:$("#ni-kind").value===OWNED?"준비 완료":"필요",note:"",vers:[ui.itemVer||"exh"]}); toast(ui.itemVer?`${verName(ui.itemVer)} 버전 물품으로 추가했어요`:"추가했어요");};
 }
 
 /* ----- graphics ----- */
@@ -2582,7 +2623,7 @@ function tasksHTML(){
   const placing=state.tasks.find(t=>t.id===ui.placingTask);
   const hint=placing?`<b>${esc(placing.title)}</b>: 도면에서 위치를 누르세요. <button class="linkbtn" id="cancelPlace">취소</button>`
     :"할 일 옆 '위치'를 누른 뒤 도면을 누르면 그 자리에 번호가 찍혀요. 번호를 누르면 해당 할 일로 이동해요.";
-  const ctx=state.markers.filter(m=>m.floor===ui.floor).map(m=>({id:"ctx-"+m.id,x:m.x,y:m.y,color:tcolor(m.type),text:"",label:m.label,faded:true,ctx:true}));
+  const ctx=opMarkers().filter(m=>m.floor===ui.floor).map(m=>({id:"ctx-"+m.id,x:m.x,y:m.y,color:tcolor(m.type),text:"",label:m.label,faded:true,ctx:true}));
   const map=mapCard("할 일 위치","",ctx.concat(pins),hint,!!placing);
   const list = state.tasks.length ? (groups.length? groups.map(([c,a])=>`<div class="group-h"><h4>${c}</h4><span class="small muted">${a.length}</span></div>
     ${a.map(t=>`<div class="task ${t.done?"done":""} ${!t.done&&t.due&&t.due<today?"overdue":""} ${ui.taskSel===t.id?"sel":""}" data-id="${t.id}" id="task-${t.id}">
