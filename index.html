@@ -248,8 +248,16 @@ table.itbl .ck input{width:auto;margin:0}
 table.itbl td select,table.itbl td input:not([type=checkbox]){padding-left:6px;padding-right:6px}
 table.itbl .acts{position:sticky;right:0;z-index:1;background:var(--panel);white-space:nowrap;box-shadow:-8px 0 8px -8px var(--shadow)}
 table.itbl thead .acts{background:var(--soft)}
-table.itbl tr.rowsel .acts{background:inherit}
+table.itbl tr.rowsel td.acts{background:linear-gradient(var(--warnbg),var(--warnbg)),var(--panel)}
+table.itbl .actw{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+@media (max-width:1180px){table.itbl .actw{width:150px}}
 .vtog button{padding:3px 5px}
+table.itbl th.fc{padding-left:12px}
+table.itbl th.fc.r{padding-left:5px;padding-right:12px}
+table.itbl .acts .linksel{width:92px;font-size:12px;padding:3px 6px}
+.mk.focus{outline:3px solid var(--ink);outline-offset:2px;z-index:6;animation:mkpulse 1s ease-in-out 3}
+@keyframes mkpulse{50%{transform:translate(-50%,-50%) scale(1.35)}}
+@media (prefers-reduced-motion:reduce){.mk.focus{animation:none}}
 table.itbl .maker-in{margin-top:4px;font-size:12px;padding:3px 6px}
 .verbar{gap:8px;align-items:center;margin-bottom:10px}
 .vtog{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
@@ -1551,7 +1559,7 @@ function gPop(g,n,fromPlan){
 function markerText(m){const q=Number(m.qty)||1; return m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));}
 function floorSeg(){return `<div class="seg" role="group" aria-label="층 선택"><button data-floor="4F" aria-pressed="${ui.floor==="4F"}">4층</button><button data-floor="3F" aria-pressed="${ui.floor==="3F"}">3층</button></div>`;}
 function mapCard(title,controls,pins,hint,adding){
-  const marks=pins.map(p=>`<button class="mk static ${p.dark?"dark-text":""} ${p.faded?"faded":""} ${p.sel?"sel":""} ${p.gap?"gap":""}" data-pin="${esc(p.id)}" style="left:${p.x}%;top:${p.y}%;background:${p.color}" aria-label="${esc(p.label)}">${esc(p.text)}${p.ctx?"":`<span class="lbl">${esc(p.label)}</span>`}</button>`).join("");
+  const marks=pins.map(p=>`<button class="mk static ${p.dark?"dark-text":""} ${p.faded?"faded":""} ${p.sel?"sel":""} ${p.gap?"gap":""} ${p.focus?"focus":""}" data-pin="${esc(p.id)}" style="left:${p.x}%;top:${p.y}%;background:${p.color}" aria-label="${esc(p.label)}">${esc(p.text)}${p.ctx?"":`<span class="lbl">${esc(p.label)}</span>`}</button>`).join("");
   return `<div class="panel mapcard ${ui.mapOpen?"":"closed"}">
     <div class="row" style="justify-content:space-between;margin-bottom:${ui.mapOpen?10:0}px">
       <div class="row"><h3 style="margin:0">${title}</h3>${floorSeg()}</div>
@@ -1954,7 +1962,7 @@ function itemsHTML(){
   for(const x of [...ui.isel]) if(!all.some(i=>i.id===x)) ui.isel.delete(x);
   const nsel=ui.isel.size, allOn=rows.length&&rows.every(i=>ui.isel.has(i.id));
   const selbar=nsel?`<div class="row selbar noprint"><b><span class="num">${nsel}</span>개 선택</b><button class="btn small danger" id="isel-del" type="button">선택한 물품 삭제</button><button class="linkbtn small" id="isel-none" type="button">선택 해제</button></div>`:"";
-  const body = rows.length? `${selbar}<div class="tbl-wrap"><table class="itbl"><thead><tr><th class="noprint ck"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목")}${th("kind","구분")}<th>버전</th>${th("qty","수량","r")}${th("price","단가(원)","r")}${th("amt","금액(원)","r")}${th("vendor","업체")}${th("status","상태")}<th>메모</th><th class="acts noprint">후보 · 삭제</th></tr></thead><tbody>
+  const body = rows.length? `${selbar}<div class="tbl-wrap"><table class="itbl"><thead><tr><th class="noprint ck"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목","fc")}${th("kind","구분","fc")}<th>버전</th>${th("qty","수량","r fc")}${th("price","단가(원)","r fc")}${th("amt","금액(원)","r")}${th("vendor","업체","fc")}${th("status","상태","fc")}<th class="fc">메모</th><th class="acts noprint">도면 · 후보 · 삭제</th></tr></thead><tbody>
     ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
       return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="noprint ck"><input type="checkbox" data-isel aria-label="선택" ${ui.isel.has(i.id)?"checked":""}></td><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
@@ -1966,7 +1974,7 @@ function itemsHTML(){
       <td style="min-width:110px">${vendorSel(i,qq)}</td>
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
       <td style="min-width:110px"><input data-f="note" value="${esc(i.note||"")}" title="${esc(i.note||"")}"></td>
-      <td class="acts noprint"><button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></td></tr>
+      <td class="acts noprint"><div class="actw">${i.link?`<button class="btn small" data-focus="${esc(i.link)}" aria-pressed="${ui.itemFocus===i.link}" title="도면에서 이 물품 위치 보기">도면 <span class="num">${auto||0}</span></button>`:`<select class="linksel" data-f="link" aria-label="배치도 연결" title="배치도의 어떤 표시와 이어진 물품인지 고르면 도면에서 위치를 볼 수 있어요"><option value="">도면 연결</option>${Object.entries(TYPES).filter(([k])=>k!=="note").map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select>`} <button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></div></td></tr>
       ${open?`<tr class="cand-row noprint" data-id="${i.id}"><td colspan="${NC}">${candsHTML(i)}</td></tr>`:""}`;}).join("")}
     </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:"이 라벨에 묶인 물품이 없어요."}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
   const kinds=`<div class="seg kindseg" role="group" aria-label="구분" style="margin-bottom:10px">${[["","전체"]].concat(kindsOf(base).map(k=>[k,k])).map(([k,n])=>`<button data-kf="${k}" aria-pressed="${(kf||"")===k}">${n} <span class="num">${k?base.filter(i=>i.kind===k).length:base.length}</span></button>`).join("")}</div>`;
@@ -1975,10 +1983,10 @@ function itemsHTML(){
     ${state.quotes.length?`<button class="chip" data-qf-filter="none" aria-pressed="${f==="none"}">견적 없음 <span class="num muted">${all.filter(i=>!qOf(i)).length}</span></button>`:""}</div>`;
   const linked=[...new Set(all.map(i=>i.link).filter(Boolean))];
   const pins=state.markers.filter(m=>inVer(m,ui.itemVer||"exh")&&m.floor===ui.floor&&linked.includes(m.type)).map(m=>({id:m.id,x:m.x,y:m.y,color:tcolor(m.type),dark:TYPES[m.type]&&TYPES[m.type].dark,
-    text:markerText(m),label:`${m.label}${(Number(m.qty)||1)>1?" ×"+m.qty:""}`,faded:ui.itemFocus&&m.type!==ui.itemFocus}));
+    text:markerText(m),label:`${m.label}${(Number(m.qty)||1)>1?" ×"+m.qty:""}`,faded:ui.itemFocus&&m.type!==ui.itemFocus,focus:ui.itemFocus&&m.type===ui.itemFocus}));
   const cf=countBy(ui.floor,ui.itemVer||"exh");
   const chips=`<button class="chip" data-ifocus="" aria-pressed="${!ui.itemFocus}">전체</button>`+linked.map(k=>`<button class="chip" data-ifocus="${k}" aria-pressed="${ui.itemFocus===k}"><span class="dot" style="background:${tcolor(k)}"></span>${TYPES[k]?TYPES[k].name:k}<span class="num muted">${cf[k]||0}</span></button>`).join("");
-  const map=mapCard("물품 위치",chips,pins,"도면의 점을 누르면 아래 표의 그 물품 줄로 내려가요. 표의 '도면' 숫자를 누르면 그 물품만 도면에서 진하게 보여요.");
+  const map=mapCard("물품 위치",chips,pins,"도면의 점을 누르면 아래 표의 그 물품 줄로 내려가요. 표의 '도면' 버튼을 누르면 그 물품 위치만 도면 가운데에 진하게 보여요.");
   return `${map}${quotesHTML(sum)}<div class="panel">
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">구매·대여 물품</h3>
       <div class="row small"><span>구매 <b class="num">${won(total("구매"))||0}</b>원</span><span>대여 <b class="num">${won(total("대여"))||0}</b>원</span><span>업체 <b class="num">${won(total("업체"))||0}</b>원</span><span>인쇄물 <b class="num">${won(total("인쇄물"))||0}</b>원</span></div></div>
@@ -2137,6 +2145,14 @@ async function setThumb(itemId,file){
   const b=await shrinkImage(file,320,.8); save("items",{...it,image:await readURL(b)});
 }
 const goRow=sel=>{ const el=document.querySelector(sel); if(el) el.scrollIntoView({behavior:"smooth",block:"center"}); return !!el; };
+function focusPins(){ // 진하게 표시한 점들이 화면과 도면 가운데에 오게
+  const mc=document.querySelector(".mapcard"), sc=mc&&mc.querySelector(".plan-scroll"), pins=mc?[...mc.querySelectorAll(".mk.focus")]:[];
+  if(!mc) return;
+  if(sc&&pins.length&&sc.scrollWidth>sc.clientWidth){ const r=sc.getBoundingClientRect(), xs=pins.map(p=>p.getBoundingClientRect()).map(b=>b.left+b.width/2-r.left+sc.scrollLeft);
+    sc.scrollLeft=(Math.min(...xs)+Math.max(...xs))/2-sc.clientWidth/2; }
+  const tgt=pins.length?pins:[mc], ys=tgt.map(p=>p.getBoundingClientRect()).map(b=>b.top+b.height/2+window.scrollY);
+  window.scrollTo({top:Math.max(0,(Math.min(...ys)+Math.max(...ys))/2-window.innerHeight/2),behavior:"smooth"});
+}
 function bindItems(){
   bindMapCard(id=>{ // 도면의 점 → 그 물품 줄로
     const m=state.markers.find(x=>x.id===id); if(!m) return;
@@ -2149,9 +2165,13 @@ function bindItems(){
   document.querySelectorAll("[data-ifocus]").forEach(b=>b.onclick=()=>{ui.itemFocus=b.dataset.ifocus||null;render();});
   document.querySelectorAll("[data-qf-filter]").forEach(b=>b.onclick=()=>{ui.quoteFilter=b.dataset.qfFilter||null;render();});
   document.querySelectorAll("[data-focus]").forEach(b=>b.onclick=()=>{
-    const k=b.dataset.focus; ui.itemFocus=k;
-    if(!opMarkers().some(m=>m.floor===ui.floor&&m.type===k)){const o=opMarkers().find(m=>m.type===k); if(o) ui.floor=o.floor;}
-    ui.mapOpen=true; render(); const mc=document.querySelector(".mapcard"); if(mc) mc.scrollIntoView({behavior:"smooth",block:"start"});});
+    const k=b.dataset.focus, iv=ui.itemVer||"exh";
+    if(ui.itemFocus===k&&b.getAttribute("aria-pressed")==="true"){ ui.itemFocus=null; ui.hiItem=null; render(); return; } // 한 번 더 누르면 해제
+    ui.itemFocus=k; ui.hiItem=k;
+    const ms=state.markers.filter(m=>inVer(m,iv)&&m.type===k);
+    if(!ms.length){ toast(`도면에 '${(TYPES[k]||{}).name||k}' 표시가 아직 없어요. 배치도 탭에서 찍어 주세요.`); render(); return; }
+    if(!ms.some(m=>m.floor===ui.floor)){ ui.floor=ms[0].floor; try{localStorage.setItem("mb-floor",ui.floor)}catch(e){} }
+    ui.mapOpen=true; render(); focusPins();});
   dropZone($("#quoteDrop"),{onFiles:addQuoteFiles,accept:"application/pdf,image/*"});
   document.querySelectorAll(".qcard").forEach(card=>{
     const q=()=>state.quotes.find(x=>x.id===card.dataset.q);
