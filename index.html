@@ -186,6 +186,28 @@ th.r .thsort{width:100%;text-align:right}
 .t3-week div{text-align:center;font-size:11px;padding:4px 0;border-radius:5px;background:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .t3-week div b{display:block;font-size:10.5px;color:var(--muted);font-weight:500}
 .t3-week div.today{outline:2px solid var(--brand)} .t3-week div.cov{color:var(--warn);font-weight:700} .t3-week div.gap{color:var(--bad)}
+.t3-editp{left:10px;top:10px;width:300px;max-height:calc(100% - 20px);overflow:auto;padding:12px;display:grid;gap:8px;align-content:start}
+.t3-ehead{display:flex;align-items:center;justify-content:space-between;gap:8px} .t3-ehead b{font-size:15px}
+.t3-eseg{display:flex} .t3-eseg button{flex:1;font-size:12.5px;padding:6px 4px;white-space:nowrap}
+.t3-editp h4{margin:4px 0 0;font-size:12px;color:var(--muted);font-weight:600}
+.t3-ehelp{margin:0;font-size:12.5px;color:var(--muted);line-height:1.5} .t3-ehelp.small{font-size:11.5px}
+.t3-emsg{margin:0;font-size:12.5px;color:var(--ok);min-height:1em}
+.t3-editp .ef{display:grid;gap:3px;font-size:12px;color:var(--muted)}
+.t3-editp .ef textarea{resize:vertical}
+.t3-echk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);cursor:pointer}
+.t3-echk input{width:auto;flex:none;margin:0}
+.t3-estaff{display:grid;grid-template-columns:1fr 1fr;gap:5px 8px} .t3-estaff .t3-echk{font-size:12.5px;align-items:flex-start}
+.t3-erow{display:flex;flex-wrap:wrap;align-items:center;gap:6px} .t3-elen{font-size:12.5px;color:var(--muted);margin-right:auto}
+.t3-ebox{display:grid;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}
+.t3-etitle{font-size:13.5px;font-weight:700}
+.t3-elist{display:grid;gap:3px} .t3-elist .btn{text-align:left;white-space:normal} .t3-elist .btn.on,.t3-erow .btn.on{border-color:var(--brand);font-weight:600}
+.t3-efoot{padding-top:6px;border-top:1px solid var(--line)}
+.t3-tag.t3-etag{background:var(--panel);color:var(--ink);border:1px solid var(--brand)} .t3-tag.t3-etag.sel{border-color:var(--warn);color:var(--warn)}
+.t3-pad{position:absolute;z-index:5;left:14px;bottom:14px;display:grid;grid-template-columns:repeat(3,58px);grid-template-rows:repeat(2,58px);gap:6px}
+.t3-pb{font:inherit;font-size:18px;line-height:1;display:grid;place-items:center;align-content:center;gap:2px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:0 2px 8px var(--shadow);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+.t3-pb small{font-size:10.5px;color:var(--muted)}
+.t3-pb:active{background:var(--brand);color:var(--panel)} .t3-pb:active small{color:var(--panel)}
+.t3-pb.up{grid-column:2;grid-row:1} .t3-pb.lt{grid-column:1;grid-row:2} .t3-pb.dn{grid-column:2;grid-row:2} .t3-pb.rt{grid-column:3;grid-row:2}
 .t3-exitwalk{position:absolute;z-index:5;right:10px;top:10px}
 .t3-tour{left:50%;transform:translateX(-50%);bottom:10px;width:min(600px,calc(100% - 20px));max-height:60%;overflow:auto;padding:12px 14px;display:grid;gap:6px}
 .t3-tprog{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);font-family:var(--f-num)}
@@ -214,6 +236,8 @@ th.r .thsort{width:100%;text-align:right}
   .t3-card{left:8px;right:8px;width:auto;top:auto;bottom:8px;max-height:55%}
   .t3-hint{display:none}
   .t3-tour{left:6px;right:6px;width:auto;transform:none;bottom:6px;max-height:55%;padding:10px}
+  .t3-editp{left:6px;right:6px;width:auto;top:auto;bottom:6px;max-height:50%}
+  .t3-pad{left:50%;transform:translateX(-50%);grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,64px)}
   .t3-ttitle{font-size:16px} .t3-tdesc{font-size:13px}
 }
 .ver4seg{margin-left:6px}
@@ -1255,7 +1279,7 @@ function renderInner(){
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
 }
 /* ---------- 3D 보기 (board3d.js): 배치도 점·인력 배정·물품을 그대로 읽어서 그려요. 배치도에서 추가·이동하면 바로 바뀌어요 ---------- */
-const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=4"];
+const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=7"];
 let t3load=null;
 function load3d(){
   if(!t3load) t3load=T3_LIBS.reduce((p,src)=>p.then(()=>new Promise((ok,no)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=ok; sc.onerror=()=>no(new Error(src)); document.head.append(sc); })),Promise.resolve())
@@ -1267,7 +1291,11 @@ function data3d(){
   cov.pos.forEach(x=>{ if(!x.marker) return;
     week[x.id]=cov.res[x.id].map(r=>r&&r.who?{c:pname(r.who),k:r.kind}:{c:"",k:"gap"});
     slots[x.id]=x.slot?{name:x.slot.name,time:x.slot.time,brk:x.slot.brk,cover:x.slot.cover}:{name:x.label}; });
-  return {markers:viewMarkers().filter(m=>m.type!=="note"&&(m.floor==="4F"||m.floor==="3F")), items:state.items, types:TYPES, days:DAYS, week, slots, ver4:ui.ver4, vers:VER4, setVer4:v=>{ ui.ver4=v; try{localStorage.setItem("mb-ver4",v)}catch(e){}; render(); }};
+  return {markers:viewMarkers().filter(m=>m.type!=="note"&&(m.floor==="4F"||m.floor==="3F")), items:state.items, types:TYPES, days:DAYS, week, slots, ver4:ui.ver4, vers:VER4, setVer4:v=>{ ui.ver4=v; try{localStorage.setItem("mb-ver4",v)}catch(e){}; render(); },
+    walls3d:(state.settings.find(x=>x.id==="cfg-3dwalls")||{}).walls, tour3d:(state.settings.find(x=>x.id==="cfg-3dtour")||{}).legs,
+    saveWalls:w=>save("settings",{id:"cfg-3dwalls",walls:w,at:new Date().toISOString()},true),
+    saveTour:l=>save("settings",{id:"cfg-3dtour",legs:l,at:new Date().toISOString()},true),
+    moveMarker:(id,p)=>{ const m=state.markers.find(x=>x.id===id); if(m) save("markers",{...m,...p},true); }};
 }
 function bind3d(){
   const host=$("#t3host");
