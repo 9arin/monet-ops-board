@@ -252,6 +252,7 @@ table.itbl tr.rowsel td.acts{background:linear-gradient(var(--warnbg),var(--warn
 table.itbl .actw{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 @media (max-width:1180px){table.itbl .actw{width:150px}}
 .vtog button{padding:3px 5px}
+.jobtag{margin-bottom:3px;white-space:nowrap;color:var(--ink)}
 table.itbl th.fc{padding-left:12px}
 table.itbl th.fc.r{padding-left:5px;padding-right:12px}
 table.itbl .acts .linksel{width:92px;font-size:12px;padding:3px 6px}
@@ -1800,8 +1801,11 @@ function staffHTML(){
   const shown=ALLG.filter(g=>P(g)||M(g));
   const loose=ppl.filter(p=>!ALLG.some(g=>g.id===pgroup(p)));
   const T=pos.length, NT=shown.reduce((s,g)=>s+N(g),0);
-  const row=(p,s)=>{const wd=7-(p.off||[]).length;
-    return `<tr data-id="${p.id}"><td style="min-width:110px"><input data-f="name" value="${esc(p.name||"")}" placeholder="${esc(pname(p))}"></td>
+  // 이 사람이 맡을 일: 근무표에서 그 사람이 가장 많이 서는 자리 (대체는 들어가는 자리들)
+  const jobs={}; pos.forEach(x=>(res[x.id]||[]).forEach(c=>{ if(c&&c.who){ const j=jobs[c.who.id]||(jobs[c.who.id]={}); const n=jobName(x.label); j[n]=(j[n]||0)+1; } }));
+  const jobOf=p=>{ const j=jobs[p.id]; if(!j) return ""; const ks=Object.keys(j).sort((a,b)=>j[b]-j[a]); return p.kind==="대타"&&ks.length>1?ks.slice(0,3).join(", ")+(ks.length>3?" 외":""):ks[0]; };
+  const row=(p,s)=>{const wd=7-(p.off||[]).length, job=jobOf(p);
+    return `<tr data-id="${p.id}"><td style="min-width:150px"><div class="jobtag small"><b>${esc(pname(p.name?{...p,name:""}:p))}</b>${job?` · ${esc(job)}`:` · <span class="muted">맡을 자리 없음</span>`}${p.kind==="대타"?` <span class="muted">(대체)</span>`:""}</div><input data-f="name" value="${esc(p.name||"")}" placeholder="${esc(pname(p))}" aria-label="${esc(pname(p.name?{...p,name:""}:p))} 이름"></td>
       <td style="min-width:190px"><div class="days" title="매주 쉬어야 하는 요일">${DAYS.map((d,i)=>`<button data-must="${i}" aria-pressed="${mustDow(p).includes(i)}" aria-label="매주 ${d}요일 필수 휴무">${d}</button>`).join("")}</div>
         <div class="row" style="gap:4px;margin-top:4px">${mustDates(p).map(d=>`<span class="chip mchip">${+d.slice(5,7)}/${+d.slice(8)}<button class="x" data-mrm="${d}" aria-label="빼기">×</button></span>`).join("")}<button class="linkbtn small noprint" data-mcal>${ui.mustOpen===p.id?"달력 닫기":"+ 날짜"}</button></div></td>
       <td class="r num" style="color:${actDays(p)*personNet(p,pos)>MAX_H?"var(--bad)":actDays(p)<WORK_DAYS?"var(--warn)":"inherit"}">${actDays(p)}일 · ${+(actDays(p)*personNet(p,pos)).toFixed(1)}h${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(nightCrews().total[p.id]||0)}</td>
