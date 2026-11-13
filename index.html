@@ -1287,7 +1287,7 @@ function renderInner(){
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
 }
 /* ---------- 3D 보기 (board3d.js): 배치도 점·인력 배정·물품을 그대로 읽어서 그려요. 배치도에서 추가·이동하면 바로 바뀌어요 ---------- */
-const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=7"];
+const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=8"];
 let t3load=null;
 function load3d(){
   if(!t3load) t3load=T3_LIBS.reduce((p,src)=>p.then(()=>new Promise((ok,no)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=ok; sc.onerror=()=>no(new Error(src)); document.head.append(sc); })),Promise.resolve())
@@ -1410,11 +1410,11 @@ function planHTML(){
   // 인력: 고른 요일에 그 자리에서 일하는 사람 (인력 탭과 같은 계산)
   const d=ui.staffDay, cov=loaded.staff&&ms.some(m=>m.type==="staff")&&!(ui.floor==="4F"&&ui.ver4!=="exh")?coverage().res:null; // 근무자 배정은 전시 버전만
   const whoAt=m=>{ if(!cov||m.type!=="staff") return null; const c=cov[m.id]&&cov[m.id][d];
-    if(!cov[m.id]) return {txt:"매일 자리 아님",faded:true}; if(!c||c.kind==="gap") return {txt:"빈자리",gap:true}; return {txt:pname(c.who)+(c.kind==="cover"?" (대타)":"")}; };
+    if(!cov[m.id]) return {txt:"",faded:true}; if(!c||c.kind==="gap") return {txt:"",gap:true}; return {txt:pname(c.who)}; }; // 도면엔 하는 일 · 이름만
   const marks=ms.filter(m=>!ui.hidden.has(m.type)).map(m=>{
     const q=Number(m.qty)||1, w=whoAt(m); let txt=m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));
     if(w&&w.gap) txt="!";
-    const lbl=(m.label||"")+(w&&!ui.hidden.has("L-who")?` · ${w.txt}`:"");
+    const lbl=jobName(m.label)+(w&&w.txt&&!ui.hidden.has("L-who")?` · ${w.txt}`:"");
     return `<button class="mk ${TYPES[m.type]&&TYPES[m.type].dark?"dark-text":""} ${ui.sel===m.id?"sel":""} ${w&&w.faded?"faded":""}" data-id="${m.id}" style="left:${m.x}%;top:${m.y}%;background:${w&&w.gap?"var(--bad)":tcolor(m.type)}" aria-label="${esc((TYPES[m.type]||{}).name)} ${esc(lbl)}">${esc(txt)}<span class="lbl">${esc(lbl)}</span></button>`;}).join("");
   // 그래픽: 그래픽 탭에서 그린 벽 선과 번호를 그대로 겹쳐 보여요 (고치는 건 그래픽 탭에서)
   const gs=ui.hidden.has("L-gfx")?[]:state.graphics.filter(g=>g.floor===ui.floor&&!ui.hidden.has("g-"+g.type)), gn=gnum(), gsel=gs.find(g=>g.id===ui.planG);
@@ -1556,6 +1556,7 @@ function gPop(g,n,fromPlan){
   </div>`;
 }
 /* ----- shared mini map ----- */
+const jobName=s=>{ s=String(s||""); const t=s.replace(/\s*\(?\s*인력\s*\)?\s*/g," ").trim(); return t||s; }; // 도면 이름표: '인력' 같은 말은 빼고 하는 일만
 function markerText(m){const q=Number(m.qty)||1; return m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));}
 function floorSeg(){return `<div class="seg" role="group" aria-label="층 선택"><button data-floor="4F" aria-pressed="${ui.floor==="4F"}">4층</button><button data-floor="3F" aria-pressed="${ui.floor==="3F"}">3층</button></div>`;}
 function mapCard(title,controls,pins,hint,adding){
@@ -1782,10 +1783,10 @@ function staffMap(res,extra){
   const d=ui.staffDay;
   const pins=opMarkers().filter(m=>m.floor===ui.floor&&m.type==="staff").map(m=>{
     let who="", gap=false, faded=false; const c=res[m.id]&&res[m.id][d];
-    if(!res[m.id]){ who="매일 자리 아님"; faded=true; }
-    else if(!c||c.kind==="gap"){ who="빈자리"; gap=true; }
+    if(!res[m.id]) faded=true;
+    else if(!c||c.kind==="gap") gap=true;
     else who=pname(c.who);
-    return {id:m.id,x:m.x,y:m.y,color:gap?"var(--bad)":tcolor("staff"),text:gap?"!":"●",label:`${m.label} · ${who}`,gap,faded};
+    return {id:m.id,x:m.x,y:m.y,color:gap?"var(--bad)":tcolor("staff"),text:gap?"!":"●",label:jobName(m.label)+(who?` · ${who}`:""),gap,faded};
   });
   const dayseg=`<div class="seg daypick" role="group" aria-label="요일">${DAYS.map((x,i)=>`<button data-day="${i}" aria-pressed="${d===i}">${x}</button>`).join("")}</div>`;
   return mapCard("요일별 배치",dayseg,pins,"");

@@ -325,13 +325,14 @@ function rebuildMarkers(){
   if(ed.item) ed.item.scale.setScalar(1.15);
 }
 function staffOf(m){ const w=D.week[m.id]; return w?{w:w[ui.day],slot:D.slots[m.id]||{}}:null; }
+const jobName=s=>{ s=String(s||""); const t=s.replace(/\s*\(?\s*인력\s*\)?\s*/g," ").trim(); return t||s; };
 function staffKind(s){ return !s?"none":!s.w||!s.w.c?"empty":s.w.k==="cover"?"cover":"main"; }
 function refreshStaff(){
   tags.forEach(t=>{ const m=t.obj.userData.marker, s=staffOf(m), kind=staffKind(s);
     t.obj.userData.body.material=kind==="main"?mats.staff:X[kind];
     t.el.className="t3-tag k-"+kind; t.el.textContent="";
-    t.el.append((s&&s.slot.name)||m.label||"근무 자리");
-    if(s) t.el.append(el("small",null,s.w&&s.w.c?s.w.c+(kind==="cover"?" 대타":""):"공석")); });
+    t.el.append(jobName((s&&s.slot.name)||m.label)||"근무 자리");
+    if(s&&s.w&&s.w.c) t.el.append(el("small",null,s.w.c)); }); // 하는 일 · 이름만
 }
 function validLegs(x){ return Array.isArray(x)&&x.length&&x.every(L=>L&&(L.fl==="4F"||L.fl==="3F")&&Array.isArray(L.nodes)&&L.nodes.length>=2&&L.nodes.every(n=>Array.isArray(n.p)&&n.p.length===2)); }
 function sync(data){
@@ -510,8 +511,8 @@ function posAt(L,s){ s=Math.max(0,Math.min(L.len,s)); let k=1; while(k<L.cum.len
 const yawTo=(from,to)=>Math.atan2(-(to.x-from.x),-(to.z-from.z));
 function lookPoint(st){ const L=LEGS[st.leg]; return st.look?toWorld(L.fl,st.look[0],st.look[1]):null; }
 function staffRow(id){ const m=D&&D.markers.find(x=>x.id===id); if(!m) return null; const s=staffOf(m), kind=staffKind(s), w=s&&s.w;
-  const r=el("div","t3-trow"); r.append(el("span","t3-tdot k-"+kind),el("b",null,(s&&s.slot.name)||m.label||"근무 자리"),
-    el("span",null,w&&w.c?w.c+(kind==="cover"?" · 대타":""):s?"공석":"배정 없음")); if(s&&s.slot.time) r.append(el("em",null,s.slot.time)); return r; }
+  const r=el("div","t3-trow"); r.append(el("span","t3-tdot k-"+kind),el("b",null,jobName((s&&s.slot.name)||m.label)||"근무 자리"),
+    el("span",null,w&&w.c?w.c:"")); if(s&&s.slot.time) r.append(el("em",null,s.slot.time)); return r; }
 function caption(){
   if(!LEGS.length) return;
   const done=tour.done, L=LEGS[Math.max(0,tour.leg)], st=STOPS[tour.cur]||{t:L.zone,d:""};
