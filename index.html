@@ -805,11 +805,11 @@ function nightCrews(){
     // 야간을 하면 40시간이 넘는 사람은 그 주 주간 하루를 빼요 (지원 근무가 있는 날에서)
     const hrs=p=>{ const n=add[p.id]||0, h=baseH[p.id]+NIGHT_H*n; return h>MAX_H?h-personNet(p,pos):h; };
     const after=p=>{ const n=(add[p.id]||0)+1, h=baseH[p.id]+NIGHT_H*n; return h>MAX_H?h-personNet(p,pos):h; };
-    const cands=date=>ppl.filter(p=>!dayWork(p,dowOf(date))&&!mustDates(p).includes(date)&&(add[p.id]||0)<NIGHT_MAX&&after(p)<=MAX_H)
+    const cands=date=>ppl.filter(p=>!dayWork(p,dowOf(date))&&!mustDates(p).includes(date)&&!mustDow(p).includes(dowOf(date))&&(add[p.id]||0)<NIGHT_MAX&&after(p)<=MAX_H)
       .sort((a,b)=>hrs(a)-hrs(b)||(total[a.id]||0)-(total[b.id]||0)||(a.order||0)-(b.order||0));
     const man=nc.crew||{}; // 직접 고른 날은 그대로
     const isMan=d=>Array.isArray(man[d])&&man[d].length; // 비워 둔 날은 자동
-    todo.filter(isMan).forEach(date=>{ const c=man[date].map(id=>ppl.find(p=>p.id===id)).filter(Boolean); c.forEach(p=>{ add[p.id]=(add[p.id]||0)+1; total[p.id]=(total[p.id]||0)+1; }); crews[date]=c; });
+    todo.filter(isMan).forEach(date=>{ const c=man[date].map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!mustDates(p).includes(date)&&!mustDow(p).includes(dowOf(date))); c.forEach(p=>{ add[p.id]=(add[p.id]||0)+1; total[p.id]=(total[p.id]||0)+1; }); crews[date]=c; });
     todo.filter(isMan).forEach(date=>{ const c=crews[date]; cands(date).filter(p=>!c.includes(p)).slice(0,Math.max(0,+nc.alba-c.length)).forEach(p=>{ c.push(p); add[p.id]=(add[p.id]||0)+1; total[p.id]=(total[p.id]||0)+1; }); }); // 골랐던 사람이 없어졌으면 채워요
     const rest=todo.filter(d=>!isMan(d));
     while(rest.length){ rest.sort((a,b)=>cands(a).length-cands(b).length||a.localeCompare(b)); const date=rest.shift(); // 고를 사람이 적은 날부터
@@ -1692,16 +1692,34 @@ function dayPlan(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
   const cells={}; pos.forEach(x=>{ const base=res[x.id][d]; const o=ov[x.id]&&byId(ov[x.id]);
     cells[x.id]=o?{who:o,kind:"swap",base:base.who}:{who:base.who,kind:base.kind}; });
   const inCell=()=>new Set(Object.values(cells).map(c=>c.who&&c.who.id).filter(Boolean));
-  let extras=ctx.extra[d].filter(p=>!dropped.has(p.id)&&!mustDates(p).includes(date)&&!inCell().has(p.id));
-  const fill=(x,base,why)=>{ let i=extras.findIndex(q=>pgroup(q)===x.group); if(i<0) i=extras.findIndex(()=>true); /* 같은 층 먼저, 없으면 다른 층 */ if(i>=0){ cells[x.id]={who:extras[i],kind:"auto",base,why}; extras.splice(i,1); return true; } return false; };
+  const isMust=p=>mustDates(p).includes(date)||mustDow(p).includes(d); // 빼야 하는 날: 무조건 쉬어요
+  const post=new Set((ctx.crews[addDay(date,-1)]||[]).map(p=>p.id)); // 어제 야간한 사람
+  const wkNights=p=>Object.entries(ctx.crews).filter(([dt,cs])=>weekKey(dt)===weekKey(date)&&cs.some(q=>q.id===p.id)).length;
+  let extras=ctx.extra[d].filter(p=>!dropped.has(p.id)&&!isMust(p)&&!inCell().has(p.id));
+  extras.sort((a,b)=>(post.has(a.id)?1:0)-(post.has(b.id)?1:0)); // 어제 야간한 사람은 대신 서는 데 맨 뒤로
+  const fill=(x,base,why)=>{ const ok=q=>!post.has(q.id); /* 어제 야간한 사람은 되도록 안 불러요 */ let i=extras.findIndex(q=>ok(q)&&pgroup(q)===x.group); if(i<0) i=extras.findIndex(ok); /* 같은 층 먼저, 없으면 다른 층 */
+    if(i<0&&!/야간 다음날/.test(why)) i=extras.findIndex(()=>true); if(i>=0){ cells[x.id]={who:extras[i],kind:"auto",base,why}; extras.splice(i,1); return true; } return false; };
   // 야간 주에 빠지는 사람 → 같은 층 지원 인원이 그 자리로
   pos.forEach(x=>{ const c=cells[x.id]; if(c.kind!=="swap"&&c.who&&dropped.has(c.who.id)) fill(x,c.who,"야간 주 휴무"); });
   // 필수 휴무 날짜인 사람 → 지원 인원 먼저, 없으면 그날 쉬는 사람 (40시간 안 넘는 사람 먼저)
-  pos.forEach(x=>{ const c=cells[x.id]; if(c.kind==="swap"||!c.who||!mustDates(c.who).includes(date)) return;
+  pos.forEach(x=>{ const c=cells[x.id]; if(!c.who||!isMust(c.who)) return; // 직접 바꾼 칸이라도 빼야 하는 날이면 빼요
     if(fill(x,c.who,"필수 휴무")) return;
     const busy=new Set([...inCell(),...crew.map(p=>p.id),...extras.map(p=>p.id)]);
-    const sub=ppl.filter(p=>!busy.has(p.id)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)).sort((a,b)=>(dayDays(a)>=WORK_DAYS?1:0)-(dayDays(b)>=WORK_DAYS?1:0)||(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||(a.order||0)-(b.order||0))[0];
+    const sub=ppl.filter(p=>!busy.has(p.id)&&!isMust(p)).sort((a,b)=>(post.has(a.id)?1:0)-(post.has(b.id)?1:0)||(dayDays(a)>=WORK_DAYS?1:0)-(dayDays(b)>=WORK_DAYS?1:0)||(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||(a.order||0)-(b.order||0))[0];
     cells[x.id]=sub?{who:sub,kind:"auto",base:c.who,why:"필수 휴무"}:{who:null,kind:"gap",base:c.who}; });
+  // 야간 다음날: 되도록 쉬게 (지원 인원 → 그날 쉬는 주4일 근무자 중 그 주 야간이 없는 사람), 안 되면 같은 일의 오후조로
+  if(post.size){
+    const startOf=x=>toMin(String(posTime(x)).split("~")[0])||0, kindOf=x=>jobName(x.label).replace(/\s*\(?\s*(오전조|오후조|오전|오후)\s*\)?\s*/g," ").trim();
+    pos.forEach(x=>{ const c=cells[x.id], q=c.who; if(!q||!post.has(q.id)||c.kind==="swap") return;
+      if(fill(x,q,"야간 다음날 휴무")) return;
+      const busy=new Set([...inCell(),...crew.map(p=>p.id),...extras.map(p=>p.id)]);
+      const sub=ppl.filter(p=>!busy.has(p.id)&&!post.has(p.id)&&!isMust(p)&&dayDays(p)<WORK_DAYS&&!wkNights(p))
+        .sort((a,b)=>(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||(a.order||0)-(b.order||0))[0];
+      if(sub){ cells[x.id]={who:sub,kind:"auto",base:q,why:"야간 다음날 휴무"}; return; }
+      const later=pos.filter(y=>y.id!==x.id&&y.group===x.group&&kindOf(y)===kindOf(x)&&startOf(y)>startOf(x)&&cells[y.id].who&&cells[y.id].kind!=="swap"&&!post.has(cells[y.id].who.id))
+        .sort((a,b)=>startOf(b)-startOf(a))[0];
+      if(later){ const o=cells[later.id].who; cells[later.id]={who:q,kind:"auto",base:o,why:"야간 다음날이라 오후조"}; cells[x.id]={who:o,kind:"auto",base:q,why:"야간 다음날이라 오후조와 바꿈"}; } });
+  }
   extras=extras.filter(p=>!inCell().has(p.id));
   const working=inCell(); // 자리를 다 채우고 남는 사람은 그날 쉬어요 (지원 근무 없음)
   const off=ppl.filter(p=>!working.has(p.id)&&!crew.some(c=>c.id===p.id));
@@ -1732,7 +1750,7 @@ function rotaHTML(pos,res,pr){ // pr: 인쇄용 (버튼·편집 없이)
   const closed=`<td class="closed">휴관</td>`;
   let body=keys.map(t=>sec(t,`휴게 1시간 · 하루 ${net(t)}시간`)+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}${posBrk(x)?`<span class="brk">☕ ${posBrk(x)}</span>`:""}</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
       const c=plans[i].cells[x.id], key=dt+"|"+x.id; if(c.kind==="prep") return `<td class="closed">OT·시뮬</td>`; if(c.kind==="closed") return `<td class="closed">휴관</td>`;
-      if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>!pl.working.has(p.id)||p.id===(c.who&&c.who.id)).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 덜 일한 사람 먼저
+      if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>(!pl.working.has(p.id)||p.id===(c.who&&c.who.id))&&!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 덜 일한 사람 먼저
         return `<td class="editing"><select data-swap="${key}"><option value="">${c.kind==="swap"?"원래대로":"그대로"}</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select></td>`; }
       const cls=c.kind==="gap"?"gap":c.kind==="swap"||c.kind==="auto"?"swp":"";
       if(pr) return `<td class="${cls}">${c.who?esc(pname(c.who)):"빈자리"}</td>`;
