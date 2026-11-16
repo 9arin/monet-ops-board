@@ -510,6 +510,19 @@ tr[data-grow]{cursor:pointer}
 .plan .mkpop .it.big img{width:100%;height:170px;flex:none;object-fit:contain;cursor:zoom-in}
 .mkpop .pill.ok,.pit .pill.ok{background:var(--okbg);color:var(--ok)}
 .plan .mk.faded{opacity:.45}
+.zrect{position:absolute;border:1.5px dashed var(--muted);border-radius:6px;pointer-events:none;opacity:.55}
+.zrect.open{border-color:var(--accent);opacity:1}
+.zrect span{position:absolute;left:4px;top:2px;font-size:10px;font-weight:700;color:var(--muted);background:var(--panel);padding:0 3px;border-radius:3px}
+.zbadge{position:absolute;transform:translate(-50%,-50%);z-index:3;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;padding:3px 9px;border-radius:999px;border:2px solid var(--ink);background:var(--panel);color:var(--ink);font:inherit;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px var(--shadow)}
+.zbadge b{background:var(--ink);color:var(--panel);border-radius:999px;padding:0 6px;font-size:11px}
+.plan.editing .zbadge{cursor:pointer}
+.zpop .zlist{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
+.zrow{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:4px;border-radius:8px;cursor:pointer;width:100%}
+.zrow:hover,.zrow:focus-visible{background:var(--soft)}
+.plan .zrow img{position:static;inset:auto;filter:none;width:40px;height:40px;flex:0 0 40px;object-fit:cover;border-radius:6px;background:var(--soft)}
+.zdot{width:40px;height:40px;flex:0 0 40px;border-radius:8px;opacity:.85}
+.zrow .zt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.zrow .zq{font-size:15px;font-weight:700;white-space:nowrap}
 .plan.editing .pg,.plan.editing .pgb{opacity:.35;pointer-events:none}
 .plan .pgb{z-index:1}
 .pweek{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;font-size:10.5px;text-align:center}
@@ -717,7 +730,7 @@ const dbCol=c=>VCOL[c]?VCOL[c].col:c;
 const state = {markers:[],items:[],staff:[],tasks:[],quotes:[],files:[],settings:[],graphics:[],nights:[],sched:[],docs:[],manual:[],people:[]};
 const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,files:false,settings:false,graphics:false,nights:false,sched:false,docs:false,manual:false,people:false};
 const ui = {tab:"plan",floor:"4F",hidden:new Set(),addType:null,sel:null,labels:true,taskFilter:"open",confirmDel:null,
-  mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,rotaWeek:null,editCell:null,mustOpen:null,mustMon:null,editPos:null,staffSub:"rota",personOpen:null};
+  mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,rotaWeek:null,editCell:null,mustOpen:null,mustMon:null,editPos:null,staffSub:"rota",personOpen:null,zoneOpen:null,zDraw:null};
 try{const t=localStorage.getItem("mb-tab"); if(t) ui.tab=t; const f=localStorage.getItem("mb-floor"); if(f) ui.floor=f; if(localStorage.getItem("mb-map")==="0") ui.mapOpen=false; const ss=localStorage.getItem("mb-staffsub"); if(ss) ui.staffSub=ss;}catch(e){}
 let db=null, mode="loading";
 
@@ -1484,6 +1497,37 @@ function planItemsHTML(cf){
     return `<button class="pit" data-pit="${i.id}" type="button">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="noimg"><span class="dot" style="background:${tcolor(k)}"></span></span>`}
       <span class="pit-t"><b>${esc(i.name||"")}</b>${i.chosen?` <span class="pill ok">최종</span>`:""}<br><span class="small muted">${esc(i.status||"")} · 도면 ${placed}${need?` / 필요 ${need}`:""}${need&&placed<need?` <span style="color:var(--bad)">· ${need-placed} 부족</span>`:""}</span></span></button>`; }).join("")).join("")}</div>`;
 }
+// 구역(방): 그 안의 물품 점은 '리셉션 12'처럼 하나로 묶어 보여요. 구역 밖에서 서로 겹치는 점도 숫자 하나로 묶어요. (알바생 자리는 묶지 않아요)
+const DEFAULT_ZONES=[
+  {id:"z-4f-rec",floor:"4F",name:"리셉션",x1:4,y1:37,x2:20,y2:57},
+  {id:"z-4f-con",floor:"4F",name:"콘솔룸",x1:20.5,y1:40,x2:25.5,y2:72},
+  {id:"z-4f-media",floor:"4F",name:"미디어실",x1:25.5,y1:40,x2:66,y2:72},
+  {id:"z-3f-staff",floor:"3F",name:"스태프실",x1:15,y1:42,x2:25.5,y2:76},
+  {id:"z-3f-shop",floor:"3F",name:"굿즈샵",x1:73,y1:50,x2:89,y2:93}];
+const zonesAll=()=>{ const c=state.settings.find(x=>x.id==="cfg-zones"); return c&&Array.isArray(c.zones)?c.zones:DEFAULT_ZONES; };
+const putZones=zs=>save("settings",{id:"cfg-zones",zones:zs,at:new Date().toISOString()});
+const inZone=(m,z)=>m.x>=Math.min(z.x1,z.x2)&&m.x<=Math.max(z.x1,z.x2)&&m.y>=Math.min(z.y1,z.y2)&&m.y<=Math.max(z.y1,z.y2);
+function planGroups(ms){
+  const used=new Set(), groups=[], ok=m=>m.type!=="staff";
+  zonesAll().filter(z=>z.floor===ui.floor).forEach(z=>{ const L=ms.filter(m=>ok(m)&&!used.has(m.id)&&inZone(m,z)); L.forEach(m=>used.add(m.id));
+    groups.push({id:z.id,name:z.name,zone:z,x:(z.x1+z.x2)/2,y:(z.y1+z.y2)/2,ms:L}); });
+  const rest=ms.filter(m=>ok(m)&&!used.has(m.id)), near=(a,b)=>Math.hypot((a.x-b.x)*16,(a.y-b.y)*10.75)<26, seen=new Set(); // 도면 그림 픽셀로 26px 안이면 겹침
+  rest.forEach(m=>{ if(seen.has(m.id)) return; const c=[m]; seen.add(m.id);
+    for(let i=0;i<c.length;i++) rest.forEach(o=>{ if(!seen.has(o.id)&&near(c[i],o)){ seen.add(o.id); c.push(o); } });
+    if(c.length>1){ c.forEach(x=>used.add(x.id)); groups.push({id:"c:"+c.map(x=>x.id).sort()[0],name:"겹친 물품",x:c.reduce((s,x)=>s+x.x,0)/c.length,y:c.reduce((s,x)=>s+x.y,0)/c.length,ms:c}); } });
+  return groups;
+}
+function zPop(g){ // 묶음을 누르면: 사진 · 이름 · 개수 목록
+  const rows={}; g.ms.forEach(m=>{ const k=m.type+"|"+(m.label||""); const r=rows[k]||(rows[k]={m,q:0,n:0}); r.q+=Number(m.qty)||1; r.n++; });
+  const L=Object.values(rows).sort((a,b)=>b.q-a.q), tot=L.reduce((s,r)=>s+r.q,0);
+  const pic=m=>{ const i=state.items.find(x=>x.link===m.type&&x.image); return i?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="zdot" style="background:${tcolor(m.type)}"></span>`; };
+  return `<div class="mkpop zpop" style="${popPos(g.x,g.y)}" role="dialog" aria-label="${esc(g.name)} 물품">
+    <button class="x" data-zclose aria-label="닫기">×</button>
+    <b>${esc(g.name)} <span class="small muted">물품 ${tot}개 · ${L.length}종</span></b>
+    <div class="zlist">${L.map(r=>{ const t=TYPES[r.m.type]||{}, nm=t.name||"", lb=r.m.label&&r.m.label!==nm?r.m.label:"";
+      return `<button type="button" class="zrow" data-zsel="${r.m.id}">${pic(r.m)}<span class="zt"><b>${esc(nm||lb||"물품")}</b>${lb&&nm?`<span class="small muted">${esc(lb)}</span>`:""}</span><span class="num zq">${r.q}<span class="small muted">개</span></span></button>`; }).join("")||`<div class="small muted">아직 물품이 없어요.</div>`}</div>
+    <div class="small muted">${ui.planEdit?"도면의 점을 끌어서 옮길 수 있어요. 다 했으면 ×로 접어요.":"줄을 누르면 그 점의 정보가 열려요."}</div></div>`;
+}
 function planHTML(){
   const ms=viewMarkers().filter(m=>m.floor===ui.floor);
   const cf=countBy(ui.floor,ui.ver4), ca=countBy(null,ui.ver4);
@@ -1497,7 +1541,13 @@ function planHTML(){
   const d=ui.staffDay, cov=loaded.staff&&ms.some(m=>m.type==="staff")&&!(ui.floor==="4F"&&ui.ver4!=="exh")?coverage().res:null; // 근무자 배정은 전시 버전만
   const whoAt=m=>{ if(!cov||m.type!=="staff") return null; const c=cov[m.id]&&cov[m.id][d];
     if(!cov[m.id]) return {txt:"",faded:true}; if(!c||c.kind==="gap") return {txt:"",gap:true}; return {txt:pname(c.who)}; }; // 도면엔 하는 일 · 이름만
-  const marks=ms.filter(m=>!ui.hidden.has(m.type)).map(m=>{
+  const vis=ms.filter(m=>!ui.hidden.has(m.type)), groups=planGroups(vis), openG=groups.find(g=>g.id===ui.zoneOpen);
+  const hid=new Set(); groups.forEach(g=>{ if(g!==openG) g.ms.forEach(m=>hid.add(m.id)); });
+  const zrects=groups.filter(g=>g.zone&&(g.ms.length||ui.planEdit||g===openG)).map(g=>{ const z=g.zone, x=Math.min(z.x1,z.x2), y=Math.min(z.y1,z.y2);
+    return `<div class="zrect ${g===openG?"open":""}" style="left:${x}%;top:${y}%;width:${Math.abs(z.x2-z.x1)}%;height:${Math.abs(z.y2-z.y1)}%"><span>${esc(z.name)}</span></div>`; }).join("");
+  const zbadges=groups.filter(g=>g.ms.length&&g!==openG).map(g=>{ const n=g.ms.reduce((s,m)=>s+(Number(m.qty)||1),0);
+    return `<button class="zbadge" data-zone="${esc(g.id)}" style="left:${g.x}%;top:${g.y}%" aria-label="${esc(g.name)} 물품 ${n}개 보기">${g.zone?`${esc(g.name)} `:""}<b class="num">${n}</b></button>`; }).join("");
+  const marks=vis.filter(m=>!hid.has(m.id)).map(m=>{
     const q=Number(m.qty)||1, w=whoAt(m); let txt=m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));
     if(w&&w.gap) txt="!";
     const lbl=jobName(m.label)+(w&&w.txt&&!ui.hidden.has("L-who")?` · ${w.txt}`:"");
@@ -1540,8 +1590,9 @@ function planHTML(){
     <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
       <div class="row small noprint"><span class="muted" style="margin-right:4px">보기</span>${chips}${layerChips}</div>${dayseg}
       <div class="plan-scroll"><div class="plan ${ui.planEdit?"editing":"locked"} ${ui.planEdit&&ui.addType?"adding":""} ${ui.labels?"":"nolabels"}" id="plan">
-        <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${glines}${gbad}${marks}${sel&&!ui.planEdit&&sel.floor===ui.floor?mkPop(sel,whoAt(sel),cov):""}${gsel&&!sel&&!ui.planEdit?gPop(gsel,gn[gsel.id],true):""}</div></div>
-      ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}</div>${itemChips?`<div class="row small noprint"><span class="muted" style="margin-right:4px">물품</span>${itemChips}</div>`:""}${ui.addType&&TYPES[ui.addType]?`<div class="small muted noprint">도면을 누르면 <b>${esc(TYPES[ui.addType].name)}</b>이(가) 추가돼요.</div>`:""}`:""}
+        <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${zrects}${glines}${gbad}${marks}${zbadges}${sel&&!ui.planEdit&&sel.floor===ui.floor?mkPop(sel,whoAt(sel),cov):""}${openG&&!(sel&&!ui.planEdit)?zPop(openG):""}${gsel&&!sel&&!ui.planEdit&&!openG?gPop(gsel,gn[gsel.id],true):""}</div></div>
+      ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">구역</span>${zonesAll().filter(z=>z.floor===ui.floor).map(z=>`<span class="chip mchip"><button type="button" class="linkbtn small" data-zren="${esc(z.id)}" title="이름 바꾸기">${esc(z.name)}</button><button type="button" class="x" data-zdel="${esc(z.id)}" aria-label="${esc(z.name)} 구역 지우기">×</button></span>`).join("")}<button type="button" class="chip add" data-zadd aria-pressed="${!!ui.zDraw}">+ 구역 그리기</button>${ui.zDraw?`<span class="muted">${ui.zDraw.x==null?"도면에서 구역의 한쪽 모서리를 누르세요.":"반대쪽 모서리를 누르세요."}</span>`:`<span class="muted">구역 안의 물품은 하나로 묶여 보여요</span>`}</div>
+      <div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}</div>${itemChips?`<div class="row small noprint"><span class="muted" style="margin-right:4px">물품</span>${itemChips}</div>`:""}${ui.addType&&TYPES[ui.addType]?`<div class="small muted noprint">도면을 누르면 <b>${esc(TYPES[ui.addType].name)}</b>이(가) 추가돼요.</div>`:""}`:""}
       ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted noprint">이 층에는 아직 표시한 항목이 없어요. '위치 편집'을 누른 뒤 '추가'에서 종류를 고르고 도면을 눌러 보세요.</div>`)}
     </div>
     <aside class="side">${editor}</aside>
@@ -1553,7 +1604,7 @@ function bindPlan(){
     const has=state.markers.filter(m=>m.floor==="4F"&&mver(m)===to).length;
     if(has&&!confirm(`${verName(to)} 버전에 이미 ${has}개가 있어요. ${verName(from)} 버전을 그 위에 더해서 복사할까요?`)) return;
     copyVer4(from,to); });
-  document.querySelectorAll("[data-floor]").forEach(b=>b.onclick=()=>{ui.floor=b.dataset.floor;ui.sel=null;try{localStorage.setItem("mb-floor",ui.floor)}catch(e){};render();});
+  document.querySelectorAll("[data-floor]").forEach(b=>b.onclick=()=>{ui.floor=b.dataset.floor;ui.sel=null;ui.zoneOpen=null;ui.zDraw=null;try{localStorage.setItem("mb-floor",ui.floor)}catch(e){};render();});
   document.querySelectorAll("[data-vis]").forEach(b=>b.onclick=()=>{const k=b.dataset.vis;ui.hidden.has(k)?ui.hidden.delete(k):ui.hidden.add(k);render();});
   document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{ const k=b.dataset.add, it=state.items.find(i=>i.id===k);
     if(it&&it.link!==it.id) save("items",{...it,link:it.id},true); // 물품을 배치도 항목으로 (찍은 수 = 도면 수량)
@@ -1570,12 +1621,25 @@ function bindPlan(){
   fitPop(plan);
   plan.querySelectorAll("[data-itzoom]").forEach(im=>im.onclick=()=>{ const i=state.items.find(x=>x.id===im.dataset.itzoom); if(!i) return;
     const ph=(i.photos||[]).find(p=>p.thumb===i.image); zoomImg(i.image,i.name||"",ph&&ph.fileId); });
+  plan.querySelectorAll("[data-zclose]").forEach(b=>b.onclick=()=>{ ui.zoneOpen=null; ui.sel=null; render(); });
+  plan.querySelectorAll("[data-zsel]").forEach(b=>b.onclick=()=>{ ui.sel=b.dataset.zsel; ui.planG=null; render(); });
+  document.querySelectorAll("[data-zadd]").forEach(b=>b.onclick=()=>{ ui.zDraw=ui.zDraw?null:{}; ui.addType=null; render(); });
+  document.querySelectorAll("[data-zren]").forEach(b=>b.onclick=()=>{ const zs=zonesAll(), z=zs.find(x=>x.id===b.dataset.zren); if(!z) return;
+    const n=(prompt("구역 이름",z.name)||"").trim(); if(n&&n!==z.name) putZones(zs.map(x=>x.id===z.id?{...x,name:n}:x)); });
+  document.querySelectorAll("[data-zdel]").forEach(b=>b.onclick=()=>{ const zs=zonesAll(), z=zs.find(x=>x.id===b.dataset.zdel); if(!z||!confirm(`'${z.name}' 구역을 지울까요? (안의 물품은 그대로 있어요)`)) return;
+    if(ui.zoneOpen===z.id) ui.zoneOpen=null; putZones(zs.filter(x=>x.id!==z.id)); });
   plan.addEventListener("pointerdown",e=>{
     if(e.target.closest(".mkpop")) return; /* 정보 창 안을 누를 땐 그대로 */
+    const zb=e.target.closest("[data-zone]"); if(zb){ ui.zoneOpen=ui.zoneOpen===zb.dataset.zone?null:zb.dataset.zone; ui.sel=null; ui.planG=null; render(); return; }
+    if(ui.planEdit&&ui.zDraw&&!e.target.closest(".mk")){ const r0=plan.getBoundingClientRect(), x=+((e.clientX-r0.left)/r0.width*100).toFixed(1), y=+((e.clientY-r0.top)/r0.height*100).toFixed(1);
+      if(ui.zDraw.x==null){ ui.zDraw={x,y}; render(); return; }
+      const n=(prompt("구역 이름 (예: 리셉션, 남자 스태프실)","")||"").trim(), a=ui.zDraw; ui.zDraw=null;
+      if(n&&Math.abs(a.x-x)>0.5&&Math.abs(a.y-y)>0.5) putZones([...zonesAll(),{id:uid("z"),floor:ui.floor,name:n,x1:Math.min(a.x,x),y1:Math.min(a.y,y),x2:Math.max(a.x,x),y2:Math.max(a.y,y)}]); else render();
+      return; }
     const gb=e.target.closest("[data-pg]"); if(gb&&!ui.planEdit){ ui.planG=ui.planG===gb.dataset.pg?null:gb.dataset.pg; ui.sel=null; render(); return; }
     const mk=e.target.closest(".mk:not([data-pg])"); const r=plan.getBoundingClientRect();
     if(!mk){
-      if(!ui.planEdit||!ui.addType){ if(ui.sel||ui.planG){ui.sel=null;ui.planG=null;render();} return; }
+      if(!ui.planEdit||!ui.addType){ if(ui.sel||ui.planG||ui.zoneOpen){ui.sel=null;ui.planG=null;ui.zoneOpen=null;render();} return; }
       const x=+((e.clientX-r.left)/r.width*100).toFixed(2), y=+((e.clientY-r.top)/r.height*100).toFixed(2);
       if(!TYPES[ui.addType]){ ui.addType=null; render(); return; }
       const m={id:uid("m"),floor:ui.floor,type:ui.addType,x,y,label:TYPES[ui.addType].name,qty:1,note:""};
@@ -1660,7 +1724,7 @@ function mapCard(title,controls,pins,hint,adding){
   </div>`;
 }
 function bindMapCard(onPin,onPlace){
-  document.querySelectorAll("[data-floor]").forEach(b=>b.onclick=()=>{ui.floor=b.dataset.floor;ui.sel=null;try{localStorage.setItem("mb-floor",ui.floor)}catch(e){};render();});
+  document.querySelectorAll("[data-floor]").forEach(b=>b.onclick=()=>{ui.floor=b.dataset.floor;ui.sel=null;ui.zoneOpen=null;ui.zDraw=null;try{localStorage.setItem("mb-floor",ui.floor)}catch(e){};render();});
   const t=$("#mapToggle"); if(t) t.onclick=()=>{ui.mapOpen=!ui.mapOpen;try{localStorage.setItem("mb-map",ui.mapOpen?"1":"0")}catch(e){};render();};
   const l=$("#lblToggle2"); if(l) l.onchange=e=>{ui.labels=e.target.checked;render();};
   const plan=$("#miniPlan"); if(!plan) return;
