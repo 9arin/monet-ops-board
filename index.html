@@ -367,6 +367,10 @@ table.rota td.over{box-shadow:inset 0 0 0 2px var(--bad)}
 table.rota .overtxt{color:var(--bad);font-weight:700}
 table.rota .cellbtn{all:unset;cursor:pointer;display:block;width:100%;min-height:18px}
 table.rota .cellbtn:hover{text-decoration:underline}
+table.rota .plusp{display:block;font-size:11.5px;color:var(--ink)}
+table.rota td.editing{min-width:130px}
+table.rota td.editing .pchip{display:flex;justify-content:space-between;margin-top:4px;font-size:11.5px}
+table.rota td.editing [data-plus]{margin-top:4px}
 table.rota td.editing select{width:100%;font-size:12px;border:1px solid var(--accent);border-radius:4px;background:var(--bg)}
 .nightgrid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;align-items:start}
 @media (max-width:640px){.nightgrid{grid-template-columns:minmax(0,1fr)}}
@@ -609,10 +613,15 @@ tr.rowsel td{background:var(--warnbg)}
   tr,.task,.panel h3{break-inside:avoid}
   #printArea input,#printArea select{border:0;background:none;appearance:none;-webkit-appearance:none}
   #printArea .task{grid-template-columns:24px 52px minmax(0,1fr) 140px 110px}
+  .rotaprint{break-inside:avoid;page-break-inside:avoid}
   .rotaprint table.rota{width:100%;min-width:0}
   .rotaprint table.rota td,.rotaprint table.rota th{font-size:11.5px;padding:4px 3px}
   .rotaprint table.rota td.gap{color:var(--bad)}
 }
+/* 인쇄 크기 재기용 (인쇄 때와 같은 글자·여백) */
+#printArea.measure .rotaprint table.rota{width:100%;min-width:0}
+#printArea.measure .rotaprint table.rota td,#printArea.measure .rotaprint table.rota th{font-size:11.5px;padding:4px 3px}
+#printArea.measure .noprint{display:none}
 .rp-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
 </style>
 
@@ -1433,8 +1442,8 @@ function printAll(pick){
   Object.assign(ui,keep); ui.printingAll=false;
   doPrint(parts.join(""),`MONET100 운영보드 ${new Date().toISOString().slice(0,10)}`);
 }
-function doPrint(html,title){ // title = PDF 파일 이름
-  $("#printArea").innerHTML=html;
+function doPrint(html,title,before){ // title = PDF 파일 이름, before: 인쇄 직전에 한 번 (크기 맞추기 등)
+  $("#printArea").innerHTML=html; if(before) before();
   const root=document.documentElement, theme=root.getAttribute("data-theme");
   root.setAttribute("data-theme","light"); document.body.classList.add("printing");
   const t0=document.title; document.title=title;
@@ -1696,7 +1705,15 @@ function nightDrops(pos,extra,crews,res){ // 야간을 해서 40시간이 넘는
       if(pick){ (drops[pick]=drops[pick]||new Set()).add(p.id); used[pick]=(used[pick]||0)+1; /* 지원 인원 한 명을 쓴 셈 */ } }); });
   return drops;
 }
-function dayPlan(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 반영), 지원, 야간, 휴무
+function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 것 (cfg-ovr days[날짜]["자리id+"] = [사람])
+  const pl=dayPlan0(ctx,date); pl.plus={}; if(pl.closed||pl.prep) return pl;
+  const ov=ovrAll()[date]||{}, d=dowOf(date), ppl=alba(), crew=pl.crew||[];
+  ctx.pos.forEach(x=>{ const ids=ov[x.id+"+"]; if(!Array.isArray(ids)) return;
+    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!pl.working.has(p.id)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)&&!crew.some(c=>c.id===p.id));
+    if(L.length){ pl.plus[x.id]=L; L.forEach(p=>pl.working.add(p.id)); } });
+  pl.off=pl.off.filter(p=>!pl.working.has(p.id)); return pl;
+}
+function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 반영), 지원, 야간, 휴무
   const {pos,res}=ctx, d=dowOf(date), ov=ovrAll()[date]||{}, ppl=alba(), byId=id=>ppl.find(p=>p.id===id);
   if(isClosed(date)){ const cells={}; pos.forEach(x=>cells[x.id]={who:null,kind:"closed"}); return {cells,crew:[],off:ppl.slice(),working:new Set(),extras:[],spare:[],closed:true}; } // 휴관
   if(date>=WORK_FROM&&date<OPEN_FROM){ // OT·시뮬레이션: 전원 (필수 휴무 날짜만 빼고)
@@ -1750,14 +1767,22 @@ function printRota(){
   const {res,pos}=coverage(), dates=weekDates(curWeek()), f=d=>`${+d.slice(5,7)}/${+d.slice(8)}`;
   const html=`<section class="p-sec rotaprint"><div class="rp-head"><h2>MONET 100 주간 근무표</h2><b>${dates[0].slice(0,4)}. ${f(dates[0])} (월) ~ ${f(dates[6])} (일)</b></div>
     ${rotaHTML(pos,res,true)}<p class="small muted" style="margin:6px 0 0">운영 시간 기준 · 자리마다 휴게 1시간 · ${new Date().toLocaleDateString("ko-KR")} 뽑음</p></section>`;
-  doPrint(html,`MONET100 근무표 ${dates[0]}~${dates[6].slice(5)}`);
+  doPrint(html,`MONET100 근무표 ${dates[0]}~${dates[6].slice(5)}`,fitOnePage);
+}
+// A4 가로 한 장(여백 10mm → 277×190mm ≈ 1047×718px)에 다 들어가게 줄여요
+function fitOnePage(){
+  const pa=$("#printArea"), sec=pa.querySelector(".p-sec"); if(!sec) return;
+  const keep=pa.getAttribute("style")||""; pa.setAttribute("style","display:block;position:absolute;left:-20000px;top:0;width:1047px;background:#fff"); pa.classList.add("measure");
+  sec.style.zoom=""; const w=sec.scrollWidth, h=sec.scrollHeight;
+  const z=Math.min(1,1040/Math.max(1,w),700/Math.max(1,h)); if(z<1) sec.style.zoom=String(Math.floor(z*1000)/1000);
+  pa.classList.remove("measure"); if(keep) pa.setAttribute("style",keep); else pa.removeAttribute("style");
 }
 function rotaHTML(pos,res,pr){ // pr: 인쇄용 (버튼·편집 없이)
   const mgr=state.staff.find(isMgr), mon=curWeek(), dates=weekDates(mon), open=dt=>dt>=WORK_FROM&&dt<=OPEN_TO;
   const ctx=planCtx(), plans=dates.map(dt=>dayPlan(ctx,dt));
   // 그 주 근무일 (주간+야간) → 5일 넘으면 빨간 테두리
   // 그 주 근무시간 (주간: 자리 시간에서 휴게 1시간 뺌, 야간 3시간) → 40시간 넘으면 빨간 테두리
-  const wk={}; plans.forEach((pl,i)=>{ if(!open(dates[i])) return; (pl.prep||[]).forEach(p=>wk[p.id]=(wk[p.id]||0)+8); pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) wk[c.who.id]=(wk[c.who.id]||0)+netH(posTime(x)); }); pl.extras.forEach(p=>wk[p.id]=(wk[p.id]||0)+personNet(p,pos)); pl.crew.forEach(p=>wk[p.id]=(wk[p.id]||0)+NIGHT_H); });
+  const wk={}; plans.forEach((pl,i)=>{ if(!open(dates[i])) return; (pl.prep||[]).forEach(p=>wk[p.id]=(wk[p.id]||0)+8); pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) wk[c.who.id]=(wk[c.who.id]||0)+netH(posTime(x)); (pl.plus[x.id]||[]).forEach(p=>wk[p.id]=(wk[p.id]||0)+netH(posTime(x))); }); pl.extras.forEach(p=>wk[p.id]=(wk[p.id]||0)+personNet(p,pos)); pl.crew.forEach(p=>wk[p.id]=(wk[p.id]||0)+NIGHT_H); });
   const over=p=>p&&(wk[p.id]||0)>MAX_H;
   const secs={}; pos.forEach(x=>(secs[posTime(x)]=secs[posTime(x)]||[]).push(x));
   const keys=Object.keys(secs).sort((a,b)=>toMin(a)-toMin(b));
@@ -1771,10 +1796,13 @@ function rotaHTML(pos,res,pr){ // pr: 인쇄용 (버튼·편집 없이)
   let body=keys.map(t=>sec(t,`휴게 1시간 · 하루 ${net(t)}시간`)+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}${posBrk(x)?`<span class="brk">☕ ${posBrk(x)}</span>`:""}</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
       const c=plans[i].cells[x.id], key=dt+"|"+x.id; if(c.kind==="prep") return `<td class="closed">OT·시뮬</td>`; if(c.kind==="closed") return `<td class="closed">휴관</td>`;
       if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>(!pl.working.has(p.id)||p.id===(c.who&&c.who.id))&&!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 덜 일한 사람 먼저
-        return `<td class="editing"><select data-swap="${key}"><option value="">${c.kind==="swap"?"원래대로":"그대로"}</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select></td>`; }
+        const plusL=pl.plus[x.id]||[], addable=alba().filter(p=>!pl.working.has(p.id)&&!pl.crew.some(q=>q.id===p.id)&&!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0));
+        const plusUI=`${plusL.map(p=>`<span class="chip pchip">+ ${esc(pname(p))}<button type="button" class="x" data-plusrm="${key}|${p.id}" aria-label="빼기">×</button></span>`).join("")}<select data-plus="${key}" aria-label="이 칸에 사람 더 넣기"><option value="">+ 사람 더 넣기</option>${addable.map(p=>`<option value="${p.id}">${esc(pname(p))} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select><button type="button" class="linkbtn small" data-celldone>닫기</button>`;
+        return `<td class="editing"><select data-swap="${key}"><option value="">${c.kind==="swap"?"원래대로":"그대로"}</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select>${plusUI}</td>`; }
       const cls=c.kind==="gap"?"gap":c.kind==="swap"||c.kind==="auto"?"swp":"";
-      if(pr) return `<td class="${cls}">${c.who?esc(pname(c.who)):"빈자리"}</td>`;
-      return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="${c.kind==="auto"?esc(pname(c.base))+" "+(c.why||"")+" → 자동 대체":"이날만 사람 바꾸기"}">${c.who?esc(pname(c.who)):"빈자리"}</button></td>`; }).join("")}</tr>`).join("")).join("");
+      const plusH=(plans[i].plus[x.id]||[]).map(p=>`<span class="plusp ${!pr&&over(p)?"overtxt":""}">+ ${esc(pname(p))}</span>`).join("");
+      if(pr) return `<td class="${cls}">${c.who?esc(pname(c.who)):"빈자리"}${plusH}</td>`;
+      return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="${c.kind==="auto"?esc(pname(c.base))+" "+(c.why||"")+" → 자동 대체":"이날만 사람 바꾸기"}">${c.who?esc(pname(c.who)):"빈자리"}</button>${plusH}</td>`; }).join("")}</tr>`).join("")).join("");
   if(plans.some(pl=>pl.prep)) body+=sec("OT · 시뮬레이션","전원 8시간")+`<tr><td class="rl">전원 근무</td>${dates.map((dt,i)=>plans[i].prep?`<td class="nt">${plans[i].prep.length}명</td>`:open(dt)?`<td></td>`:closed).join("")}</tr>`;
   const under=alba().map(p=>({p,h:wk[p.id]||0})).filter(o=>o.h<MAX_H).sort((a,b)=>a.h-b.h||(a.p.order||0)-(b.p.order||0));
   if(under.length&&!pr) body+=sec(`이번 주 ${MAX_H}시간 미만`,"여유 있는 사람 · 야간이나 빈자리에 넣을 수 있어요")+`<tr class="under"><td class="rl">${under.length}명</td><td colspan="7" style="text-align:left">${under.map(o=>`<span class="chip uchip">${esc(pname(o.p))} <span class="num muted">${+o.h.toFixed(1)}h · ${Math.round(o.h/8*10)/10}일</span></span>`).join(" ")}</td></tr>`;
@@ -1785,7 +1813,8 @@ function rotaHTML(pos,res,pr){ // pr: 인쇄용 (버튼·편집 없이)
   body+=`<tr class="sum"><td class="rl">인원</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed; const t=Object.values(plans[i].cells).filter(c=>c.who).length, n=plans[i].crew.length;
     if(plans[i].prep) return `<td class="ok">전원 ${plans[i].prep.length}</td>`;
     if(plans[i].closed) return `<td class="closed">휴관</td>`;
-    return `<td class="${t===DAILY_ALBA?"ok":"bad"}">알바 ${t}${nightCfg().dates.includes(dt)?`<br>+야간 ${n}`:""}</td>`; }).join("")}</tr>`;
+    const pn=Object.values(plans[i].plus).reduce((s,L)=>s+L.length,0);
+    return `<td class="${t===DAILY_ALBA?"ok":"bad"}">알바 ${t}${pn?` <span class="small">+${pn}</span>`:""}${nightCfg().dates.includes(dt)?`<br>+야간 ${n}`:""}</td>`; }).join("")}</tr>`;
   const closedBar=`<div class="row small noprint" style="gap:6px;margin-bottom:8px"><span class="muted">휴관일</span>${closedDays().slice().sort().map(d=>`<span class="chip mchip">${+d.slice(5,7)}/${+d.slice(8)} (${DAYS[dowOf(d)]})<button class="x" data-closedrm="${d}" aria-label="휴관 취소">×</button></span>`).join("")}<input type="date" id="closedAdd" min="${OPEN_FROM}" max="${OPEN_TO}" style="font-size:12px"></div>`;
   if(pr) return `<table class="rota">${head}${body}</table>`;
   return `${nav}${closedBar}<div class="tbl-wrap"><table class="rota">${head}${body}</table></div>`;
@@ -1809,7 +1838,7 @@ function payLedger(){
   const P=id=>per[id]=per[id]||{days:0,nights:0,m:{}}, M=k=>months[k]=months[k]||{days:0,nights:0,open:0,from:null,to:null};
   for(let d=WORK_FROM;d<=OPEN_TO;d=addDay(d,1)){ const pl=dayPlan(ctx,d), k=d.slice(0,7), m=M(k); if(!pl.closed) m.open++; m.cal=(m.cal||0)+1; m.from=m.from||d; m.to=d; // 휴관일은 기준 근무일에서 빼요 (월급 그대로)
     const add=(id,u,night)=>{ const o=P(id); o.m[k]=(o.m[k]||0)+u; if(night){ o.nights++; m.nights++; } else { o.days++; m.days++; } };
-    ctx.pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) add(c.who.id,1); });
+    ctx.pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) add(c.who.id,1); (pl.plus&&pl.plus[x.id]||[]).forEach(p=>add(p.id,1)); });
     pl.extras.forEach(p=>add(p.id,1)); pl.crew.forEach(p=>add(p.id,NIGHT_W,true)); (pl.prep||[]).forEach(p=>add(p.id,1)); }
   const std=k=>months[k].open*WORK_DAYS/7, dim=k=>new Date(+k.slice(0,4),+k.slice(5),0).getDate();
   const pay=(o,k)=>monthly*(((o.m||{})[k]||0)/std(k));
@@ -1868,12 +1897,21 @@ function bindRota(){
     i.onblur=done; });
   document.querySelectorAll("[data-wk]").forEach(b=>b.onclick=()=>{ const d=new Date(curWeek()+"T00:00"); d.setDate(d.getDate()+(+b.dataset.wk)); ui.rotaWeek=ymd(d); ui.editCell=null; render(); });
   document.querySelectorAll("[data-cell]").forEach(b=>b.onclick=()=>{ ui.editCell=b.dataset.cell; render(); const sel=document.querySelector(`[data-swap="${ui.editCell}"]`); if(sel) sel.focus(); });
+  const ovPut=(dt,f)=>{ const c=state.settings.find(x=>x.id==="cfg-ovr")||{id:"cfg-ovr",days:{}}, day={...(c.days||{})[dt]}; f(day);
+    const days={...(c.days||{}),[dt]:day}; if(!Object.keys(day).length) delete days[dt]; save("settings",{...c,days}); };
+  const inCellNow=el=>{ const td=el.closest("td"); return td&&td.contains(document.activeElement); };
+  document.querySelectorAll("[data-plus]").forEach(sel=>{ sel.onchange=()=>{ const [dt,pid]=sel.dataset.plus.split("|"), v=sel.value; if(!v) return;
+      ovPut(dt,day=>{ const L=Array.isArray(day[pid+"+"])?day[pid+"+"]:[]; if(!L.includes(v)) day[pid+"+"]=[...L,v]; }); toast("이 칸에 사람을 더 넣었어요"); };
+    sel.onblur=()=>setTimeout(()=>{ if(ui.editCell===sel.dataset.plus&&!inCellNow(sel)){ ui.editCell=null; render(); } },150); });
+  document.querySelectorAll("[data-plusrm]").forEach(b=>b.onclick=()=>{ const [dt,pid,who]=b.dataset.plusrm.split("|");
+    ovPut(dt,day=>{ const L=(day[pid+"+"]||[]).filter(x=>x!==who); if(L.length) day[pid+"+"]=L; else delete day[pid+"+"]; }); });
+  document.querySelectorAll("[data-celldone]").forEach(b=>b.onclick=()=>{ ui.editCell=null; render(); });
   document.querySelectorAll("[data-swap]").forEach(sel=>{ const done=()=>{ ui.editCell=null; render(); };
     sel.onchange=()=>{ const [dt,pid]=sel.dataset.swap.split("|"), c=state.settings.find(x=>x.id==="cfg-ovr")||{id:"cfg-ovr",days:{}}, day={...(c.days||{})[dt]};
       if(sel.value) day[pid]=sel.value; else delete day[pid];
       const days={...(c.days||{}),[dt]:day}; if(!Object.keys(day).length) delete days[dt];
-      ui.editCell=null; save("settings",{...c,days}); };
-    sel.onblur=()=>setTimeout(()=>{ if(ui.editCell===sel.dataset.swap) done(); },150); });
+      save("settings",{...c,days}); };
+    sel.onblur=()=>setTimeout(()=>{ if(ui.editCell===sel.dataset.swap&&!inCellNow(sel)) done(); },150); });
   const nc=()=>nightCfg(), put=dates=>{ save("settings",{...nc(),id:"cfg-night",dates:[...new Set(dates)].sort()}); syncRoster(); };
   document.querySelectorAll("[data-cal]").forEach(b=>b.onclick=()=>{ const d=b.dataset.cal, ds=nc().dates; ui.calMonth=d.slice(0,7); put(ds.includes(d)?ds.filter(x=>x!==d):[...ds,d]); });
   document.querySelectorAll("[data-calrm]").forEach(b=>b.onclick=()=>put(nc().dates.filter(x=>x!==b.dataset.calrm)));
