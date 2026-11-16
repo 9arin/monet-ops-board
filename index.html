@@ -1522,6 +1522,8 @@ function planGroups(ms){
     if(c.length>1){ c.forEach(x=>used.add(x.id)); groups.push({id:"c:"+c.map(x=>x.id).sort()[0],name:"겹친 물품",x:c.reduce((s,x)=>s+x.x,0)/c.length,y:c.reduce((s,x)=>s+x.y,0)/c.length,ms:c}); } });
   return groups;
 }
+const itemsToPlace=()=>state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0));
+const placeKey=i=>i.link&&i.link!==i.id&&BASE_TYPES.has(i.link)?i.link:i.id; // 배치도에 찍힐 종류
 function zPop(g){ // 묶음을 누르면: 사진 · 이름 · 개수 목록
   const rows={}; g.ms.forEach(m=>{ const k=m.type+"|"+(m.label||""); const r=rows[k]||(rows[k]={m,q:0,n:0,last:m}); r.q+=Number(m.qty)||1; r.n++; r.last=m; });
   const L=Object.values(rows).sort((a,b)=>b.q-a.q), tot=L.reduce((s,r)=>s+r.q,0);
@@ -1531,7 +1533,7 @@ function zPop(g){ // 묶음을 누르면: 사진 · 이름 · 개수 목록
     <b>${esc(g.name)} <span class="small muted">물품 ${tot}개 · ${L.length}종</span></b>
     <div class="zlist">${L.map(r=>{ const t=TYPES[r.m.type]||{}, nm=t.name||"", lb=r.m.label&&r.m.label!==nm?r.m.label:"";
       return `<div class="zrowwrap"><button type="button" class="zrow" data-zsel="${r.m.id}">${pic(r.m)}<span class="zt"><b>${esc(nm||lb||"물품")}</b>${lb&&nm?`<span class="small muted">${esc(lb)}</span>`:""}</span><span class="num zq">${r.q}<span class="small muted">개</span></span></button><span class="zpm"><button type="button" data-zminus="${r.last.id}" aria-label="${esc(nm)} 하나 빼기" title="하나 빼기">−</button><button type="button" data-zplus="${r.last.id}" aria-label="${esc(nm)} 하나 더" title="하나 더">+</button></span></div>`; }).join("")||`<div class="small muted">아직 물품이 없어요.</div>`}</div>
-    ${g.zone?`<select data-zput aria-label="${esc(g.name)}에 물품 넣기"><option value="">+ ${esc(g.name)}에 물품 넣기</option><optgroup label="기본 항목">${Object.entries(TYPES).filter(([k,t])=>!t.item&&k!=="staff"&&k!=="note").map(([k,t])=>`<option value="${k}">${esc(t.name)}</option>`).join("")}</optgroup><optgroup label="물품 탭">${state.items.filter(i=>!i.link||i.link===i.id).filter(i=>ui.floor!=="4F"||itemVers(i).includes(ui.ver4)).map(i=>`<option value="${i.id}">${esc(i.name||"물품")}</option>`).join("")}</optgroup></select>`:""}
+    ${g.zone?`<select data-zput aria-label="${esc(g.name)}에 물품 넣기"><option value="">+ ${esc(g.name)}에 물품 넣기</option><optgroup label="기본 항목">${Object.entries(TYPES).filter(([k,t])=>!t.item&&k!=="staff"&&k!=="note").map(([k,t])=>`<option value="${k}">${esc(t.name)}</option>`).join("")}</optgroup><optgroup label="물품 탭">${itemsToPlace().map(i=>`<option value="${esc(placeKey(i))}">${esc(i.name||"물품")}</option>`).join("")}</optgroup></select>`:""}
     <div class="small muted">${ui.planEdit?"도면의 점을 끌어서 옮길 수 있어요. 다 했으면 ×로 접어요.":"줄을 누르면 그 점의 정보가 열려요."}</div></div>`;
 }
 function planHTML(){
@@ -1541,8 +1543,9 @@ function planHTML(){
   const chips=Object.entries(TYPES).filter(([k,t])=>!t.item||ca[k]).map(([k,t])=>`<button class="chip" data-vis="${k}" aria-pressed="${!ui.hidden.has(k)}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}<span class="num muted">${cf[k]||0}</span></button>`).join("");
   const addChips=Object.entries(TYPES).filter(([k,t])=>!t.item).map(([k,t])=>`<button class="chip add" data-add="${k}" aria-pressed="${ui.addType===k}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</button>`).join("");
   // 물품 탭의 물품 중 아직 기본 항목과 이어지지 않은 것 (4층은 지금 버전에 들어가는 물품만)
-  const placeItems=state.items.filter(i=>(!i.link||i.link===i.id)&&(ui.floor!=="4F"||itemVers(i).includes(ui.ver4))).sort((a,b)=>(a.order||0)-(b.order||0));
-  const itemChips=placeItems.map(i=>`<button class="chip add" data-add="${i.id}" aria-pressed="${ui.addType===i.id}" title="물품 탭의 '${esc(i.name||"")}' · 찍은 만큼 도면 수량이 돼요"><span class="dot" style="background:${tcolor(i.link===i.id?i.id:"note")}"></span>${esc(i.name||"이름 없는 물품")}${ca[i.id]?` <span class="num muted">${ca[i.id]}</span>`:""}</button>`).join("");
+  // 물품 탭의 물품 전부 (3층·4층, 버전 상관없이 같은 목록). 기본 항목(차단봉 등)과 이어진 물품은 그 항목으로 찍혀요
+  const placeItems=itemsToPlace();
+  const itemChips=placeItems.map(i=>{ const k=placeKey(i); return `<button class="chip add" data-add="${esc(k)}" aria-pressed="${ui.addType===k}" title="물품 탭의 '${esc(i.name||"")}' · 찍은 만큼 도면 수량이 돼요"><span class="dot" style="background:${tcolor(i.link?k:"note")}"></span>${esc(i.name||"이름 없는 물품")}${ca[k]?` <span class="num muted">${ca[k]}</span>`:""}</button>`; }).join("");
   // 인력: 고른 요일에 그 자리에서 일하는 사람 (인력 탭과 같은 계산)
   const d=ui.staffDay, cov=loaded.staff&&ms.some(m=>m.type==="staff")&&!(ui.floor==="4F"&&ui.ver4!=="exh")?coverage().res:null; // 근무자 배정은 전시 버전만
   const whoAt=m=>{ if(!cov||m.type!=="staff") return null; const c=cov[m.id]&&cov[m.id][d];
