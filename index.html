@@ -649,6 +649,13 @@ const TYPES = {
   desk:{name:"리셉션 테이블",c:"--t-desk"}, chair:{name:"의자",c:"--t-chair"}, exhibit:{name:"전시 차단봉",c:"--t-exhibit"},
   sticker:{name:"바닥 스티커",c:"--t-sticker"}, caution:{name:"주의표지판",c:"--t-caution"}, note:{name:"메모",c:"--t-note"}
 };
+const BASE_TYPES=new Set(Object.keys(TYPES));
+// 물품 탭의 물품을 배치도에 바로 찍을 수 있게: 물품 자신과 이어진 물품(link = 물품 id)은 배치도 항목이 돼요
+const ITEM_C=["--t-sticker","--t-exhibit","--t-caution","--t-desk","--t-stanchion","--t-pop","--t-chair"];
+function syncItemTypes(){
+  Object.keys(TYPES).forEach(k=>{ if(!BASE_TYPES.has(k)) delete TYPES[k]; });
+  state.items.forEach(i=>{ if(i.link===i.id){ let h=0; for(const ch of i.id) h=(h*31+ch.charCodeAt(0))>>>0; TYPES[i.id]={name:i.name||"물품",c:ITEM_C[h%ITEM_C.length],item:true}; } });
+}
 const DAYS = ["월","화","수","목","금","토","일"];
 const GROUPS = [
   {id:"rec",name:"리셉션",floor:"4층",slots:[
@@ -1318,7 +1325,7 @@ const drafts={};
 document.addEventListener("submit",e=>{ [...(e.target.elements||[])].forEach(el=>{ if(el.id) delete drafts[el.id]; }); },true);
 document.addEventListener("submit",e=>{ const id=e.target.id; if(id) setTimeout(()=>{ const f=document.getElementById(id); if(f&&f.reset) f.reset(); },0); }); // 추가한 뒤 칸 비우기
 function render(){
-  actCache=null; renderQueued=false; // 지금 그리니까 기다리던 '나중에 그리기'는 없던 걸로 (안 그러면 걸려서 멈춰요)
+  actCache=null; renderQueued=false; syncItemTypes(); // 지금 그리니까 기다리던 '나중에 그리기'는 없던 걸로 (안 그러면 걸려서 멈춰요)
   const a=document.activeElement, fid=a&&a.id&&$("#view").contains(a)?a.id:null, sel=fid&&typeof a.selectionStart==="number"?[a.selectionStart,a.selectionEnd]:null;
   try{ renderInner(); }
   catch(e){ console.error(e); $("#view").innerHTML=`<div class="empty">이 화면을 그리다 문제가 생겼어요. 다른 탭을 눌렀다 돌아오거나 새로고침해 주세요.<br><span class="small">${esc(e.message)}</span></div>`; }
@@ -1465,8 +1472,11 @@ function planHTML(){
   const ms=viewMarkers().filter(m=>m.floor===ui.floor);
   const cf=countBy(ui.floor,ui.ver4), ca=countBy(null,ui.ver4);
   const sel=state.markers.find(m=>m.id===ui.sel);
-  const chips=Object.entries(TYPES).map(([k,t])=>`<button class="chip" data-vis="${k}" aria-pressed="${!ui.hidden.has(k)}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}<span class="num muted">${cf[k]||0}</span></button>`).join("");
-  const addChips=Object.entries(TYPES).map(([k,t])=>`<button class="chip add" data-add="${k}" aria-pressed="${ui.addType===k}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</button>`).join("");
+  const chips=Object.entries(TYPES).filter(([k,t])=>!t.item||ca[k]).map(([k,t])=>`<button class="chip" data-vis="${k}" aria-pressed="${!ui.hidden.has(k)}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}<span class="num muted">${cf[k]||0}</span></button>`).join("");
+  const addChips=Object.entries(TYPES).filter(([k,t])=>!t.item).map(([k,t])=>`<button class="chip add" data-add="${k}" aria-pressed="${ui.addType===k}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</button>`).join("");
+  // 물품 탭의 물품 중 아직 기본 항목과 이어지지 않은 것 (4층은 지금 버전에 들어가는 물품만)
+  const placeItems=state.items.filter(i=>(!i.link||i.link===i.id)&&(ui.floor!=="4F"||itemVers(i).includes(ui.ver4))).sort((a,b)=>(a.order||0)-(b.order||0));
+  const itemChips=placeItems.map(i=>`<button class="chip add" data-add="${i.id}" aria-pressed="${ui.addType===i.id}" title="물품 탭의 '${esc(i.name||"")}' · 찍은 만큼 도면 수량이 돼요"><span class="dot" style="background:${tcolor(i.link===i.id?i.id:"note")}"></span>${esc(i.name||"이름 없는 물품")}${ca[i.id]?` <span class="num muted">${ca[i.id]}</span>`:""}</button>`).join("");
   // 인력: 고른 요일에 그 자리에서 일하는 사람 (인력 탭과 같은 계산)
   const d=ui.staffDay, cov=loaded.staff&&ms.some(m=>m.type==="staff")&&!(ui.floor==="4F"&&ui.ver4!=="exh")?coverage().res:null; // 근무자 배정은 전시 버전만
   const whoAt=m=>{ if(!cov||m.type!=="staff") return null; const c=cov[m.id]&&cov[m.id][d];
@@ -1515,7 +1525,7 @@ function planHTML(){
       <div class="row small noprint"><span class="muted" style="margin-right:4px">보기</span>${chips}${layerChips}</div>${dayseg}
       <div class="plan-scroll"><div class="plan ${ui.planEdit?"editing":"locked"} ${ui.planEdit&&ui.addType?"adding":""} ${ui.labels?"":"nolabels"}" id="plan">
         <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${glines}${gbad}${marks}${sel&&!ui.planEdit&&sel.floor===ui.floor?mkPop(sel,whoAt(sel),cov):""}${gsel&&!sel&&!ui.planEdit?gPop(gsel,gn[gsel.id],true):""}</div></div>
-      ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}${ui.addType?`<span class="muted">도면을 누르면 <b>${TYPES[ui.addType].name}</b>이 추가돼요.</span>`:""}</div>`:""}
+      ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}</div>${itemChips?`<div class="row small noprint"><span class="muted" style="margin-right:4px">물품</span>${itemChips}</div>`:""}${ui.addType&&TYPES[ui.addType]?`<div class="small muted noprint">도면을 누르면 <b>${esc(TYPES[ui.addType].name)}</b>이(가) 추가돼요.</div>`:""}`:""}
       ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted noprint">이 층에는 아직 표시한 항목이 없어요. '위치 편집'을 누른 뒤 '추가'에서 종류를 고르고 도면을 눌러 보세요.</div>`)}
     </div>
     <aside class="side">${editor}</aside>
@@ -1529,7 +1539,9 @@ function bindPlan(){
     copyVer4(from,to); });
   document.querySelectorAll("[data-floor]").forEach(b=>b.onclick=()=>{ui.floor=b.dataset.floor;ui.sel=null;try{localStorage.setItem("mb-floor",ui.floor)}catch(e){};render();});
   document.querySelectorAll("[data-vis]").forEach(b=>b.onclick=()=>{const k=b.dataset.vis;ui.hidden.has(k)?ui.hidden.delete(k):ui.hidden.add(k);render();});
-  document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{ui.addType=ui.addType===b.dataset.add?null:b.dataset.add;render();});
+  document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{ const k=b.dataset.add, it=state.items.find(i=>i.id===k);
+    if(it&&it.link!==it.id) save("items",{...it,link:it.id},true); // 물품을 배치도 항목으로 (찍은 수 = 도면 수량)
+    ui.addType=ui.addType===k?null:k; render(); });
   $("#lblToggle").onchange=e=>{ui.labels=e.target.checked;render();};
   $("#planEditBtn").onclick=()=>{ui.planEdit=!ui.planEdit; ui.addType=null; ui.confirmDel=null; if(!ui.planEdit) toast("위치를 잠갔어요"); render();};
   const plan=$("#plan");
@@ -1549,6 +1561,7 @@ function bindPlan(){
     if(!mk){
       if(!ui.planEdit||!ui.addType){ if(ui.sel||ui.planG){ui.sel=null;ui.planG=null;render();} return; }
       const x=+((e.clientX-r.left)/r.width*100).toFixed(2), y=+((e.clientY-r.top)/r.height*100).toFixed(2);
+      if(!TYPES[ui.addType]){ ui.addType=null; render(); return; }
       const m={id:uid("m"),floor:ui.floor,type:ui.addType,x,y,label:TYPES[ui.addType].name,qty:1,note:""};
       if(ui.floor==="4F"&&ui.ver4!=="exh") m.ver=ui.ver4; // 지금 고른 4층 버전에 추가
       if(ui.addType==="sticker") m.glyph="→";
@@ -2165,7 +2178,7 @@ function itemsHTML(){
       <td style="min-width:110px">${vendorSel(i,qq)}</td>
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
       <td style="min-width:110px"><input data-f="note" value="${esc(i.note||"")}" title="${esc(i.note||"")}"></td>
-      <td class="acts noprint"><div class="actw">${i.link?`<button class="btn small" data-focus="${esc(i.link)}" aria-pressed="${ui.itemFocus===i.link}" title="도면에서 이 물품 위치 보기">도면 <span class="num">${auto||0}</span></button>`:`<select class="linksel" data-f="link" aria-label="배치도 연결" title="배치도의 어떤 표시와 이어진 물품인지 고르면 도면에서 위치를 볼 수 있어요"><option value="">도면 연결</option>${Object.entries(TYPES).filter(([k])=>k!=="note").map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select>`} <button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></div></td></tr>
+      <td class="acts noprint"><div class="actw">${i.link?`<button class="btn small" data-focus="${esc(i.link)}" aria-pressed="${ui.itemFocus===i.link}" title="도면에서 이 물품 위치 보기">도면 <span class="num">${auto||0}</span></button>`:`<select class="linksel" data-f="link" aria-label="배치도 연결" title="배치도의 어떤 표시와 이어진 물품인지 고르면 도면에서 위치를 볼 수 있어요"><option value="">도면 연결</option><option value="${i.id}">이 물품 그대로 (배치도에서 찍기)</option>${Object.entries(TYPES).filter(([k,t])=>k!=="note"&&!t.item).map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select>`} <button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></div></td></tr>
       ${open?`<tr class="cand-row noprint" data-id="${i.id}"><td colspan="${NC}">${candsHTML(i)}</td></tr>`:""}`;}).join("")}
     </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:"이 라벨에 묶인 물품이 없어요."}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
   const kinds=`<div class="seg kindseg" role="group" aria-label="구분" style="margin-bottom:10px">${[["","전체"]].concat(kindsOf(base).map(k=>[k,k])).map(([k,n])=>`<button data-kf="${k}" aria-pressed="${(kf||"")===k}">${n} <span class="num">${k?base.filter(i=>i.kind===k).length:base.length}</span></button>`).join("")}</div>`;
@@ -2187,7 +2200,7 @@ function itemsHTML(){
       <label class="f">구분<select id="ni-kind">${ITEM_KIND.map(k=>`<option ${kf===k?"selected":""}>${k}</option>`).join("")}</select></label>
       <label class="f" id="ni-maker-f" ${kf===MAKER?"":"hidden"}>업체명<input id="ni-maker" placeholder="예: NGD"></label>
       <label class="f">수량<input id="ni-qty" type="number" min="0"></label>
-      <label class="f">배치도 연결<select id="ni-link"><option value="">없음</option>${Object.entries(TYPES).filter(([k])=>k!=="note").map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select></label>
+      <label class="f">배치도 연결<select id="ni-link"><option value="">없음 (배치도 '물품'에서 찍을 수 있어요)</option>${Object.entries(TYPES).filter(([k,t])=>k!=="note"&&!t.item).map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select></label>
       <button class="btn primary" type="submit">추가</button></form></div>`;
 }
 const curItem=id=>state.items.find(x=>x.id===id);
