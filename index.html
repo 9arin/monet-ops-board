@@ -1381,7 +1381,7 @@ function renderInner(){
   else if(ui.tab==="items") v.innerHTML=itemsHTML(), bindItems();
   else if(ui.tab==="gfx") v.innerHTML=gfxHTML(), bindGfx();
   else if(ui.tab==="sched") v.innerHTML=schedHTML(), bindSched();
-  else if(ui.tab==="docs") v.innerHTML=docsHTML(), bindDocs();
+  else if(ui.tab==="docs"){ ui.tab="plan"; try{localStorage.setItem("mb-tab","plan")}catch(e){} return render(); } // 자료 탭은 없앴어요 (올린 파일은 DB에 그대로)
   else if(ui.tab==="manual") v.innerHTML=manHTML(), bindMan();
   else v.innerHTML=tasksHTML(), bindTasks();
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
@@ -1430,7 +1430,7 @@ function renderStats(){
   ].join("");
 }
 function renderTabs(){
-  const tabs=[["plan","배치도",viewMarkers().length],["3d","3D",viewMarkers().filter(m=>m.type!=="note").length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["manual","운영",state.manual.length],["docs","자료",state.docs.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
+  const tabs=[["plan","배치도",viewMarkers().length],["3d","3D",viewMarkers().filter(m=>m.type!=="note").length],["staff","인력",alba().length],["items","물품",state.items.length],["gfx","그래픽",state.graphics.length],["sched","일정",state.sched.length],["manual","운영",state.manual.length],["tasks","할 일",state.tasks.filter(t=>!t.done).length]];
   $("#tabs").innerHTML=tabs.filter(t=>!guest||t[0]==="gfx").map(([k,n,c])=>`<button role="tab" data-tab="${k}" aria-selected="${ui.tab===k}">${n}<span class="cnt">${c}</span></button>`).join("");
   $("#tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;ui.sel=null;try{localStorage.setItem("mb-tab",ui.tab)}catch(e){};render();});
 }
