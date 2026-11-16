@@ -16,6 +16,7 @@
   --ok:#2f7d4f; --warn:#b7791f; --bad:#c0392b; --okbg:#e3f1e8; --warnbg:#fbf0dc; --badbg:#f9e3e0;
   --t-staff:#2e9a52; --t-stanchion:#d93a2f; --t-pop:#e2b007; --t-desk:#ef8a1f; --t-chair:#222222;
   --t-exhibit:#c2287a; --t-sticker:#2f6fdb; --t-caution:#14968c; --t-note:#7a8583;
+  --ic1:#7c4dff; --ic2:#8b5a2b; --ic3:#8a9a1b; --ic4:#1f3a93; --ic5:#5fb81f; --ic6:#1fa3d6; --ic7:#ff7aa8; --ic8:#4b3fbf; --ic9:#8e1b3a; --ic10:#b8860b; --ic11:#3dbf96; --ic12:#a23fd1; --ic13:#5a7fa8; --ic14:#ff8f6b; --ic15:#6b2d6b; --ic16:#2e6b2e;
   --v1:#7a5af5; --v2:#b58900; --v3:#3f9a3a; --v4:#14968c; --v5:#9a6b2f; --v6:#2f6fdb; --v7:#c2287a; --vbg:.16;
   --plan-filter:none; --scrim:rgba(20,26,25,.88); --scrim-ink:#ffffff; --shadow:rgba(20,30,28,.18);
   --f-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
@@ -27,6 +28,7 @@
   --ok:#6cc48d; --warn:#e3b55a; --bad:#ef7a6c; --okbg:#1d3326; --warnbg:#3a2f18; --badbg:#3d1f1b;
   --t-staff:#4fc77a; --t-stanchion:#ff6b5e; --t-pop:#f4cf3a; --t-desk:#ffa24a; --t-chair:#e7ecea;
   --t-exhibit:#f05aa8; --t-sticker:#6ea0ff; --t-caution:#3cc7bb; --t-note:#9aa6a3;
+  --ic1:#a98bff; --ic2:#c48a55; --ic3:#b8c94a; --ic4:#6f8be8; --ic5:#8fe05a; --ic6:#5cc9f2; --ic7:#ff9fc0; --ic8:#8a7ff0; --ic9:#e05a7f; --ic10:#e0b040; --ic11:#6fe0bc; --ic12:#c97ff0; --ic13:#8fb0d6; --ic14:#ffab8f; --ic15:#b77ab7; --ic16:#6fb06f;
   --v1:#a48cff; --v2:#e8c14a; --v3:#6cc46a; --v4:#3cc7bb; --v5:#d19a5c; --v6:#6ea0ff; --v7:#f05aa8; --vbg:.22;
   --plan-filter:invert(.9) hue-rotate(180deg); --shadow:rgba(0,0,0,.55); color-scheme:dark}}
 :root[data-theme="dark"]{
@@ -35,6 +37,7 @@
   --ok:#6cc48d; --warn:#e3b55a; --bad:#ef7a6c; --okbg:#1d3326; --warnbg:#3a2f18; --badbg:#3d1f1b;
   --t-staff:#4fc77a; --t-stanchion:#ff6b5e; --t-pop:#f4cf3a; --t-desk:#ffa24a; --t-chair:#e7ecea;
   --t-exhibit:#f05aa8; --t-sticker:#6ea0ff; --t-caution:#3cc7bb; --t-note:#9aa6a3;
+  --ic1:#a98bff; --ic2:#c48a55; --ic3:#b8c94a; --ic4:#6f8be8; --ic5:#8fe05a; --ic6:#5cc9f2; --ic7:#ff9fc0; --ic8:#8a7ff0; --ic9:#e05a7f; --ic10:#e0b040; --ic11:#6fe0bc; --ic12:#c97ff0; --ic13:#8fb0d6; --ic14:#ffab8f; --ic15:#b77ab7; --ic16:#6fb06f;
   --v1:#a48cff; --v2:#e8c14a; --v3:#6cc46a; --v4:#3cc7bb; --v5:#d19a5c; --v6:#6ea0ff; --v7:#f05aa8; --vbg:.22;
   --plan-filter:invert(.9) hue-rotate(180deg); --shadow:rgba(0,0,0,.55); color-scheme:dark}
 *{box-sizing:border-box}
@@ -654,10 +657,11 @@ const TYPES = {
 };
 const BASE_TYPES=new Set(Object.keys(TYPES));
 // 물품 탭의 물품을 배치도에 바로 찍을 수 있게: 물품 자신과 이어진 물품(link = 물품 id)은 배치도 항목이 돼요
-const ITEM_C=["--t-sticker","--t-exhibit","--t-caution","--t-desk","--t-stanchion","--t-pop","--t-chair"];
+const ITEM_C=Array.from({length:16},(_,i)=>`--ic${i+1}`); // 물품마다 다른 색 (기본 항목 색과도 겹치지 않게, :root 토큰)
 function syncItemTypes(){
   Object.keys(TYPES).forEach(k=>{ if(!BASE_TYPES.has(k)) delete TYPES[k]; });
-  state.items.forEach(i=>{ if(i.link===i.id){ let h=0; for(const ch of i.id) h=(h*31+ch.charCodeAt(0))>>>0; TYPES[i.id]={name:i.name||"물품",c:ITEM_C[h%ITEM_C.length],item:true}; } });
+  state.items.filter(i=>i.link===i.id).sort((a,b)=>(a.order||0)-(b.order||0)||a.id.localeCompare(b.id))
+    .forEach((i,n)=>{ TYPES[i.id]={name:i.name||"물품",c:ITEM_C[n%ITEM_C.length],item:true}; }); // 등록 순서대로 색을 하나씩
 }
 const DAYS = ["월","화","수","목","금","토","일"];
 const GROUPS = [
