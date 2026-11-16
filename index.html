@@ -517,6 +517,11 @@ tr[data-grow]{cursor:pointer}
 .zbadge b{background:var(--ink);color:var(--panel);border-radius:999px;padding:0 6px;font-size:11px}
 .plan.editing .zbadge{cursor:pointer}
 .zpop .zlist{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
+.zrowwrap{display:flex;align-items:center;gap:4px}
+.zpm{display:flex;gap:2px;flex:none}
+.zpm button{width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:15px;line-height:1;cursor:pointer;padding:0}
+.zpm button:hover{background:var(--soft)}
+.zpop [data-zput]{width:100%;font-size:13px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 .zrow{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:4px;border-radius:8px;cursor:pointer;width:100%}
 .zrow:hover,.zrow:focus-visible{background:var(--soft)}
 .plan .zrow img{position:static;inset:auto;filter:none;width:40px;height:40px;flex:0 0 40px;object-fit:cover;border-radius:6px;background:var(--soft)}
@@ -1518,14 +1523,15 @@ function planGroups(ms){
   return groups;
 }
 function zPop(g){ // 묶음을 누르면: 사진 · 이름 · 개수 목록
-  const rows={}; g.ms.forEach(m=>{ const k=m.type+"|"+(m.label||""); const r=rows[k]||(rows[k]={m,q:0,n:0}); r.q+=Number(m.qty)||1; r.n++; });
+  const rows={}; g.ms.forEach(m=>{ const k=m.type+"|"+(m.label||""); const r=rows[k]||(rows[k]={m,q:0,n:0,last:m}); r.q+=Number(m.qty)||1; r.n++; r.last=m; });
   const L=Object.values(rows).sort((a,b)=>b.q-a.q), tot=L.reduce((s,r)=>s+r.q,0);
   const pic=m=>{ const i=state.items.find(x=>x.link===m.type&&x.image); return i?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="zdot" style="background:${tcolor(m.type)}"></span>`; };
   return `<div class="mkpop zpop" style="${popPos(g.x,g.y)}" role="dialog" aria-label="${esc(g.name)} 물품">
     <button class="x" data-zclose aria-label="닫기">×</button>
     <b>${esc(g.name)} <span class="small muted">물품 ${tot}개 · ${L.length}종</span></b>
     <div class="zlist">${L.map(r=>{ const t=TYPES[r.m.type]||{}, nm=t.name||"", lb=r.m.label&&r.m.label!==nm?r.m.label:"";
-      return `<button type="button" class="zrow" data-zsel="${r.m.id}">${pic(r.m)}<span class="zt"><b>${esc(nm||lb||"물품")}</b>${lb&&nm?`<span class="small muted">${esc(lb)}</span>`:""}</span><span class="num zq">${r.q}<span class="small muted">개</span></span></button>`; }).join("")||`<div class="small muted">아직 물품이 없어요.</div>`}</div>
+      return `<div class="zrowwrap"><button type="button" class="zrow" data-zsel="${r.m.id}">${pic(r.m)}<span class="zt"><b>${esc(nm||lb||"물품")}</b>${lb&&nm?`<span class="small muted">${esc(lb)}</span>`:""}</span><span class="num zq">${r.q}<span class="small muted">개</span></span></button><span class="zpm"><button type="button" data-zminus="${r.last.id}" aria-label="${esc(nm)} 하나 빼기" title="하나 빼기">−</button><button type="button" data-zplus="${r.last.id}" aria-label="${esc(nm)} 하나 더" title="하나 더">+</button></span></div>`; }).join("")||`<div class="small muted">아직 물품이 없어요.</div>`}</div>
+    ${g.zone?`<select data-zput aria-label="${esc(g.name)}에 물품 넣기"><option value="">+ ${esc(g.name)}에 물품 넣기</option><optgroup label="기본 항목">${Object.entries(TYPES).filter(([k,t])=>!t.item&&k!=="staff"&&k!=="note").map(([k,t])=>`<option value="${k}">${esc(t.name)}</option>`).join("")}</optgroup><optgroup label="물품 탭">${state.items.filter(i=>!i.link||i.link===i.id).filter(i=>ui.floor!=="4F"||itemVers(i).includes(ui.ver4)).map(i=>`<option value="${i.id}">${esc(i.name||"물품")}</option>`).join("")}</optgroup></select>`:""}
     <div class="small muted">${ui.planEdit?"도면의 점을 끌어서 옮길 수 있어요. 다 했으면 ×로 접어요.":"줄을 누르면 그 점의 정보가 열려요."}</div></div>`;
 }
 function planHTML(){
@@ -1623,6 +1629,17 @@ function bindPlan(){
     const ph=(i.photos||[]).find(p=>p.thumb===i.image); zoomImg(i.image,i.name||"",ph&&ph.fileId); });
   plan.querySelectorAll("[data-zclose]").forEach(b=>b.onclick=()=>{ ui.zoneOpen=null; ui.sel=null; render(); });
   plan.querySelectorAll("[data-zsel]").forEach(b=>b.onclick=()=>{ ui.sel=b.dataset.zsel; ui.planG=null; render(); });
+  // 묶음 안에서 바로 빼고 넣기: − 하나 빼기(1개면 점을 지움), + 하나 더, 아래 칸에서 새 물품을 그 구역 안에 넣기
+  plan.querySelectorAll("[data-zplus]").forEach(b=>b.onclick=()=>{ const m=state.markers.find(x=>x.id===b.dataset.zplus); if(m) save("markers",{...m,qty:(Number(m.qty)||1)+1}); });
+  plan.querySelectorAll("[data-zminus]").forEach(b=>b.onclick=()=>{ const m=state.markers.find(x=>x.id===b.dataset.zminus); if(!m) return; const q=Number(m.qty)||1;
+    if(q>1) save("markers",{...m,qty:q-1}); else { remove("markers",m.id); undoToast(`${m.label||"물품"}을(를) 뺐어요.`,()=>save("markers",m)); } });
+  plan.querySelectorAll("[data-zput]").forEach(sel=>sel.onchange=()=>{ const k=sel.value; if(!k) return; const z=zonesAll().find(x=>x.id===ui.zoneOpen); if(!z) return;
+    const it=state.items.find(i=>i.id===k); if(it&&it.link!==it.id) save("items",{...it,link:it.id},true); syncItemTypes();
+    const ex=state.markers.find(m=>m.type===k&&m.floor===ui.floor&&inVer(m,ui.ver4)&&inZone(m,z)); // 같은 물품이 이미 있으면 개수만 하나 더
+    if(ex){ save("markers",{...ex,qty:(Number(ex.qty)||1)+1}); return; }
+    const x1=Math.min(z.x1,z.x2), y1=Math.min(z.y1,z.y2), w=Math.abs(z.x2-z.x1), h=Math.abs(z.y2-z.y1);
+    const m={id:uid("m"),floor:ui.floor,type:k,x:+(x1+w*(0.2+Math.random()*0.6)).toFixed(2),y:+(y1+h*(0.2+Math.random()*0.6)).toFixed(2),label:(TYPES[k]||{}).name||"물품",qty:1,note:""};
+    if(ui.floor==="4F"&&ui.ver4!=="exh") m.ver=ui.ver4; save("markers",m); toast(`${z.name}에 넣었어요`); });
   document.querySelectorAll("[data-zadd]").forEach(b=>b.onclick=()=>{ ui.zDraw=ui.zDraw?null:{}; ui.addType=null; render(); });
   document.querySelectorAll("[data-zren]").forEach(b=>b.onclick=()=>{ const zs=zonesAll(), z=zs.find(x=>x.id===b.dataset.zren); if(!z) return;
     const n=(prompt("구역 이름",z.name)||"").trim(); if(n&&n!==z.name) putZones(zs.map(x=>x.id===z.id?{...x,name:n}:x)); });
