@@ -1535,7 +1535,7 @@ function zPop(g){ // 묶음을 누르면: 사진 · 이름 · 개수 목록
   const pic=m=>{ const i=state.items.find(x=>x.link===m.type&&x.image); return i?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="zdot" style="background:${tcolor(m.type)}"></span>`; };
   return `<div class="mkpop zpop" style="${popPos(g.x,g.y)}" role="dialog" aria-label="${esc(g.name)} 물품">
     <button class="x" data-zclose aria-label="닫기">×</button>
-    <b>${esc(g.name)} <span class="small muted">물품 ${tot}개 · ${L.length}종</span></b>
+    <b>${esc(g.name)} <span class="small muted">물품 ${new Set(g.ms.map(m=>m.type)).size}가지 · 수량 합계 ${tot}개</span></b>
     <div class="zlist">${L.map(r=>{ const t=TYPES[r.m.type]||{}, nm=t.name||"", lb=r.m.label&&r.m.label!==nm?r.m.label:"";
       return `<div class="zrowwrap"><button type="button" class="zrow" data-zsel="${r.m.id}">${pic(r.m)}<span class="zt"><b>${esc(nm||lb||"물품")}</b>${lb&&nm?`<span class="small muted">${esc(lb)}</span>`:""}</span><span class="num zq">${r.q}<span class="small muted">개</span></span></button><span class="zpm"><button type="button" data-zminus="${r.last.id}" aria-label="${esc(nm)} 하나 빼기" title="하나 빼기">−</button><button type="button" data-zplus="${r.last.id}" aria-label="${esc(nm)} 하나 더" title="하나 더">+</button></span></div>`; }).join("")||`<div class="small muted">아직 물품이 없어요.</div>`}</div>
     ${g.zone?`<select data-zput aria-label="${esc(g.name)}에 물품 넣기"><option value="">+ ${esc(g.name)}에 물품 넣기</option><optgroup label="기본 항목">${Object.entries(TYPES).filter(([k,t])=>!t.item&&k!=="staff"&&k!=="note").map(([k,t])=>`<option value="${k}">${esc(t.name)}</option>`).join("")}</optgroup><optgroup label="물품 탭">${itemsToPlace().map(i=>`<option value="${esc(placeKey(i))}">${esc(i.name||"물품")}</option>`).join("")}</optgroup></select>`:""}
@@ -1559,8 +1559,8 @@ function planHTML(){
   const hid=new Set(); groups.forEach(g=>{ if(g!==openG) g.ms.forEach(m=>hid.add(m.id)); });
   const zrects=groups.filter(g=>g.zone&&(g.ms.length||ui.planEdit||g===openG)).map(g=>{ const z=g.zone, x=Math.min(z.x1,z.x2), y=Math.min(z.y1,z.y2);
     return `<div class="zrect ${g===openG?"open":""}" style="left:${x}%;top:${y}%;width:${Math.abs(z.x2-z.x1)}%;height:${Math.abs(z.y2-z.y1)}%"><span>${esc(z.name)}</span></div>`; }).join("");
-  const zbadges=groups.filter(g=>g.ms.length&&g!==openG).map(g=>{ const n=g.ms.reduce((s,m)=>s+(Number(m.qty)||1),0);
-    return `<button class="zbadge" data-zone="${esc(g.id)}" style="left:${g.x}%;top:${g.y}%" aria-label="${esc(g.name)} 물품 ${n}개 보기">${g.zone?`${esc(g.name)} `:""}<b class="num">${n}</b></button>`; }).join("");
+  const zbadges=groups.filter(g=>g.ms.length&&g!==openG).map(g=>{ const n=new Set(g.ms.map(m=>m.type)).size; // 물품 가짓수 (수량 합이 아니라)
+    return `<button class="zbadge" data-zone="${esc(g.id)}" style="left:${g.x}%;top:${g.y}%" aria-label="${esc(g.name)} 물품 ${n}가지 보기">${g.zone?`${esc(g.name)} `:""}<b class="num">${n}</b></button>`; }).join("");
   const marks=vis.filter(m=>!hid.has(m.id)).map(m=>{
     const q=Number(m.qty)||1, w=whoAt(m); let txt=m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));
     if(w&&w.gap) txt="!";
