@@ -2274,6 +2274,11 @@ const qcolor=q=>{ const g=groupOf(q), L=g?g.qs[0]:q; return `var(${LABEL_C[(L&&L
 // 물품은 견적서 하나(quote) 또는 업체 전체(quoteGroup = 업체 키)에 묶여요
 const groupByKey=k=>k?quoteGroups().find(g=>g.key===k)||null:null;
 const itemQuote=i=>state.quotes.find(x=>x.id===i.quote)||((groupByKey(i.quoteGroup)||{qs:[]}).qs[0])||null; // 색·업체 표시용
+// 진행 필터: 아직 안 됨(필요·견적) / 주문함(도착 전) / 준비됨(입고 이후) — 이 기기에 기억
+const STAGES=[["","전체"],["todo","아직 안 됨"],["order","주문함"],["ready","준비됨"]];
+const stageOf=i=>{ const st=i.status||"필요"; return st==="필요"||st==="견적"?"todo":st==="주문"?"order":"ready"; };
+try{ ui.stageFilter=localStorage.getItem("mb-istage")||""; }catch(e){ ui.stageFilter=""; }
+const inStage=i=>!ui.stageFilter||stageOf(i)===ui.stageFilter;
 function inQF(i,f){ if(!f) return true; const q=itemQuote(i);
   if(f==="none") return !q; if(f.startsWith("g:")) return !!q&&"g:"+vkey(q)===f; return i.quote===f; }
 const qOfFilter=f=>!f||f==="none"?null:f.startsWith("g:")?{group:groupByKey(f.slice(2))}:state.quotes.find(x=>x.id===f)||null;
@@ -2366,7 +2371,8 @@ function itemsHTML(){
   const all=state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0)).filter(i=>!iv||itemVers(i).includes(iv));
   const qOf=itemQuote;
   const f=ui.quoteFilter;
-  const base=all.filter(i=>inQF(i,f)), kf=ui.kindFilter;
+  const base=all.filter(i=>inQF(i,f)&&inStage(i)), kf=ui.kindFilter, sg=ui.stageFilter||"";
+  const stagebar=`<div class="row verbar noprint"><b class="small">진행</b><div class="seg" role="group" aria-label="진행">${STAGES.map(([k,n])=>`<button type="button" data-istage="${k}" aria-pressed="${sg===k}" title="${k==="todo"?"상태가 필요·견적인 물품 (아직 사거나 준비 안 한 것)":k==="order"?"주문했지만 아직 안 들어온 물품":k==="ready"?"입고·준비 완료·설치 완료·반납 완료":""}">${n} <span class="num">${all.filter(i=>inQF(i,f)&&(!k||stageOf(i)===k)).length}</span></button>`).join("")}</div>${sg?`<span class="small muted">위 금액도 '${STAGES.find(x=>x[0]===sg)[1]}' 물품만 더한 거예요.</span>`:""}</div>`;
   const verbar=`<div class="row verbar noprint"><b class="small">버전</b><div class="seg" role="group" aria-label="버전">${[["","전체"]].concat(VER4).map(([k,n])=>`<button type="button" data-iver="${k}" aria-pressed="${iv===k}">${n} <span class="num">${k?state.items.filter(i=>itemVers(i).includes(k)).length:state.items.length}</span></button>`).join("")}</div>${iv?`<span class="small muted">'도면' 수량은 4층 ${verName(iv)} 배치도 기준이에요.</span>`:""}</div>`;
   const amt=i=>i.kind===OWNED?0:qtyOfItem(i,counts)*priceOf(i)+numOf(i.extra); // 추가 비용(배송·설치 등) 포함
   const rows=sortItems(base.filter(i=>!kf||i.kind===kf),i=>qtyOfItem(i,counts),amt);
@@ -2394,7 +2400,7 @@ function itemsHTML(){
       <td style="min-width:110px"><input data-f="note" value="${esc(i.note||"")}" title="${esc(i.note||"")}"></td>
       <td class="acts noprint"><div class="actw">${i.link?`<button class="btn small" data-focus="${esc(i.link)}" aria-pressed="${ui.itemFocus===i.link}" title="도면에서 이 물품 위치 보기">도면 <span class="num">${auto||0}</span></button>`:`<select class="linksel" data-f="link" aria-label="배치도 연결" title="배치도의 어떤 표시와 이어진 물품인지 고르면 도면에서 위치를 볼 수 있어요"><option value="">도면 연결</option><option value="${i.id}">이 물품 그대로 (배치도에서 찍기)</option>${Object.entries(TYPES).filter(([k,t])=>k!=="note"&&!t.item).map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select>`} <button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></div></td></tr>
       ${open?`<tr class="cand-row noprint" data-id="${i.id}"><td colspan="${NC}">${candsHTML(i)}</td></tr>`:""}`;}).join("")}
-    </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:"이 라벨에 묶인 물품이 없어요."}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
+    </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:(ui.stageFilter?"이 조건에 맞는 물품이 없어요.":"이 라벨에 묶인 물품이 없어요.")}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
   const kinds=`<div class="seg kindseg" role="group" aria-label="구분" style="margin-bottom:10px">${[["","전체"]].concat(kindsOf(base).map(k=>[k,k])).map(([k,n])=>`<button data-kf="${k}" aria-pressed="${(kf||"")===k}">${n} <span class="num">${k?base.filter(i=>i.kind===k).length:base.length}</span></button>`).join("")}</div>`;
   const labels=`<div class="row small" style="margin-bottom:10px"><button class="chip" data-qf-filter="" aria-pressed="${!f}">전체 <span class="num muted">${all.length}</span></button>
     ${quoteGroups().map(g=>{ const k="g:"+g.key; return `<button class="chip" data-qf-filter="${esc(k)}" aria-pressed="${f===k}"><span class="dot" style="background:${qcolor(g.qs[0])}"></span>${esc(g.qs[0].vendor||"이름 없는 견적")}${g.qs.length>1?` <span class="small muted">견적 ${g.qs.length}</span>`:""} <span class="num muted">${all.filter(i=>inQF(i,k)).length}</span></button>`; }).join("")}
@@ -2408,7 +2414,7 @@ function itemsHTML(){
   return `${map}${quotesHTML(sum)}<div class="panel">
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">구매·대여 물품</h3>
       <div class="isum">${kindsOf(base).filter(k=>k!==OWNED).map(k=>`<span class="isum-k"><span class="small muted">${esc(k)}</span><b class="num">${won(total(k))||0}<span class="small">원</span></b></span>`).join("")}<span class="isum-k isum-t"><span class="small">총 금액</span><b class="num">${won(base.reduce((s,i)=>s+amt(i),0))||0}<span class="small">원</span></b></span></div></div>
-    ${verbar}${kinds}${labels}${rows.length>1?sortbar:""}${body}
+    ${verbar}${stagebar}${kinds}${labels}${rows.length>1?sortbar:""}${body}
     <p class="small muted" style="margin:8px 0 0">수량을 비워 두면 배치도에 찍은 개수(수량 칸의 흐린 숫자)로 금액을 계산해요. 금액 = 수량 × 단가 + 추가 비용(배송비·설치비 등). 구매 물품의 업체는 구매 링크로 쿠팡·스마트스토어 등이 자동으로 적혀요. 그 밖의 업체는 구분 아래에서 올린 견적서의 업체를 고르거나 '직접 입력'으로 적어요. 사진 칸에 사진을 끌어다 놓을 수 있어요.</p>
     <form class="addform" id="addItem"><label class="f">품목<input id="ni-name" placeholder="예: 무전기 이어폰" required></label>
       <label class="f">구분<select id="ni-kind">${ITEM_KIND.map(k=>`<option ${kf===k?"selected":""}>${k}</option>`).join("")}</select></label>
@@ -2576,11 +2582,12 @@ function bindItems(){
   bindMapCard(id=>{ // 도면의 점 → 그 물품 줄로
     const m=state.markers.find(x=>x.id===id); if(!m) return;
     if(!state.items.some(i=>i.link===m.type)){ toast(`'${(TYPES[m.type]||{}).name||"이 항목"}'은 물품 표에 연결된 품목이 없어요.`); return; }
-    const shown=i=>inQF(i,ui.quoteFilter)&&(!ui.kindFilter||i.kind===ui.kindFilter);
-    if(!state.items.some(i=>i.link===m.type&&shown(i))){ ui.quoteFilter=null; ui.kindFilter=null; } // 가려져 있으면 필터 풀기
+    const shown=i=>inQF(i,ui.quoteFilter)&&inStage(i)&&(!ui.kindFilter||i.kind===ui.kindFilter);
+    if(!state.items.some(i=>i.link===m.type&&shown(i))){ ui.quoteFilter=null; ui.kindFilter=null; ui.stageFilter=""; } // 가려져 있으면 필터 풀기
     ui.itemFocus=m.type; ui.hiItem=m.type; render(); goRow(`tr[data-link="${m.type}"]`);
   },null);
   document.querySelectorAll("[data-kf]").forEach(b=>b.onclick=()=>{ui.kindFilter=b.dataset.kf||null;render();});
+  document.querySelectorAll("[data-istage]").forEach(b=>b.onclick=()=>{ ui.stageFilter=b.dataset.istage; try{localStorage.setItem("mb-istage",ui.stageFilter)}catch(e){}; render(); });
   document.querySelectorAll("[data-ifocus]").forEach(b=>b.onclick=()=>{ui.itemFocus=b.dataset.ifocus||null;render();});
   document.querySelectorAll("[data-qf-filter]").forEach(b=>b.onclick=()=>{ui.quoteFilter=b.dataset.qfFilter||null;render();});
   document.querySelectorAll("[data-focus]").forEach(b=>b.onclick=()=>{
