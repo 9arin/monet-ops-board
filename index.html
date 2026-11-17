@@ -307,6 +307,7 @@ tr.cand-row .drop{cursor:default;padding:10px}
 .qsub{border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:5px;background:var(--bg)}
 .qsub .qrow input{background:var(--panel)}
 .qmore{padding:8px;font-size:12px}
+.qfile{overflow-wrap:anywhere;line-height:1.35}
 .qrow{display:grid;grid-template-columns:72px minmax(0,1fr);gap:6px;align-items:center;font-size:12px;color:var(--muted)}
 .qrow input{border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:var(--bg);min-width:0;width:100%;font-size:13px}
 .btn.small{padding:3px 8px;font-size:12px;white-space:nowrap}
@@ -2283,7 +2284,8 @@ function quotesHTML(sum){
   const cards=quoteGroups().map(g=>{ const L=g.qs[0], ids=g.qs.map(q=>q.id), inG=i=>ids.includes(i.quote)||!i.quote&&i.quoteGroup===g.key, n=state.items.filter(inG).length, nAll=state.items.filter(i=>!i.quote&&i.quoteGroup===g.key).length;
     const subs=g.qs.map((q,k)=>{ const m=state.items.filter(i=>i.quote===q.id).length;
       return `<div class="qsub" data-q="${q.id}">
-        <div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:6px"><b class="small qname">${g.qs.length>1?`견적 ${k+1} · `:""}${q.fileId?`<button class="linkbtn small" data-qopen>${esc(q.fileName||"견적서 보기")}</button>`:`<span class="muted">파일 없음</span>`}</b><button class="x" data-qdel aria-label="이 견적서 삭제">${ui.confirmDel===q.id?"삭제?":"×"}</button></div>
+        <div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:6px"><b class="small">${g.qs.length>1?`견적 ${k+1}`:"견적서"}</b><button class="x" data-qdel aria-label="이 견적서 삭제">${ui.confirmDel===q.id?"삭제?":"×"}</button></div>
+        ${q.fileId?`<div class="small qfile" title="${esc(q.fileName||"")}">${esc(q.fileName||"견적서 파일")}</div><div class="row" style="gap:6px"><button class="btn small" data-qopen type="button">보기</button><button class="btn small" data-qdown type="button">내려받기</button></div>`:`<div class="small muted">파일 없음</div>`}
         <div class="small muted">${q.scan?esc(q.scan)+" · ":""}물품 ${m}개 · 합계 <span class="num">${won(sum(i=>i.quote===q.id))||0}</span>원</div>
         ${QF1.map(([k,nm])=>`<label class="qrow">${nm}<input data-qf="${k}" value="${esc(q[k]||"")}" ${k==="amount"?'inputmode="numeric"':""}></label>`).join("")}
       </div>`; }).join("");
@@ -2602,6 +2604,7 @@ function bindItems(){
       const q=()=>state.quotes.find(x=>x.id===sub.dataset.q);
       sub.querySelectorAll("[data-qf]").forEach(el=>el.onchange=()=>{const k=el.dataset.qf; let v=el.value.trim(); if(k==="amount") v=v.replace(/[^\d]/g,""); save("quotes",{...q(),[k]:v});});
       const o=sub.querySelector("[data-qopen]"); if(o) o.onclick=()=>openFile(q().fileId);
+      const d=sub.querySelector("[data-qdown]"); if(d) d.onclick=()=>downloadFile(q().fileId,q().fileName);
       sub.querySelector("[data-qdel]").onclick=()=>{ const x=q(); if(ui.confirmDel===x.id){ui.confirmDel=null; if(ui.quoteFilter===x.id) ui.quoteFilter=null; if(x.fileId) remove("files",x.fileId); remove("quotes",x.id);} else {ui.confirmDel=x.id;render();} };
     });
   });
