@@ -304,6 +304,9 @@ tr.cand-row .drop{cursor:default;padding:10px}
 .qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:12px}
 .qcard{border:1px solid var(--line);border-top:4px solid var(--qc);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;background:var(--panel);min-width:0}
 .qname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qsub{border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:5px;background:var(--bg)}
+.qsub .qrow input{background:var(--panel)}
+.qmore{padding:8px;font-size:12px}
 .qrow{display:grid;grid-template-columns:72px minmax(0,1fr);gap:6px;align-items:center;font-size:12px;color:var(--muted)}
 .qrow input{border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:var(--bg);min-width:0;width:100%;font-size:13px}
 .btn.small{padding:3px 8px;font-size:12px;white-space:nowrap}
@@ -2259,22 +2262,40 @@ function bindPeople(){
 
 /* ----- items ----- */
 const LABEL_C=["--t-sticker","--t-exhibit","--t-caution","--t-desk","--t-staff","--t-stanchion","--t-pop","--t-note"];
-const qcolor=q=>`var(${LABEL_C[(q&&q.color||0)%LABEL_C.length]})`;
-const QF=[["vendor","회사명"],["amount","금액(원)"],["bank","은행"],["account","계좌번호"],["holder","예금주"],["phone","연락처"],["email","이메일"],["bizno","사업자번호"],["date","견적일"]];
+// 같은 업체(이름이 같으면)의 견적서는 한 카드로 묶어요 — 한 업체에 견적서 여러 개
+const vkey=q=>String(q&&q.vendor||"").replace(/\s|\(주\)|㈜|주식회사|\(유\)|유한회사/g,"").toLowerCase()||(q&&q.id)||"";
+function quoteGroups(){ const gs=[], by={};
+  state.quotes.slice().sort((a,b)=>a.id.localeCompare(b.id)).forEach(q=>{ const k=vkey(q); if(!by[k]){ by[k]={key:k,qs:[]}; gs.push(by[k]); } by[k].qs.push(q); });
+  return gs; }
+const groupOf=q=>q?quoteGroups().find(g=>g.key===vkey(q)):null;
+const qcolor=q=>{ const g=groupOf(q), L=g?g.qs[0]:q; return `var(${LABEL_C[(L&&L.color||0)%LABEL_C.length]})`; };
+// 물품 필터: "" 전체 · "none" 견적 없음 · "g:업체" 그 업체의 모든 견적서 · q-id 견적서 하나
+function inQF(i,f){ if(!f) return true; const q=state.quotes.find(x=>x.id===i.quote);
+  if(f==="none") return !q; if(f.startsWith("g:")) return !!q&&"g:"+vkey(q)===f; return i.quote===f; }
+const qOfFilter=f=>!f||f==="none"?null:f.startsWith("g:")?((quoteGroups().find(g=>"g:"+g.key===f)||{qs:[]}).qs.slice(-1)[0]||null):state.quotes.find(x=>x.id===f)||null;
+const qLabel=(q,g)=>{ const n=g.qs.indexOf(q)+1; return `${g.qs[0].vendor||q.vendor||"이름 없는 견적"}${g.qs.length>1?` · 견적 ${n}${q.date?" ("+q.date+")":""}`:""}`; };
+const QF=[["vendor","회사명"],["bank","은행"],["account","계좌번호"],["holder","예금주"],["phone","연락처"],["email","이메일"],["bizno","사업자번호"]]; // 업체 공통 (묶인 견적서 모두에 저장)
+const QF1=[["amount","금액(원)"],["date","견적일"],["memo","메모"]]; // 견적서마다
 function quotesHTML(sum){
-  const cards=state.quotes.slice().sort((a,b)=>a.id.localeCompare(b.id)).map(q=>{const n=state.items.filter(i=>i.quote===q.id).length;
-    return `<div class="qcard" data-q="${q.id}" style="--qc:${qcolor(q)}">
-      <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b class="qname">${esc(q.vendor||"이름 없는 견적")}</b><button class="x" data-qdel aria-label="견적서 삭제">${ui.confirmDel===q.id?"삭제?":"×"}</button></div>
-      <div class="small muted">${q.scan?esc(q.scan)+" · ":""}물품 ${n}개 · 합계 <span class="num">${won(sum(i=>i.quote===q.id))||0}</span>원</div>
-      ${QF.map(([k,n])=>`<label class="qrow">${n}<input data-qf="${k}" value="${esc(q[k]||"")}" ${k==="amount"?'inputmode="numeric"':""}></label>`).join("")}
-      <label class="qrow">메모<input data-qf="memo" value="${esc(q.memo||"")}"></label>
-      <div class="row" style="justify-content:space-between">${q.fileId?`<button class="linkbtn small" data-qopen>${esc(q.fileName||"견적서 보기")}</button>`:"<span></span>"}
-        <button class="btn small" data-qcolor title="라벨 색 바꾸기"><span class="dot" style="background:${qcolor(q)}"></span> 색</button></div>
+  const cards=quoteGroups().map(g=>{ const L=g.qs[0], ids=g.qs.map(q=>q.id), n=state.items.filter(i=>ids.includes(i.quote)).length;
+    const subs=g.qs.map((q,k)=>{ const m=state.items.filter(i=>i.quote===q.id).length;
+      return `<div class="qsub" data-q="${q.id}">
+        <div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:6px"><b class="small qname">${g.qs.length>1?`견적 ${k+1} · `:""}${q.fileId?`<button class="linkbtn small" data-qopen>${esc(q.fileName||"견적서 보기")}</button>`:`<span class="muted">파일 없음</span>`}</b><button class="x" data-qdel aria-label="이 견적서 삭제">${ui.confirmDel===q.id?"삭제?":"×"}</button></div>
+        <div class="small muted">${q.scan?esc(q.scan)+" · ":""}물품 ${m}개 · 합계 <span class="num">${won(sum(i=>i.quote===q.id))||0}</span>원</div>
+        ${QF1.map(([k,nm])=>`<label class="qrow">${nm}<input data-qf="${k}" value="${esc(q[k]||"")}" ${k==="amount"?'inputmode="numeric"':""}></label>`).join("")}
+      </div>`; }).join("");
+    return `<div class="qcard" data-qg="${esc(g.key)}" style="--qc:${qcolor(L)}">
+      <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b class="qname">${esc(L.vendor||"이름 없는 견적")}</b><span class="small muted" style="white-space:nowrap">견적서 ${g.qs.length}개</span></div>
+      <div class="small muted">물품 ${n}개 · 합계 <span class="num">${won(sum(i=>ids.includes(i.quote)))||0}</span>원${g.qs.length>1?` · 견적 금액 합 <span class="num">${won(g.qs.reduce((t,q)=>t+numOf(q.amount),0))||0}</span>원`:""}</div>
+      ${QF.map(([k,nm])=>`<label class="qrow">${nm}<input data-qgf="${k}" value="${esc(L[k]||"")}"></label>`).join("")}
+      ${subs}
+      <div class="drop noprint qmore" data-qmore><b>+ 이 업체 견적서 더 넣기</b><br><span class="muted">끌어다 놓거나 눌러서</span></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn small" data-qcolor title="라벨 색 바꾸기"><span class="dot" style="background:${qcolor(L)}"></span> 색</button></div>
     </div>`;}).join("");
   return `<div class="panel" style="margin-bottom:16px"><h3>견적서</h3>
     <div class="drop noprint" id="quoteDrop"><b>견적서 파일을 여기로 끌어다 놓으세요</b><br><span class="small">PDF·사진 · 눌러서 고를 수도 있어요 · 회사명, 계좌, 금액, 연락처를 자동으로 읽어요 · 파일당 ${mb(MAX_FILE)}MB까지</span></div>
     ${cards?`<div class="qgrid">${cards}</div>`:""}
-    <p class="small muted" style="margin:8px 0 0">자동으로 읽은 내용은 꼭 한 번 확인해 주세요. 틀린 칸은 눌러서 바로 고치면 돼요. 견적서마다 라벨이 생기고, 아래 물품 표의 '업체' 칸에서 이 업체를 고르면 그 물품이 이 견적서로 묶여요.</p></div>`;
+    <p class="small muted" style="margin:8px 0 0">자동으로 읽은 내용은 꼭 한 번 확인해 주세요. 틀린 칸은 눌러서 바로 고치면 돼요. 회사명이 같은 견적서는 한 업체 카드로 묶여요. 같은 업체의 견적서를 더 넣으려면 카드 아래 '+ 이 업체 견적서 더 넣기'에 올리세요. 아래 물품 표의 업체 칸에서 그 업체의 견적서를 고르면 물품이 그 견적서로 묶여요.</p></div>`;
 }
 function photosHTML(i){
   const ps=i.photos||[];
@@ -2329,7 +2350,8 @@ const shopOf=i=>i.kind==="구매"&&i.url?shopName(i.url):"";
 const vendorShown=i=>shopOf(i)||i.vendor||i.maker||"";
 // 업체: 올린 견적서의 업체에서 고르면 그 견적서와 연결돼요 (직접 입력도 가능)
 function vendorSel(i,qq){
-  const opts=state.quotes.map(x=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(x.vendor||"이름 없는 견적")}</option>`).join("");
+  const opt=(x,g)=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(qLabel(x,g))}</option>`;
+  const opts=quoteGroups().map(g=>g.qs.length>1?`<optgroup label="${esc(g.qs[0].vendor||"이름 없는 견적")}">${g.qs.map(x=>opt(x,g)).join("")}</optgroup>`:opt(g.qs[0],g)).join("");
   const v=i.vendor||i.maker||"", loose=!qq&&v?`<option value="__txt" selected>${esc(v)}</option>`:"";
   return `<select data-vq class="qsel" aria-label="업체" style="--qc:${qq?qcolor(qq):"transparent"}" title="${state.quotes.length?"올린 견적서의 업체에서 골라요":"견적서를 올리면 그 업체가 여기 나와요"}"><option value="" ${!qq&&!v?"selected":""}>업체 없음</option>${loose}${opts}<option value="__new">직접 입력…</option></select>`;
 }
@@ -2338,7 +2360,7 @@ function itemsHTML(){
   const all=state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0)).filter(i=>!iv||itemVers(i).includes(iv));
   const qOf=i=>state.quotes.find(q=>q.id===i.quote);
   const f=ui.quoteFilter;
-  const base=all.filter(i=>!f||(f==="none"?!qOf(i):i.quote===f)), kf=ui.kindFilter;
+  const base=all.filter(i=>inQF(i,f)), kf=ui.kindFilter;
   const verbar=`<div class="row verbar noprint"><b class="small">버전</b><div class="seg" role="group" aria-label="버전">${[["","전체"]].concat(VER4).map(([k,n])=>`<button type="button" data-iver="${k}" aria-pressed="${iv===k}">${n} <span class="num">${k?state.items.filter(i=>itemVers(i).includes(k)).length:state.items.length}</span></button>`).join("")}</div>${iv?`<span class="small muted">'도면' 수량은 4층 ${verName(iv)} 배치도 기준이에요.</span>`:""}</div>`;
   const amt=i=>i.kind===OWNED?0:qtyOfItem(i,counts)*priceOf(i)+numOf(i.extra); // 추가 비용(배송·설치 등) 포함
   const rows=sortItems(base.filter(i=>!kf||i.kind===kf),i=>qtyOfItem(i,counts),amt);
@@ -2369,7 +2391,7 @@ function itemsHTML(){
     </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:"이 라벨에 묶인 물품이 없어요."}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
   const kinds=`<div class="seg kindseg" role="group" aria-label="구분" style="margin-bottom:10px">${[["","전체"]].concat(kindsOf(base).map(k=>[k,k])).map(([k,n])=>`<button data-kf="${k}" aria-pressed="${(kf||"")===k}">${n} <span class="num">${k?base.filter(i=>i.kind===k).length:base.length}</span></button>`).join("")}</div>`;
   const labels=`<div class="row small" style="margin-bottom:10px"><button class="chip" data-qf-filter="" aria-pressed="${!f}">전체 <span class="num muted">${all.length}</span></button>
-    ${state.quotes.map(q=>`<button class="chip" data-qf-filter="${q.id}" aria-pressed="${f===q.id}"><span class="dot" style="background:${qcolor(q)}"></span>${esc(q.vendor||"이름 없는 견적")} <span class="num muted">${all.filter(i=>i.quote===q.id).length}</span></button>`).join("")}
+    ${quoteGroups().map(g=>{ const k="g:"+g.key; return `<button class="chip" data-qf-filter="${esc(k)}" aria-pressed="${f===k}"><span class="dot" style="background:${qcolor(g.qs[0])}"></span>${esc(g.qs[0].vendor||"이름 없는 견적")}${g.qs.length>1?` <span class="small muted">견적 ${g.qs.length}</span>`:""} <span class="num muted">${all.filter(i=>inQF(i,k)).length}</span></button>`; }).join("")}
     ${state.quotes.length?`<button class="chip" data-qf-filter="none" aria-pressed="${f==="none"}">견적 없음 <span class="num muted">${all.filter(i=>!qOf(i)).length}</span></button>`:""}</div>`;
   const linked=[...new Set(all.map(i=>i.link).filter(Boolean))];
   const pins=state.markers.filter(m=>inVer(m,ui.itemVer||"exh")&&m.floor===ui.floor&&linked.includes(m.type)).map(m=>({id:m.id,x:m.x,y:m.y,color:tcolor(m.type),dark:TYPES[m.type]&&TYPES[m.type].dark,
@@ -2480,9 +2502,10 @@ async function addCand(itemId,raw,memo){
   catch(e){ console.error(e); updCand(itemId,c.id,{loading:false,title:""},true);
     toast(isCoupang(url)?"쿠팡이 자동 읽기를 막아서 사진·가격을 못 가져왔어요. 후보 카드에 직접 넣어 주세요.":"이 링크는 정보를 못 불러왔어요. 가격을 직접 적어 주세요."); }
 }
-async function addQuoteFiles(files){
+async function addQuoteFiles(files,like){ // like = 같은 업체의 견적서 (업체 정보를 그대로 가져와요)
   for(const file of files){
-    const q={id:uid("q"),fileName:file.name,color:state.quotes.length%LABEL_C.length,scan:"읽는 중…"};
+    const base=like?Object.fromEntries(QF.map(([k])=>[k,like[k]||""]).filter(([,v])=>v)):{};
+    const q={id:uid("q"),...base,fileName:file.name,color:like?(like.color||0):state.quotes.length%LABEL_C.length,scan:"읽는 중…"};
     save("quotes",q); toast("견적서를 읽는 중이에요…");
     const fid=await storeFile(file);
     if(!fid){ remove("quotes",q.id); continue; }
@@ -2547,7 +2570,7 @@ function bindItems(){
   bindMapCard(id=>{ // 도면의 점 → 그 물품 줄로
     const m=state.markers.find(x=>x.id===id); if(!m) return;
     if(!state.items.some(i=>i.link===m.type)){ toast(`'${(TYPES[m.type]||{}).name||"이 항목"}'은 물품 표에 연결된 품목이 없어요.`); return; }
-    const shown=i=>(!ui.quoteFilter||(ui.quoteFilter==="none"?!state.quotes.some(q=>q.id===i.quote):i.quote===ui.quoteFilter))&&(!ui.kindFilter||i.kind===ui.kindFilter);
+    const shown=i=>inQF(i,ui.quoteFilter)&&(!ui.kindFilter||i.kind===ui.kindFilter);
     if(!state.items.some(i=>i.link===m.type&&shown(i))){ ui.quoteFilter=null; ui.kindFilter=null; } // 가려져 있으면 필터 풀기
     ui.itemFocus=m.type; ui.hiItem=m.type; render(); goRow(`tr[data-link="${m.type}"]`);
   },null);
@@ -2564,11 +2587,18 @@ function bindItems(){
     ui.mapOpen=true; render(); focusPins();});
   dropZone($("#quoteDrop"),{onFiles:addQuoteFiles,accept:"application/pdf,image/*"});
   document.querySelectorAll(".qcard").forEach(card=>{
-    const q=()=>state.quotes.find(x=>x.id===card.dataset.q);
-    card.querySelectorAll("[data-qf]").forEach(el=>el.onchange=()=>{const k=el.dataset.qf; let v=el.value.trim(); if(k==="amount") v=v.replace(/[^\d]/g,""); save("quotes",{...q(),[k]:v});});
-    const o=card.querySelector("[data-qopen]"); if(o) o.onclick=()=>openFile(q().fileId);
-    card.querySelector("[data-qcolor]").onclick=()=>save("quotes",{...q(),color:((q().color||0)+1)%LABEL_C.length});
-    card.querySelector("[data-qdel]").onclick=()=>{ const x=q(); if(ui.confirmDel===x.id){ui.confirmDel=null; if(ui.quoteFilter===x.id) ui.quoteFilter=null; if(x.fileId) remove("files",x.fileId); remove("quotes",x.id);} else {ui.confirmDel=x.id;render();} };
+    const g=()=>quoteGroups().find(x=>x.key===card.dataset.qg)||{qs:[]};
+    card.querySelectorAll("[data-qgf]").forEach(el=>el.onchange=()=>{ const k=el.dataset.qgf, v=el.value.trim(), qs=g().qs; // 업체 공통 칸은 묶인 견적서 모두에
+      if(k==="vendor"&&g().key!==vkey({vendor:v})&&ui.quoteFilter==="g:"+g().key) ui.quoteFilter="g:"+vkey({vendor:v,id:qs[0].id});
+      qs.forEach((q,n)=>save("quotes",{...q,[k]:v},n<qs.length-1)); });
+    card.querySelector("[data-qcolor]").onclick=()=>{ const qs=g().qs, c=((qs[0].color||0)+1)%LABEL_C.length; qs.forEach((q,n)=>save("quotes",{...q,color:c},n<qs.length-1)); };
+    dropZone(card.querySelector("[data-qmore]"),{onFiles:fs=>addQuoteFiles(fs,g().qs[0]),accept:"application/pdf,image/*"});
+    card.querySelectorAll(".qsub").forEach(sub=>{
+      const q=()=>state.quotes.find(x=>x.id===sub.dataset.q);
+      sub.querySelectorAll("[data-qf]").forEach(el=>el.onchange=()=>{const k=el.dataset.qf; let v=el.value.trim(); if(k==="amount") v=v.replace(/[^\d]/g,""); save("quotes",{...q(),[k]:v});});
+      const o=sub.querySelector("[data-qopen]"); if(o) o.onclick=()=>openFile(q().fileId);
+      sub.querySelector("[data-qdel]").onclick=()=>{ const x=q(); if(ui.confirmDel===x.id){ui.confirmDel=null; if(ui.quoteFilter===x.id) ui.quoteFilter=null; if(x.fileId) remove("files",x.fileId); remove("quotes",x.id);} else {ui.confirmDel=x.id;render();} };
+    });
   });
   document.querySelectorAll("[data-isort]").forEach(b=>b.onclick=()=>setItemSort(b.dataset.isort));
   document.querySelectorAll("[data-iver]").forEach(b=>b.onclick=()=>{ ui.itemVer=b.dataset.iver; try{localStorage.setItem("mb-iver",ui.itemVer)}catch(e){}; render(); });
@@ -2629,8 +2659,7 @@ function bindItems(){
   });
   { const nk=$("#ni-kind"), mf=$("#ni-maker-f"); if(nk&&mf){ const t=()=>{ mf.hidden=nk.value==="구매"; }; nk.addEventListener("change",t); t(); } }
   $("#addItem").onsubmit=e=>{e.preventDefault(); const n=$("#ni-name").value.trim(); if(!n) return;
-    const max=Math.max(0,...state.items.map(i=>i.order||0)); const f=ui.quoteFilter&&ui.quoteFilter!=="none"?ui.quoteFilter:"";
-    const q=state.quotes.find(x=>x.id===f);
+    const max=Math.max(0,...state.items.map(i=>i.order||0)); const q=qOfFilter(ui.quoteFilter), f=q?q.id:"";
     save("items",{id:uid("i"),order:max+1,name:n,kind:$("#ni-kind").value,maker:"",qty:$("#ni-qty").value,link:$("#ni-link").value,price:"",vendor:q?q.vendor||"":($("#ni-kind").value!=="구매"?$("#ni-maker").value.trim():""),quote:f,due:"",status:$("#ni-kind").value===OWNED?"준비 완료":"필요",note:"",vers:[ui.itemVer||"exh"]}); toast(ui.itemVer?`${verName(ui.itemVer)} 버전 물품으로 추가했어요`:"추가했어요");};
 }
 
