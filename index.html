@@ -2270,14 +2270,17 @@ function quoteGroups(){ const gs=[], by={};
 const groupOf=q=>q?quoteGroups().find(g=>g.key===vkey(q)):null;
 const qcolor=q=>{ const g=groupOf(q), L=g?g.qs[0]:q; return `var(${LABEL_C[(L&&L.color||0)%LABEL_C.length]})`; };
 // 물품 필터: "" 전체 · "none" 견적 없음 · "g:업체" 그 업체의 모든 견적서 · q-id 견적서 하나
-function inQF(i,f){ if(!f) return true; const q=state.quotes.find(x=>x.id===i.quote);
+// 물품은 견적서 하나(quote) 또는 업체 전체(quoteGroup = 업체 키)에 묶여요
+const groupByKey=k=>k?quoteGroups().find(g=>g.key===k)||null:null;
+const itemQuote=i=>state.quotes.find(x=>x.id===i.quote)||((groupByKey(i.quoteGroup)||{qs:[]}).qs[0])||null; // 색·업체 표시용
+function inQF(i,f){ if(!f) return true; const q=itemQuote(i);
   if(f==="none") return !q; if(f.startsWith("g:")) return !!q&&"g:"+vkey(q)===f; return i.quote===f; }
-const qOfFilter=f=>!f||f==="none"?null:f.startsWith("g:")?((quoteGroups().find(g=>"g:"+g.key===f)||{qs:[]}).qs.slice(-1)[0]||null):state.quotes.find(x=>x.id===f)||null;
+const qOfFilter=f=>!f||f==="none"?null:f.startsWith("g:")?{group:groupByKey(f.slice(2))}:state.quotes.find(x=>x.id===f)||null;
 const qLabel=(q,g)=>{ const n=g.qs.indexOf(q)+1; return `${g.qs[0].vendor||q.vendor||"이름 없는 견적"}${g.qs.length>1?` · 견적 ${n}${q.date?" ("+q.date+")":""}`:""}`; };
 const QF=[["vendor","회사명"],["bank","은행"],["account","계좌번호"],["holder","예금주"],["phone","연락처"],["email","이메일"],["bizno","사업자번호"]]; // 업체 공통 (묶인 견적서 모두에 저장)
 const QF1=[["amount","금액(원)"],["date","견적일"],["memo","메모"]]; // 견적서마다
 function quotesHTML(sum){
-  const cards=quoteGroups().map(g=>{ const L=g.qs[0], ids=g.qs.map(q=>q.id), n=state.items.filter(i=>ids.includes(i.quote)).length;
+  const cards=quoteGroups().map(g=>{ const L=g.qs[0], ids=g.qs.map(q=>q.id), inG=i=>ids.includes(i.quote)||!i.quote&&i.quoteGroup===g.key, n=state.items.filter(inG).length, nAll=state.items.filter(i=>!i.quote&&i.quoteGroup===g.key).length;
     const subs=g.qs.map((q,k)=>{ const m=state.items.filter(i=>i.quote===q.id).length;
       return `<div class="qsub" data-q="${q.id}">
         <div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:6px"><b class="small qname">${g.qs.length>1?`견적 ${k+1} · `:""}${q.fileId?`<button class="linkbtn small" data-qopen>${esc(q.fileName||"견적서 보기")}</button>`:`<span class="muted">파일 없음</span>`}</b><button class="x" data-qdel aria-label="이 견적서 삭제">${ui.confirmDel===q.id?"삭제?":"×"}</button></div>
@@ -2286,7 +2289,7 @@ function quotesHTML(sum){
       </div>`; }).join("");
     return `<div class="qcard" data-qg="${esc(g.key)}" style="--qc:${qcolor(L)}">
       <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b class="qname">${esc(L.vendor||"이름 없는 견적")}</b><span class="small muted" style="white-space:nowrap">견적서 ${g.qs.length}개</span></div>
-      <div class="small muted">물품 ${n}개 · 합계 <span class="num">${won(sum(i=>ids.includes(i.quote)))||0}</span>원${g.qs.length>1?` · 견적 금액 합 <span class="num">${won(g.qs.reduce((t,q)=>t+numOf(q.amount),0))||0}</span>원`:""}</div>
+      <div class="small muted">물품 ${n}개 · 합계 <span class="num">${won(sum(inG))||0}</span>원${nAll&&g.qs.length>1?` (업체 전체로 묶은 물품 ${nAll}개 포함)`:""}${g.qs.length>1?` · 견적 금액 합 <span class="num">${won(g.qs.reduce((t,q)=>t+numOf(q.amount),0))||0}</span>원`:""}</div>
       ${QF.map(([k,nm])=>`<label class="qrow">${nm}<input data-qgf="${k}" value="${esc(L[k]||"")}"></label>`).join("")}
       ${subs}
       <div class="drop noprint qmore" data-qmore><b>+ 이 업체 견적서 더 넣기</b><br><span class="muted">끌어다 놓거나 눌러서</span></div>
@@ -2350,15 +2353,16 @@ const shopOf=i=>i.kind==="구매"&&i.url?shopName(i.url):"";
 const vendorShown=i=>shopOf(i)||i.vendor||i.maker||"";
 // 업체: 올린 견적서의 업체에서 고르면 그 견적서와 연결돼요 (직접 입력도 가능)
 function vendorSel(i,qq){
-  const opt=(x,g)=>`<option value="${x.id}" ${i.quote===x.id?"selected":""}>${esc(qLabel(x,g))}</option>`;
-  const opts=quoteGroups().map(g=>g.qs.length>1?`<optgroup label="${esc(g.qs[0].vendor||"이름 없는 견적")}">${g.qs.map(x=>opt(x,g)).join("")}</optgroup>`:opt(g.qs[0],g)).join("");
+  const opt=(x,g)=>`<option value="${x.id}" ${i.quote===x.id||!i.quote&&g.qs.length===1&&i.quoteGroup===g.key?"selected":""}>${esc(qLabel(x,g))}</option>`;
+  const opts=quoteGroups().map(g=>{ const nm=g.qs[0].vendor||"이름 없는 견적";
+    return g.qs.length>1?`<optgroup label="${esc(nm)}"><option value="g:${esc(g.key)}" ${!i.quote&&i.quoteGroup===g.key?"selected":""}>${esc(nm)} · 업체 전체 (견적 ${g.qs.length}개)</option>${g.qs.map(x=>opt(x,g)).join("")}</optgroup>`:opt(g.qs[0],g); }).join("");
   const v=i.vendor||i.maker||"", loose=!qq&&v?`<option value="__txt" selected>${esc(v)}</option>`:"";
   return `<select data-vq class="qsel" aria-label="업체" style="--qc:${qq?qcolor(qq):"transparent"}" title="${state.quotes.length?"올린 견적서의 업체에서 골라요":"견적서를 올리면 그 업체가 여기 나와요"}"><option value="" ${!qq&&!v?"selected":""}>업체 없음</option>${loose}${opts}<option value="__new">직접 입력…</option></select>`;
 }
 function itemsHTML(){
   const iv=ui.itemVer||"", counts=countBy(null,iv||"exh"); // '도면' 수량은 고른 버전의 배치도 기준 (전체면 전시)
   const all=state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0)).filter(i=>!iv||itemVers(i).includes(iv));
-  const qOf=i=>state.quotes.find(q=>q.id===i.quote);
+  const qOf=itemQuote;
   const f=ui.quoteFilter;
   const base=all.filter(i=>inQF(i,f)), kf=ui.kindFilter;
   const verbar=`<div class="row verbar noprint"><b class="small">버전</b><div class="seg" role="group" aria-label="버전">${[["","전체"]].concat(VER4).map(([k,n])=>`<button type="button" data-iver="${k}" aria-pressed="${iv===k}">${n} <span class="num">${k?state.items.filter(i=>itemVers(i).includes(k)).length:state.items.length}</span></button>`).join("")}</div>${iv?`<span class="small muted">'도면' 수량은 4층 ${verName(iv)} 배치도 기준이에요.</span>`:""}</div>`;
@@ -2589,7 +2593,8 @@ function bindItems(){
   document.querySelectorAll(".qcard").forEach(card=>{
     const g=()=>quoteGroups().find(x=>x.key===card.dataset.qg)||{qs:[]};
     card.querySelectorAll("[data-qgf]").forEach(el=>el.onchange=()=>{ const k=el.dataset.qgf, v=el.value.trim(), qs=g().qs; // 업체 공통 칸은 묶인 견적서 모두에
-      if(k==="vendor"&&g().key!==vkey({vendor:v})&&ui.quoteFilter==="g:"+g().key) ui.quoteFilter="g:"+vkey({vendor:v,id:qs[0].id});
+      if(k==="vendor"){ const ok=g().key, nk=vkey({vendor:v,id:qs[0].id}); if(ok!==nk){ if(ui.quoteFilter==="g:"+ok) ui.quoteFilter="g:"+nk;
+        state.items.filter(i=>i.quoteGroup===ok).forEach(i=>save("items",{...i,quoteGroup:nk,vendor:v},true)); } }
       qs.forEach((q,n)=>save("quotes",{...q,[k]:v},n<qs.length-1)); });
     card.querySelector("[data-qcolor]").onclick=()=>{ const qs=g().qs, c=((qs[0].color||0)+1)%LABEL_C.length; qs.forEach((q,n)=>save("quotes",{...q,color:c},n<qs.length-1)); };
     dropZone(card.querySelector("[data-qmore]"),{onFiles:fs=>addQuoteFiles(fs,g().qs[0]),accept:"application/pdf,image/*"});
@@ -2609,14 +2614,15 @@ function bindItems(){
   document.querySelectorAll("tr[data-id]:not(.cand-row)").forEach(tr=>{
     const it=()=>curItem(tr.dataset.id);
     tr.querySelectorAll("[data-f]").forEach(el=>el.onchange=()=>{ const k=el.dataset.f, v=el.value.trim(), cur=it(), patch={[k]:v};
-      if(k==="kind"&&v===OWNED){ patch.quote=""; if(PRE_STATUS.includes(cur.status||"")) patch.status="준비 완료"; } // 보유는 견적 없고 이미 준비됨
+      if(k==="kind"&&v===OWNED){ patch.quote=""; patch.quoteGroup=""; if(PRE_STATUS.includes(cur.status||"")) patch.status="준비 완료"; } // 보유는 견적 없고 이미 준비됨
       if(k==="quote"&&v&&!cur.vendor){ const q=state.quotes.find(x=>x.id===v); if(q&&q.vendor) patch.vendor=q.vendor; } // 견적 고르면 업체도 채움
       save("items",{...cur,...patch}); });
     tr.querySelector("[data-del]").onclick=()=>deleteItems([tr.dataset.id]);
     { const vq=tr.querySelector("[data-vq]"); if(vq) vq.onchange=()=>{ const v=vq.value, cur=it();
       if(v==="__txt") return;
-      if(v==="__new"){ const n=(prompt("업체 이름을 적어 주세요",cur.vendor||"")||"").trim(); if(!n){ render(); return; } save("items",{...cur,quote:"",vendor:n}); return; }
-      const q=state.quotes.find(x=>x.id===v); save("items",{...cur,quote:q?q.id:"",vendor:q?(q.vendor||""):""}); }; }
+      if(v==="__new"){ const n=(prompt("업체 이름을 적어 주세요",cur.vendor||"")||"").trim(); if(!n){ render(); return; } save("items",{...cur,quote:"",quoteGroup:"",vendor:n}); return; }
+      if(v.startsWith("g:")){ const g=groupByKey(v.slice(2)); if(g) save("items",{...cur,quote:"",quoteGroup:g.key,vendor:g.qs[0].vendor||""}); return; } // 업체 전체
+      const q=state.quotes.find(x=>x.id===v); save("items",{...cur,quote:q?q.id:"",quoteGroup:"",vendor:q?(q.vendor||""):""}); }; }
     tr.querySelectorAll("[data-ivt]").forEach(b=>b.onclick=()=>{ const cur=it(), v=itemVers(cur), k=b.dataset.ivt;
       const nv=v.includes(k)?v.filter(x=>x!==k):[...v,k]; if(!nv.length){ toast("버전을 하나는 골라 주세요"); return; }
       save("items",{...cur,vers:VER4.map(x=>x[0]).filter(x=>nv.includes(x))}); });
@@ -2659,8 +2665,8 @@ function bindItems(){
   });
   { const nk=$("#ni-kind"), mf=$("#ni-maker-f"); if(nk&&mf){ const t=()=>{ mf.hidden=nk.value==="구매"; }; nk.addEventListener("change",t); t(); } }
   $("#addItem").onsubmit=e=>{e.preventDefault(); const n=$("#ni-name").value.trim(); if(!n) return;
-    const max=Math.max(0,...state.items.map(i=>i.order||0)); const q=qOfFilter(ui.quoteFilter), f=q?q.id:"";
-    save("items",{id:uid("i"),order:max+1,name:n,kind:$("#ni-kind").value,maker:"",qty:$("#ni-qty").value,link:$("#ni-link").value,price:"",vendor:q?q.vendor||"":($("#ni-kind").value!=="구매"?$("#ni-maker").value.trim():""),quote:f,due:"",status:$("#ni-kind").value===OWNED?"준비 완료":"필요",note:"",vers:[ui.itemVer||"exh"]}); toast(ui.itemVer?`${verName(ui.itemVer)} 버전 물품으로 추가했어요`:"추가했어요");};
+    const max=Math.max(0,...state.items.map(i=>i.order||0)); const qf=qOfFilter(ui.quoteFilter), gq=qf&&qf.group, q=gq?gq.qs[0]:qf, f=gq?"":q?q.id:"";
+    save("items",{id:uid("i"),order:max+1,name:n,kind:$("#ni-kind").value,maker:"",qty:$("#ni-qty").value,link:$("#ni-link").value,price:"",vendor:q?q.vendor||"":($("#ni-kind").value!=="구매"?$("#ni-maker").value.trim():""),quote:f,...(gq?{quoteGroup:gq.key}:{}),due:"",status:$("#ni-kind").value===OWNED?"준비 완료":"필요",note:"",vers:[ui.itemVer||"exh"]}); toast(ui.itemVer?`${verName(ui.itemVer)} 버전 물품으로 추가했어요`:"추가했어요");};
 }
 
 /* ----- graphics ----- */
