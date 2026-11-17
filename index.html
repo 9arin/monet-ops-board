@@ -271,6 +271,11 @@ table.itbl .acts .linksel{width:92px;font-size:12px;padding:3px 6px}
 @media (prefers-reduced-motion:reduce){.mk.focus{animation:none}}
 table.itbl .maker-in{margin-top:4px;font-size:12px;padding:3px 6px}
 table.itbl .kvend{margin-top:4px}
+.isum{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.isum-k{display:flex;flex-direction:column;align-items:flex-end;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);line-height:1.25;min-width:84px}
+.isum-k b{font-size:15px}
+.isum-t{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.isum-t .small{color:var(--panel);opacity:.85}
 table.itbl .kvend .qsel{font-size:12px;width:100%}
 .shoptag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--ink)}
 .verbar{gap:8px;align-items:center;margin-bottom:10px}
@@ -2369,7 +2374,7 @@ function itemsHTML(){
   const map=mapCard("물품 위치",chips,pins,"도면의 점을 누르면 아래 표의 그 물품 줄로 내려가요. 표의 '도면' 버튼을 누르면 그 물품 위치만 도면 가운데에 진하게 보여요.");
   return `${map}${quotesHTML(sum)}<div class="panel">
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">구매·대여 물품</h3>
-      <div class="row small"><span>구매 <b class="num">${won(total("구매"))||0}</b>원</span><span>대여 <b class="num">${won(total("대여"))||0}</b>원</span><span>업체 <b class="num">${won(total("업체"))||0}</b>원</span><span>인쇄물 <b class="num">${won(total("인쇄물"))||0}</b>원</span></div></div>
+      <div class="isum">${kindsOf(base).filter(k=>k!==OWNED).map(k=>`<span class="isum-k"><span class="small muted">${esc(k)}</span><b class="num">${won(total(k))||0}<span class="small">원</span></b></span>`).join("")}<span class="isum-k isum-t"><span class="small">총 금액</span><b class="num">${won(base.reduce((s,i)=>s+amt(i),0))||0}<span class="small">원</span></b></span></div></div>
     ${verbar}${kinds}${labels}${rows.length>1?sortbar:""}${body}
     <p class="small muted" style="margin:8px 0 0">수량을 비워 두면 배치도에 찍은 개수(수량 칸의 흐린 숫자)로 금액을 계산해요. 금액 = 수량 × 단가 + 추가 비용(배송비·설치비 등). 구매 물품의 업체는 구매 링크로 쿠팡·스마트스토어 등이 자동으로 적혀요. 그 밖의 업체는 구분 아래에서 올린 견적서의 업체를 고르거나 '직접 입력'으로 적어요. 사진 칸에 사진을 끌어다 놓을 수 있어요.</p>
     <form class="addform" id="addItem"><label class="f">품목<input id="ni-name" placeholder="예: 무전기 이어폰" required></label>
