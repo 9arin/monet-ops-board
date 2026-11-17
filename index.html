@@ -2306,9 +2306,14 @@ const CSORT=[["","넣은 순"],["low","낮은 가격"],["high","높은 가격"],
 try{ ui.itemSort=JSON.parse(lsGet("mb-isort")||"null")||{k:"order",d:1}; if(ui.itemSort.k==="due") ui.itemSort={k:"order",d:1}; }catch(e){ ui.itemSort={k:"order",d:1}; }
 ui.candSort=lsGet("mb-csort")||"";
 function setItemSort(k){ const S=ui.itemSort; ui.itemSort=S.k===k?{k,d:-S.d}:{k,d:/^(qty|price|amt)$/.test(k)?-1:1}; lsSet("mb-isort",JSON.stringify(ui.itemSort)); render(); }
+// "3 · 200", "4회", "1식", "1~2", "15,000원"처럼 글자가 섞여 있어도 앞의 숫자를 읽어요 (못 읽으면 0 — 합계가 깨지지 않게)
+const numOf=v=>{ const m=String(v??"").replace(/,/g,"").match(/\d+(\.\d+)?/); return m?+m[0]:0; };
+const chosenPrice=i=>{ const c=(i.cands||[]).find(x=>x.id===i.chosen); return c?numOf(c.price):0; };
+const priceOf=i=>numOf(i.price)||chosenPrice(i); // 단가를 비워 두면 최종 선택한 후보의 가격
+const qtyOfItem=(i,counts)=>numOf(i.qty)||(i.link?(counts[i.link]||0):0);
 function sortItems(rows,qtyOf,amt){
   const {k,d}=ui.itemSort; if(k==="order") return d<0?rows.slice().reverse():rows;
-  const val=i=>k==="qty"?qtyOf(i):k==="price"?(i.kind===OWNED?"":Number(i.price)||""):k==="amt"?(amt(i)||""):k==="status"?ITEM_STATUS.indexOf(i.status||"필요"):k==="kind"?ITEM_KIND.indexOf(i.kind):k==="vendor"?vendorShown(i):String(i[k]||"").trim();
+  const val=i=>k==="qty"?qtyOf(i):k==="price"?(i.kind===OWNED?"":priceOf(i)||""):k==="amt"?(amt(i)||""):k==="status"?ITEM_STATUS.indexOf(i.status||"필요"):k==="kind"?ITEM_KIND.indexOf(i.kind):k==="vendor"?vendorShown(i):String(i[k]||"").trim();
   return rows.map((i,n)=>({i,n,v:val(i)})).sort((a,b)=>{ const ea=a.v===""||a.v===0&&k==="qty", eb=b.v===""||b.v===0&&k==="qty";
     if(ea!==eb) return ea?1:-1; // 빈 칸은 늘 맨 뒤
     const c=typeof a.v==="number"&&typeof b.v==="number"?a.v-b.v:String(a.v).localeCompare(String(b.v),"ko",{numeric:true});
@@ -2335,8 +2340,8 @@ function itemsHTML(){
   const f=ui.quoteFilter;
   const base=all.filter(i=>!f||(f==="none"?!qOf(i):i.quote===f)), kf=ui.kindFilter;
   const verbar=`<div class="row verbar noprint"><b class="small">버전</b><div class="seg" role="group" aria-label="버전">${[["","전체"]].concat(VER4).map(([k,n])=>`<button type="button" data-iver="${k}" aria-pressed="${iv===k}">${n} <span class="num">${k?state.items.filter(i=>itemVers(i).includes(k)).length:state.items.length}</span></button>`).join("")}</div>${iv?`<span class="small muted">'도면' 수량은 4층 ${verName(iv)} 배치도 기준이에요.</span>`:""}</div>`;
-  const amt=i=>i.kind===OWNED?0:Number(i.qty||(i.link?counts[i.link]:0)||0)*Number(i.price||0)+Number(i.extra||0); // 추가 비용(배송·설치 등) 포함
-  const rows=sortItems(base.filter(i=>!kf||i.kind===kf),i=>Number(i.qty||(i.link?counts[i.link]:0)||0),amt);
+  const amt=i=>i.kind===OWNED?0:qtyOfItem(i,counts)*priceOf(i)+numOf(i.extra); // 추가 비용(배송·설치 등) 포함
+  const rows=sortItems(base.filter(i=>!kf||i.kind===kf),i=>qtyOfItem(i,counts),amt);
   const IS=ui.itemSort, th=(k,label,cls)=>`<th class="${cls||""}"><button class="thsort" data-isort="${k}" type="button" aria-label="${label}로 정렬">${label}${IS.k===k?`<span class="arr">${IS.d>0?"▲":"▼"}</span>`:""}</button></th>`;
   const sortbar=`<div class="row sortbar noprint"><b class="small">정렬</b><div class="seg" role="group" aria-label="정렬">${ISORT.map(([k,n])=>`<button type="button" data-isort="${k}" aria-pressed="${IS.k===k}">${n}${IS.k===k&&(k!=="order"||IS.d<0)?` ${IS.d>0?"▲":"▼"}`:""}</button>`).join("")}</div><span class="small muted">같은 걸 한 번 더 누르면 반대로</span></div>`;
   const sum=pred=>all.filter(pred).reduce((s,i)=>s+amt(i),0);
@@ -2348,7 +2353,7 @@ function itemsHTML(){
   const nsel=ui.isel.size, allOn=rows.length&&rows.every(i=>ui.isel.has(i.id));
   const selbar=nsel?`<div class="row selbar noprint"><b><span class="num">${nsel}</span>개 선택</b><button class="btn small danger" id="isel-del" type="button">선택한 물품 삭제</button><button class="linkbtn small" id="isel-none" type="button">선택 해제</button></div>`:"";
   const body = rows.length? `${selbar}<div class="tbl-wrap"><table class="itbl"><thead><tr><th class="noprint ck"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목","fc")}${th("kind","구분","fc")}<th>버전</th>${th("qty","수량","r fc")}${th("price","단가(원)","r fc")}<th class="r fc">추가 비용(원)</th>${th("amt","금액(원)","r")}${th("status","상태","fc")}<th class="fc">메모</th><th class="acts noprint">도면 · 후보 · 삭제</th></tr></thead><tbody>
-    ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=Number(i.qty||auto||0); const qq=qOf(i); const open=ui.openItem===i.id;
+    ${rows.map(i=>{const auto=i.link?(counts[i.link]||0):null; const q=qtyOfItem(i,counts); const qq=qOf(i); const open=ui.openItem===i.id;
       return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="noprint ck"><input type="checkbox" data-isel aria-label="선택" ${ui.isel.has(i.id)?"checked":""}></td><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
       <td style="min-width:110px"><select data-f="kind">${kindsOf([i]).map(k=>`<option ${i.kind===k?"selected":""}>${k}</option>`).join("")}</select><div class="kvend">${shopOf(i)?`<span class="shoptag" title="구매 링크로 정해져요">${esc(shopOf(i))}</span>`:vendorSel(i,qq)}</div></td>
@@ -2356,7 +2361,7 @@ function itemsHTML(){
       <td class="r" style="min-width:60px;width:60px"><input class="num" data-f="qty" type="number" min="0" value="${esc(i.qty||"")}" placeholder="${auto??""}" style="text-align:right"></td>
       ${i.kind===OWNED?`<td class="r muted">–</td><td class="r muted">–</td><td class="r muted">–</td>`:`<td class="r" style="min-width:90px;width:90px"><input class="num" data-f="price" type="number" min="0" value="${esc(i.price||"")}" style="text-align:right"></td>
       <td class="r" style="min-width:100px;width:100px"><input class="num" data-f="extra" type="number" min="0" value="${esc(i.extra||"")}" placeholder="0" style="text-align:right" aria-label="추가 비용"><input data-f="extraNote" class="maker-in" value="${esc(i.extraNote||"")}" placeholder="배송비·설치비" aria-label="추가 비용 내용" title="${esc(i.extraNote||"")}"></td>
-      <td class="r num">${won(q*Number(i.price||0)+Number(i.extra||0))}</td>`}
+      <td class="r num">${won(amt(i))}${!numOf(i.price)&&chosenPrice(i)?`<div class="small muted" title="단가 칸이 비어 있어 최종 선택한 후보 가격으로 계산">후보가 ${won(chosenPrice(i))}</div>`:""}</td>`}
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
       <td style="min-width:110px"><input data-f="note" value="${esc(i.note||"")}" title="${esc(i.note||"")}"></td>
       <td class="acts noprint"><div class="actw">${i.link?`<button class="btn small" data-focus="${esc(i.link)}" aria-pressed="${ui.itemFocus===i.link}" title="도면에서 이 물품 위치 보기">도면 <span class="num">${auto||0}</span></button>`:`<select class="linksel" data-f="link" aria-label="배치도 연결" title="배치도의 어떤 표시와 이어진 물품인지 고르면 도면에서 위치를 볼 수 있어요"><option value="">도면 연결</option><option value="${i.id}">이 물품 그대로 (배치도에서 찍기)</option>${Object.entries(TYPES).filter(([k,t])=>k!=="note"&&!t.item).map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select>`} <button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></div></td></tr>
