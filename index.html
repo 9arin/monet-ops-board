@@ -1934,9 +1934,10 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
   const byId=id=>ppl.find(p=>p.id===id);
   ctx.pos.forEach(x=>{ const v=ov[x.id], c=pl.cells[x.id]; if(!v||!c) return; const cur=c.who;
     if(v==="-"){ pl.cells[x.id]={who:null,kind:"gap",base:cur,manual:true}; return; }
-    const t=byId(v); if(!t||t===cur) return;
-    const y=ctx.pos.find(z=>z.id!==x.id&&pl.cells[z.id]&&pl.cells[z.id].who===t);
-    if(y) pl.cells[y.id]={who:cur,kind:cur?"swap":"gap",base:t};
+    const t=byId(v); if(!t) return;
+    const y=ctx.pos.find(z=>z.id!==x.id&&pl.cells[z.id]&&pl.cells[z.id].who===t), back=cur===t?c.base||null:cur; // 원래 이 자리 사람을 그쪽으로
+    if(cur===t&&!y) return;
+    if(y) pl.cells[y.id]={who:back,kind:back?"swap":"gap",base:t};
     else Object.keys(pl.plus).forEach(k=>{ if(pl.plus[k].includes(t)){ pl.plus[k]=pl.plus[k].map(q=>q===t?cur:q).filter(Boolean); if(!pl.plus[k].length) delete pl.plus[k]; } });
     pl.cells[x.id]={who:t,kind:"swap",base:cur}; });
   if(!pl.allHands){ const W=new Set(); Object.values(pl.cells).forEach(c=>c.who&&W.add(c.who.id)); Object.values(pl.plus).forEach(L=>L.forEach(q=>W.add(q.id))); pl.working=W; pl.off=ppl.filter(p=>!W.has(p.id)&&!crew.some(c=>c.id===p.id)); }
