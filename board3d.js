@@ -32,6 +32,7 @@ const toWorld=(fl,x,y)=>{const s=MPP[fl]; return new THREE.Vector3((x/100*IMG_W-
 const pct=(fl,v)=>{ const s=MPP[fl]; return [+((v.x/s+IMG_W/2)/IMG_W*100).toFixed(2), +((v.z/s+IMG_H/2)/IMG_H*100).toFixed(2)]; };
 const curFl=()=>ui.floor==="both"?"4F":ui.floor;
 const wrapA=a=>Math.atan2(Math.sin(a),Math.cos(a));
+const shapeOf=m=>{ const t=D&&D.types[m.type]; return (t&&t.shape)||m.type; }; // 물품 점은 예전 기본 항목 모양(shape)으로
 const nameOf=m=>{ const s=m.type==="staff"&&D&&D.slots[m.id]; return (s&&s.name)||m.label||((D&&D.types[m.type])||{}).name||m.type; };
 
 function makeMats(){
@@ -271,7 +272,7 @@ function post(mat,h){
 }
 function makeMarker(m){
   const g=new THREE.Group(); g.position.copy(toWorld(m.floor,+m.x||0,+m.y||0));
-  const q=Math.max(1,Math.min(60,Math.round(+m.qty||1))), t=m.type;
+  const q=Math.max(1,Math.min(60,Math.round(+m.qty||1))), t=shapeOf(m);
   g.userData={marker:m,type:t,fl:m.floor};
   if(t==="staff"){
     const body=new THREE.Mesh(new THREE.CylinderGeometry(.22,.28,1.1,20),mats.staff); body.position.y=.55;
@@ -337,7 +338,7 @@ function refreshStaff(){
 function validLegs(x){ return Array.isArray(x)&&x.length&&x.every(L=>L&&(L.fl==="4F"||L.fl==="3F")&&Array.isArray(L.nodes)&&L.nodes.length>=2&&L.nodes.every(n=>Array.isArray(n.p)&&n.p.length===2)); }
 function sync(data){
   D=data;
-  const ns=JSON.stringify(D.markers.map(m=>[m.id,m.floor,m.type,m.x,m.y,m.qty,m.glyph,m.label,m.rot]));
+  const ns=JSON.stringify(D.markers.map(m=>[m.id,m.floor,m.type,shapeOf(m),m.x,m.y,m.qty,m.glyph,m.label,m.rot]));
   if(ns!==sig&&!ed.idrag){ sig=ns; rebuildMarkers(); applyVisibility(); }
   // 가벽·동선: 보드에 저장된 게 있으면 그걸, 없으면 3D 페이지에서 가져온 시작값
   const w=Array.isArray(D.walls3d)?D.walls3d:DEFAULT_WALLS, ws=JSON.stringify(w);
@@ -389,7 +390,7 @@ function buildLegend(){
   const det=el("details"); det.open=ui.legendOpen!=null?ui.legendOpen:!matchMedia("(max-width: 640px)").matches; // 휴대폰에선 접어 둬요
   const sm=el("summary",null,"보이기"); sm.addEventListener("click",()=>{ ui.legendOpen=!det.open; }); det.append(sm);
   const lg=el("div","t3-lg"), vis=m=>ui.floor==="both"||m.floor===ui.floor;
-  KINDS.forEach(k=>{ const ms=D.markers.filter(m=>m.type===k&&vis(m)); if(!ms.length) return;
+  KINDS.forEach(k=>{ const ms=D.markers.filter(m=>shapeOf(m)===k&&vis(m)); if(!ms.length) return;
     const n=k==="staff"?ms.length+"자리":ms.reduce((a,m)=>a+Math.max(1,+m.qty||1),0)+"개";
     const b=el("button"); b.type="button"; b.setAttribute("aria-pressed",String(!ui.hidden.has(k)));
     const sw=el("span","t3-sw"); sw.style.background="var(--t-"+k+")";
@@ -421,7 +422,7 @@ function showCard(id){
       D.days.forEach((dn,i)=>{ const ww=D.week[m.id][i], c=el("div",(i===ui.day?"today ":"")+(ww&&ww.k==="cover"?"cov":"")+(ww&&!ww.c?" gap":"")); c.append(el("b",null,dn),ww&&ww.c?ww.c:"공석"); wk.append(c); });
       card.append(wk); }
   } else {
-    kv("수량",Math.max(1,+m.qty||1)+"개"); if(m.glyph&&m.type==="sticker") kv("방향",m.glyph);
+    kv("수량",Math.max(1,+m.qty||1)+"개"); if(m.glyph&&shapeOf(m)==="sticker") kv("방향",m.glyph);
     if(m.note&&!/사진 기준 대략 위치/.test(m.note)) kv("메모",m.note);
     D.items.filter(i=>i.link===m.type).forEach(i=>{ kv("물품",i.name||"이름 없음"); kv("상태",el("span","pill",(i.status||"필요")+" · "+(i.kind||""))); });
     card.append(dl);

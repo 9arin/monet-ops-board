@@ -695,13 +695,14 @@ const TYPES = {
   desk:{name:"리셉션 테이블",c:"--t-desk"}, chair:{name:"의자",c:"--t-chair"}, exhibit:{name:"전시 차단봉",c:"--t-exhibit"},
   sticker:{name:"바닥 스티커",c:"--t-sticker"}, caution:{name:"주의표지판",c:"--t-caution"}, note:{name:"메모",c:"--t-note"}
 };
-const BASE_TYPES=new Set(Object.keys(TYPES));
+const BASE_TYPES=new Set(Object.keys(TYPES)); // 예전 기본 항목: 이제 배치도에서 고르는 건 알바생(인력)과 물품 탭 물품뿐. 예전 점을 그리기 위해서만 남겨 둬요
+const shp=m=>(TYPES[m.type]&&TYPES[m.type].shape)||m.type; // 점의 모양 (물품은 shape, 없으면 종류 그대로)
 // 물품 탭의 물품을 배치도에 바로 찍을 수 있게: 물품 자신과 이어진 물품(link = 물품 id)은 배치도 항목이 돼요
 const ITEM_C=Array.from({length:16},(_,i)=>`--ic${i+1}`); // 물품마다 다른 색 (기본 항목 색과도 겹치지 않게, :root 토큰)
 function syncItemTypes(){
   Object.keys(TYPES).forEach(k=>{ if(!BASE_TYPES.has(k)) delete TYPES[k]; });
   state.items.filter(i=>i.link===i.id).sort((a,b)=>(a.order||0)-(b.order||0)||a.id.localeCompare(b.id))
-    .forEach((i,n)=>{ TYPES[i.id]={name:i.name||"물품",c:ITEM_C[n%ITEM_C.length],item:true}; }); // 등록 순서대로 색을 하나씩
+    .forEach((i,n)=>{ TYPES[i.id]={name:i.name||"물품",c:ITEM_C[n%ITEM_C.length],item:true,shape:i.shape||""}; }); // shape = 예전 기본 항목 모양 (3D·화살표용) // 등록 순서대로 색을 하나씩
 }
 const DAYS = ["월","화","수","목","금","토","일"];
 const GROUPS = [
@@ -973,7 +974,7 @@ function syncRoster(){
 // 예전 구분(제작·협조 요청)은 '업체'로 바꿔요 (남은 게 있을 때만, 업체명은 비워 둠)
 function oldKindsToMaker(){ state.items.filter(i=>i.kind==="제작"||i.kind==="협조 요청").forEach(i=>save("items",{...i,kind:MAKER},true)); }
 function popOnStickers(){
-  const st=state.markers.filter(m=>m.floor==="4F"&&m.type==="sticker"&&mver(m)==="exh");
+  const st=state.markers.filter(m=>m.floor==="4F"&&shp(m)==="sticker"&&mver(m)==="exh");
   if(!st.length||st.some(m=>m.popDone)) return;
   st.forEach(m=>{
     if(!state.markers.some(x=>x.id==="m-pop-"+m.id)) save("markers",{id:"m-pop-"+m.id,floor:"4F",type:"pop",x:m.x,y:Math.max(1,+(m.y-3).toFixed(2)),label:"신세계 POP",qty:1,note:"바닥 스티커 위"});
@@ -1397,7 +1398,7 @@ function renderInner(){
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
 }
 /* ---------- 3D 보기 (board3d.js): 배치도 점·인력 배정·물품을 그대로 읽어서 그려요. 배치도에서 추가·이동하면 바로 바뀌어요 ---------- */
-const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=8"];
+const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=9"];
 let t3load=null;
 function load3d(){
   if(!t3load) t3load=T3_LIBS.reduce((p,src)=>p.then(()=>new Promise((ok,no)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=ok; sc.onerror=()=>no(new Error(src)); document.head.append(sc); })),Promise.resolve())
@@ -1537,7 +1538,7 @@ function planGroups(ms){
     if(c.length>1){ c.forEach(x=>used.add(x.id)); groups.push({id:"c:"+c.map(x=>x.id).sort()[0],name:"겹친 물품",x:c.reduce((s,x)=>s+x.x,0)/c.length,y:c.reduce((s,x)=>s+x.y,0)/c.length,ms:c}); } });
   return groups;
 }
-const itemsToPlace=()=>state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0));
+const itemsToPlace=()=>state.items.filter(i=>i.link!=="staff").sort((a,b)=>(a.order||0)-(b.order||0)); // 인원수에 맞춘 물품(비표 등)은 빼고
 const placeKey=i=>i.link&&i.link!==i.id&&BASE_TYPES.has(i.link)?i.link:i.id; // 배치도에 찍힐 종류
 function zPop(g){ // 묶음을 누르면: 사진 · 이름 · 개수 목록
   const rows={}; g.ms.forEach(m=>{ const k=m.type+"|"+(m.label||""); const r=rows[k]||(rows[k]={m,q:0,n:0,last:m}); r.q+=Number(m.qty)||1; r.n++; r.last=m; });
@@ -1548,7 +1549,7 @@ function zPop(g){ // 묶음을 누르면: 사진 · 이름 · 개수 목록
     <b>${esc(g.name)} <span class="small muted">물품 ${new Set(g.ms.map(m=>m.type)).size}가지 · 수량 합계 ${tot}개</span></b>
     <div class="zlist">${L.map(r=>{ const t=TYPES[r.m.type]||{}, nm=t.name||"", lb=r.m.label&&r.m.label!==nm?r.m.label:"";
       return `<div class="zrowwrap"><button type="button" class="zrow" data-zsel="${r.m.id}">${pic(r.m)}<span class="zt"><b>${esc(nm||lb||"물품")}</b>${lb&&nm?`<span class="small muted">${esc(lb)}</span>`:""}</span><span class="num zq">${r.q}<span class="small muted">개</span></span></button><span class="zpm"><button type="button" data-zminus="${r.last.id}" aria-label="${esc(nm)} 하나 빼기" title="하나 빼기">−</button><button type="button" data-zplus="${r.last.id}" aria-label="${esc(nm)} 하나 더" title="하나 더">+</button></span></div>`; }).join("")||`<div class="small muted">아직 물품이 없어요.</div>`}</div>
-    ${g.zone?`<select data-zput aria-label="${esc(g.name)}에 물품 넣기"><option value="">+ ${esc(g.name)}에 물품 넣기</option><optgroup label="기본 항목">${Object.entries(TYPES).filter(([k,t])=>!t.item&&k!=="staff"&&k!=="note").map(([k,t])=>`<option value="${k}">${esc(t.name)}</option>`).join("")}</optgroup><optgroup label="물품 탭">${itemsToPlace().map(i=>`<option value="${esc(placeKey(i))}">${esc(i.name||"물품")}</option>`).join("")}</optgroup></select>`:""}
+    ${g.zone?`<select data-zput aria-label="${esc(g.name)}에 물품 넣기"><option value="">+ ${esc(g.name)}에 물품 넣기</option><optgroup label="물품 탭">${itemsToPlace().map(i=>`<option value="${esc(placeKey(i))}">${esc(i.name||"물품")}</option>`).join("")}</optgroup></select>`:""}
     <div class="small muted">${ui.planEdit?"도면의 점을 끌어서 옮길 수 있어요. 다 했으면 ×로 접어요.":"줄을 누르면 그 점의 정보가 열려요."}</div></div>`;
 }
 function planHTML(){
@@ -1559,7 +1560,7 @@ function planHTML(){
   const layerOf=m=>m.type==="staff"?"L-staff":"L-items";
   const nStaff=ms.filter(m=>m.type==="staff").length, nItems=ms.length-nStaff;
   const chips=[["L-staff","인력",tcolor("staff"),nStaff],["L-items","물품","var(--t-stanchion)",nItems]].map(([k,n,c,cnt])=>`<button class="chip" data-vis="${k}" aria-pressed="${!ui.hidden.has(k)}"><span class="dot" style="background:${c}"></span>${n}<span class="num muted">${cnt}</span></button>`).join("");
-  const addChips=Object.entries(TYPES).filter(([k,t])=>!t.item).map(([k,t])=>`<button class="chip add" data-add="${k}" aria-pressed="${ui.addType===k}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</button>`).join("");
+  const addChips=Object.entries(TYPES).filter(([k,t])=>k==="staff").map(([k,t])=>`<button class="chip add" data-add="${k}" aria-pressed="${ui.addType===k}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</button>`).join("");
   // 물품 탭의 물품 중 아직 기본 항목과 이어지지 않은 것 (4층은 지금 버전에 들어가는 물품만)
   // 물품 탭의 물품 전부 (3층·4층, 버전 상관없이 같은 목록). 기본 항목(차단봉 등)과 이어진 물품은 그 항목으로 찍혀요
   const placeItems=itemsToPlace();
@@ -1575,7 +1576,7 @@ function planHTML(){
   const zbadges=groups.filter(g=>g.ms.length&&g!==openG).map(g=>{ const n=new Set(g.ms.map(m=>m.type)).size; // 물품 가짓수 (수량 합이 아니라)
     return `<button class="zbadge" data-zone="${esc(g.id)}" style="left:${g.x}%;top:${g.y}%" aria-label="${esc(g.name)} 물품 ${n}가지 보기">${g.zone?`${esc(g.name)} `:""}<b class="num">${n}</b></button>`; }).join("");
   const marks=vis.filter(m=>!hid.has(m.id)).map(m=>{
-    const q=Number(m.qty)||1, w=whoAt(m); let txt=m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));
+    const q=Number(m.qty)||1, w=whoAt(m); let txt=shp(m)==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));
     if(w&&w.gap) txt="!";
     const lbl=jobName(m.label)+(w&&w.txt?` · ${w.txt}`:"");
     return `<button class="mk ${TYPES[m.type]&&TYPES[m.type].dark?"dark-text":""} ${ui.sel===m.id?"sel":""} ${w&&w.faded?"faded":""}" data-id="${m.id}" style="left:${m.x}%;top:${m.y}%;background:${w&&w.gap?"var(--bad)":tcolor(m.type)}" aria-label="${esc((TYPES[m.type]||{}).name)} ${esc(lbl)}">${esc(txt)}<span class="lbl">${esc(lbl)}</span></button>`;}).join("");
@@ -1588,11 +1589,11 @@ function planHTML(){
   const editor = sel ? `
     <div class="panel"><h3>선택한 항목</h3>
       <div style="display:flex;flex-direction:column;gap:8px">
-      <label class="f">종류<select id="e-type">${Object.entries(TYPES).map(([k,t])=>`<option value="${k}" ${sel.type===k?"selected":""}>${t.name}</option>`).join("")}</select></label>
+      <label class="f">종류<select id="e-type">${Object.entries(TYPES).filter(([k,t])=>k==="staff"||t.item||k===sel.type).map(([k,t])=>`<option value="${k}" ${sel.type===k?"selected":""}>${t.name}</option>`).join("")}</select></label>
       <label class="f">이름·위치<input id="e-label" value="${esc(sel.label||"")}" placeholder="예: 로비 대기줄 1열"></label>
       <div class="row" style="flex-wrap:nowrap">
         <label class="f" style="flex:1">수량<input id="e-qty" type="number" min="1" value="${Number(sel.qty)||1}"></label>
-        ${sel.type==="sticker"?`<label class="f" style="flex:1">방향<select id="e-glyph">${["→","←","↑","↓","↗","↘"].map(g=>`<option ${sel.glyph===g?"selected":""}>${g}</option>`).join("")}</select></label>`:""}
+        ${shp(sel)==="sticker"?`<label class="f" style="flex:1">방향<select id="e-glyph">${["→","←","↑","↓","↗","↘"].map(g=>`<option ${sel.glyph===g?"selected":""}>${g}</option>`).join("")}</select></label>`:""}
       </div>
       <label class="f">메모<textarea id="e-note" placeholder="규격, 담당, 확인할 점">${esc(sel.note||"")}</textarea></label>
       <div class="row" style="justify-content:space-between">
@@ -1618,7 +1619,7 @@ function planHTML(){
       <div class="plan-scroll"><div class="plan ${ui.planEdit?"editing":"locked"} ${ui.planEdit&&ui.addType?"adding":""} ${ui.labels?"":"nolabels"}" id="plan">
         <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${zrects}${glines}${gbad}${marks}${zbadges}${sel&&!ui.planEdit&&sel.floor===ui.floor?mkPop(sel,whoAt(sel),cov):""}${openG&&!(sel&&!ui.planEdit)?zPop(openG):""}${gsel&&!sel&&!ui.planEdit&&!openG?gPop(gsel,gn[gsel.id],true):""}</div></div>
       ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">구역</span>${zonesAll().filter(z=>z.floor===ui.floor).map(z=>`<span class="chip mchip"><button type="button" class="linkbtn small" data-zren="${esc(z.id)}" title="이름 바꾸기">${esc(z.name)}</button><button type="button" class="x" data-zdel="${esc(z.id)}" aria-label="${esc(z.name)} 구역 지우기">×</button></span>`).join("")}<button type="button" class="chip add" data-zadd aria-pressed="${!!ui.zDraw}">+ 구역 그리기</button>${ui.zDraw?`<span class="muted">${ui.zDraw.x==null?"도면에서 구역의 한쪽 모서리를 누르세요.":"반대쪽 모서리를 누르세요."}</span>`:`<span class="muted">구역 안의 물품은 하나로 묶여 보여요</span>`}</div>
-      <div class="row small noprint"><span class="muted" style="margin-right:4px">추가</span>${addChips}</div>${itemChips?`<div class="row small noprint"><span class="muted" style="margin-right:4px">물품</span>${itemChips}</div>`:""}${ui.addType&&TYPES[ui.addType]?`<div class="small muted noprint">도면을 누르면 <b>${esc(TYPES[ui.addType].name)}</b>이(가) 추가돼요.</div>`:""}`:""}
+      <div class="row small noprint"><span class="muted" style="margin-right:4px">인력</span>${addChips}</div>${itemChips?`<div class="row small noprint"><span class="muted" style="margin-right:4px">물품</span>${itemChips}</div>`:""}${ui.addType&&TYPES[ui.addType]?`<div class="small muted noprint">도면을 누르면 <b>${esc(TYPES[ui.addType].name)}</b>이(가) 추가돼요.</div>`:""}`:""}
       ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted noprint">이 층에는 아직 표시한 항목이 없어요. '위치 편집'을 누른 뒤 '추가'에서 종류를 고르고 도면을 눌러 보세요.</div>`)}
     </div>
     <aside class="side">${editor}</aside>
@@ -1681,7 +1682,7 @@ function bindPlan(){
       if(!TYPES[ui.addType]){ ui.addType=null; render(); return; }
       const m={id:uid("m"),floor:ui.floor,type:ui.addType,x,y,label:TYPES[ui.addType].name,qty:1,note:""};
       if(ui.floor==="4F"&&ui.ver4!=="exh") m.ver=ui.ver4; // 지금 고른 4층 버전에 추가
-      if(ui.addType==="sticker") m.glyph="→";
+      if(shp(m)==="sticker") m.glyph="→";
       ui.sel=m.id; save("markers",m); return;
     }
     const m=state.markers.find(z=>z.id===mk.dataset.id); if(!m) return;
@@ -1728,7 +1729,7 @@ function mkPop(m,who,cov){
     <button class="x" data-popx aria-label="닫기">×</button>
     <div class="mkpop-h"><span class="dot" style="background:${tcolor(m.type)}"></span><span class="small muted">${esc(t.name||"")}</span></div>
     <b>${esc(m.label||t.name||"")}</b>
-    ${who?`<div class="small">${DAYS[ui.staffDay]}요일 근무 <b style="${who.gap?"color:var(--bad)":""}">${esc(who.txt)}</b></div>${week}`:`<div class="small">수량 <b class="num">${q}</b>${m.type==="sticker"&&m.glyph?` · 방향 ${esc(m.glyph)}`:""}</div>`}
+    ${who?`<div class="small">${DAYS[ui.staffDay]}요일 근무 <b style="${who.gap?"color:var(--bad)":""}">${esc(who.txt)}</b></div>${week}`:`<div class="small">수량 <b class="num">${q}</b>${shp(m)==="sticker"&&m.glyph?` · 방향 ${esc(m.glyph)}`:""}</div>`}
     ${m.note?`<div class="small muted">${esc(m.note)}</div>`:""}
     ${its.map((i,k)=>`<div class="it ${i.image&&k===0?"big":""}">${i.image?`<img src="${esc(i.image)}" alt="${esc(i.name||"")} 사진" referrerpolicy="no-referrer" data-itzoom="${i.id}" title="눌러서 크게 보기">`:""}<div><div><b>${esc(i.name||"")}</b>${i.chosen?` <span class="pill ok">최종 선택</span>`:""}</div><div class="small muted">${esc(i.status||"")}${i.kind?` · ${esc(i.kind)}`:""}${i.price&&!noCost(i.kind)?` · ${won(Number(i.price))}원`:""}${(i.photos||[]).length>1?` · 사진 ${i.photos.length}장`:""}</div></div></div>`).join("")}
   </div>`;
@@ -1747,7 +1748,7 @@ function gPop(g,n,fromPlan){
 }
 /* ----- shared mini map ----- */
 const jobName=s=>{ s=String(s||""); const t=s.replace(/\s*\(?\s*인력\s*\)?\s*/g," ").trim(); return t||s; }; // 도면 이름표: '인력' 같은 말은 빼고 하는 일만
-function markerText(m){const q=Number(m.qty)||1; return m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));}
+function markerText(m){const q=Number(m.qty)||1; return shp(m)==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));}
 function floorSeg(){return `<div class="seg" role="group" aria-label="층 선택"><button data-floor="4F" aria-pressed="${ui.floor==="4F"}">4층</button><button data-floor="3F" aria-pressed="${ui.floor==="3F"}">3층</button></div>`;}
 function mapCard(title,controls,pins,hint,adding){
   const marks=pins.map(p=>`<button class="mk static ${p.dark?"dark-text":""} ${p.faded?"faded":""} ${p.sel?"sel":""} ${p.gap?"gap":""} ${p.focus?"focus":""}" data-pin="${esc(p.id)}" style="left:${p.x}%;top:${p.y}%;background:${p.color}" aria-label="${esc(p.label)}">${esc(p.text)}${p.ctx?"":`<span class="lbl">${esc(p.label)}</span>`}</button>`).join("");
@@ -2401,7 +2402,7 @@ function itemsHTML(){
       <td class="r num">${won(amt(i))}${!numOf(i.price)&&chosenPrice(i)?`<div class="small muted" title="단가 칸이 비어 있어 최종 선택한 후보 가격으로 계산">후보가 ${won(chosenPrice(i))}</div>`:""}</td>`}
       <td><select data-f="status" class="pill ${scls(i.status)}">${ITEM_STATUS.map(s=>`<option ${i.status===s?"selected":""}>${s}</option>`).join("")}</select></td>
       <td style="min-width:110px"><input data-f="note" value="${esc(i.note||"")}" title="${esc(i.note||"")}"></td>
-      <td class="acts noprint"><div class="actw">${i.link?`<button class="btn small" data-focus="${esc(i.link)}" aria-pressed="${ui.itemFocus===i.link}" title="도면에서 이 물품 위치 보기">도면 <span class="num">${auto||0}</span></button>`:`<select class="linksel" data-f="link" aria-label="배치도 연결" title="배치도의 어떤 표시와 이어진 물품인지 고르면 도면에서 위치를 볼 수 있어요"><option value="">도면 연결</option><option value="${i.id}">이 물품 그대로 (배치도에서 찍기)</option>${Object.entries(TYPES).filter(([k,t])=>k!=="note"&&!t.item).map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select>`} <button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></div></td></tr>
+      <td class="acts noprint"><div class="actw">${i.link?`<button class="btn small" data-focus="${esc(i.link)}" aria-pressed="${ui.itemFocus===i.link}" title="도면에서 이 물품 위치 보기">도면 <span class="num">${auto||0}</span></button>`:`<select class="linksel" data-f="link" aria-label="배치도 연결" title="배치도의 어떤 표시와 이어진 물품인지 고르면 도면에서 위치를 볼 수 있어요"><option value="">도면 연결</option><option value="${i.id}">이 물품 그대로 (배치도에서 찍기)</option><option value="staff">알바생 수만큼 (인력)</option></select>`} <button class="btn small" data-open aria-expanded="${open}">${(i.photos||[]).length?`사진 ${i.photos.length} · `:""}${(i.cands||[]).length?`후보 ${(i.cands||[]).length}`:(i.photos||[]).length?"링크":"사진·링크"} ${open?"▴":"▾"}</button> <button class="btn small danger" data-del type="button" title="이 물품 삭제">삭제</button></div></td></tr>
       ${open?`<tr class="cand-row noprint" data-id="${i.id}"><td colspan="${NC}">${candsHTML(i)}</td></tr>`:""}`;}).join("")}
     </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:(ui.stageFilter?"이 조건에 맞는 물품이 없어요.":"이 라벨에 묶인 물품이 없어요.")}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
   const kinds=`<div class="seg kindseg" role="group" aria-label="구분" style="margin-bottom:10px">${[["","전체"]].concat(kindsOf(base).map(k=>[k,k])).map(([k,n])=>`<button data-kf="${k}" aria-pressed="${(kf||"")===k}">${n} <span class="num">${k?base.filter(i=>i.kind===k).length:base.length}</span></button>`).join("")}</div>`;
@@ -2423,7 +2424,7 @@ function itemsHTML(){
       <label class="f">구분<select id="ni-kind">${ITEM_KIND.map(k=>`<option ${kf===k?"selected":""}>${k}</option>`).join("")}</select></label>
       <label class="f" id="ni-maker-f" ${kf==="구매"||!kf?"hidden":""}>업체<input id="ni-maker" placeholder="예: NGD"></label>
       <label class="f">수량<input id="ni-qty" type="number" min="0"></label>
-      <label class="f">배치도 연결<select id="ni-link"><option value="">없음 (배치도 '물품'에서 찍을 수 있어요)</option>${Object.entries(TYPES).filter(([k,t])=>k!=="note"&&!t.item).map(([k,t])=>`<option value="${k}">${t.name}</option>`).join("")}</select></label>
+      <label class="f">배치도 연결<select id="ni-link"><option value="">없음 (배치도 '물품'에서 찍을 수 있어요)</option><option value="staff">알바생 수만큼 (인력)</option></select></label>
       <button class="btn primary" type="submit">추가</button></form></div>`;
 }
 const curItem=id=>state.items.find(x=>x.id===id);
