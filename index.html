@@ -1928,7 +1928,18 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
   ctx.pos.forEach(x=>{ const ids=ov[x.id+"+"]; if(!Array.isArray(ids)) return;
     const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!pl.working.has(p.id)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)&&!crew.some(c=>c.id===p.id));
     if(L.length){ pl.plus[x.id]=(pl.plus[x.id]||[]).concat(L); L.forEach(p=>pl.working.add(p.id)); } });
-  pl.off=pl.off.filter(p=>!pl.working.has(p.id)); return pl;
+  // 근무표에서 직접 고친 칸을 마지막에 꼭 반영해요: '-'는 빈자리, 다른 자리에 선 사람을 고르면 두 사람이 자리를 맞바꿔요
+  const byId=id=>ppl.find(p=>p.id===id), isMust=p=>!pl.allHands&&(mustDates(p).includes(date)||mustDow(p).includes(d));
+  ctx.pos.forEach(x=>{ const v=ov[x.id], c=pl.cells[x.id]; if(!v||!c) return; const cur=c.who;
+    if(v==="-"){ pl.cells[x.id]={who:null,kind:"gap",base:cur,manual:true}; return; }
+    const t=byId(v); if(!t||t===cur||isMust(t)) return;
+    const y=ctx.pos.find(z=>z.id!==x.id&&pl.cells[z.id]&&pl.cells[z.id].who===t);
+    if(y) pl.cells[y.id]={who:cur,kind:cur?"swap":"gap",base:t};
+    else Object.keys(pl.plus).forEach(k=>{ if(pl.plus[k].includes(t)){ pl.plus[k]=pl.plus[k].map(q=>q===t?cur:q).filter(Boolean); if(!pl.plus[k].length) delete pl.plus[k]; } });
+    pl.cells[x.id]={who:t,kind:"swap",base:cur}; });
+  if(!pl.allHands){ const W=new Set(); Object.values(pl.cells).forEach(c=>c.who&&W.add(c.who.id)); Object.values(pl.plus).forEach(L=>L.forEach(q=>W.add(q.id))); pl.working=W; pl.off=ppl.filter(p=>!W.has(p.id)&&!crew.some(c=>c.id===p.id)); }
+  else pl.off=pl.off.filter(p=>!pl.working.has(p.id));
+  return pl;
 }
 // 전원 필수 근무일: 알바 전원을 역할 부여대로 자리에 세워요 (고른 역할 → 맡은 자리 → 그 요일 근무표 자리). 같은 자리에 두 명 이상이면 '+ 이름'으로
 function allHandsPlan(ctx,date){
@@ -2053,13 +2064,15 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   const closed=`<td class="closed">휴관</td>`;
   let body=keys.map(t=>sec(...secTitle(t))+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}<span class="brk">${esc(posTime(x))}</span></td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
       const c=plans[i].cells[x.id], key=dt+"|"+x.id; if(c.kind==="prep") return `<td class="closed">OT·시뮬</td>`; if(c.kind==="closed") return `<td class="closed">휴관</td>`;
-      if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>(pl.allHands||!pl.working.has(p.id)||p.id===(c.who&&c.who.id))&&(pl.allHands||!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt)))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 덜 일한 사람 먼저
+      if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>pl.allHands||!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(pl.working.has(a.id)?1:0)-(pl.working.has(b.id)?1:0)||(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 그날 쉬는 사람 먼저, 덜 일한 사람 먼저
+        const where=p=>{ if(c.who&&c.who.id===p.id) return ""; const y=pos.find(z=>pl.cells[z.id]&&pl.cells[z.id].who&&pl.cells[z.id].who.id===p.id); if(y) return ` (${jobName(y.label)}와 맞바꿈)`; const k=Object.keys(pl.plus).find(id=>pl.plus[id].some(q=>q.id===p.id)); if(k) return ` (${jobName((pos.find(z=>z.id===k)||{}).label||"")}에 더 들어감)`; return " (쉬는 날)"; };
         const plusL=pl.plus[x.id]||[], addable=alba().filter(p=>!pl.working.has(p.id)&&!pl.crew.some(q=>q.id===p.id)&&!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0));
         const tUI=p=>{ const S=segsOf(pTime(dt,x,p.id)).map(([a,b])=>[a,b].map(m=>`${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`)), k=`${key}|${p.id}`;
           return `<div class="ptime" data-ptime="${k}"><b>${esc(pname(p))}</b>${S.map(([a,b],j)=>`<span class="seg1"><input type="time" step="1800" value="${a}" data-ta="${j}" aria-label="시작">~<input type="time" step="1800" value="${b}" data-tb="${j}" aria-label="끝">${S.length>1?`<button type="button" class="x" data-tdel="${j}" aria-label="이 시간 빼기">×</button>`:""}</span>`).join("")}<span class="small muted num">${fmtH(netH(pTime(dt,x,p.id)))}</span><button type="button" class="linkbtn small" data-tadd>+ 시간 나누기</button>${pTimeSet(dt,x,p.id)?`<button type="button" class="linkbtn small" data-treset>기본 시간으로</button>`:""}</div>`; };
         const timeUI=`<div class="ptimes">${[c.who,...plusL].filter(Boolean).map(tUI).join("")}</div>`;
         const plusUI=`${timeUI}${plusL.map(p=>`<span class="chip pchip">+ ${esc(pname(p))}<button type="button" class="x" data-plusrm="${key}|${p.id}" aria-label="빼기">×</button></span>`).join("")}<select data-plus="${key}" aria-label="이 칸에 사람 더 넣기"><option value="">+ 사람 더 넣기</option>${addable.map(p=>`<option value="${p.id}">${esc(pname(p))} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select><button type="button" class="linkbtn small" data-celldone>닫기</button>`;
-        return `<td class="editing"><select data-swap="${key}"><option value="">${c.kind==="swap"?"원래대로":"그대로"}</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select>${plusUI}</td>`; }
+        const ovv=(ovrAll()[dt]||{})[x.id];
+        return `<td class="editing"><select data-swap="${key}"><option value="">${ovv?"원래대로":"그대로"}</option><option value="-" ${ovv==="-"?"selected":""}>빈자리로 두기</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${where(p)}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select>${plusUI}</td>`; }
       const cls=c.kind==="gap"?"gap":c.kind==="swap"||c.kind==="auto"?"swp":"";
       const tm=p=>p&&pTimeSet(dt,x,p.id)?`<span class="ptm num">${esc(pTime(dt,x,p.id).replace(/,/g," · "))}</span>`:"";
       const plusH=(plans[i].plus[x.id]||[]).map(p=>`<span class="plusp ${!pr&&over(p)?"overtxt":""}">+ ${esc(pname(p))}${tm(p)}</span>`).join("");
