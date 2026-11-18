@@ -1144,13 +1144,16 @@ async function onSession(session){
 
 // 새 버전이 올라오면 오래 열어 둔 화면(현장 모니터 등)도 알아서 새로고침 → 옛 버전이 데이터를 건드리지 않게
 let pageSig=null, updateWaiting=false;
+let lastInteract=Date.now(); ["pointerdown","keydown","input"].forEach(ev=>document.addEventListener(ev,()=>{ lastInteract=Date.now(); },true));
+// 새 버전을 찾아도 쓰는 중엔 절대 새로고침하지 않아요 (안내도 안 띄워요). 다른 탭에 갔다 돌아올 때나, 10분 동안 아무것도 안 만졌을 때만 조용히 새로고침
+const quietReload=()=>{ if(updateWaiting&&!typing()&&!busy()&&!ui.planEdit&&!ui.addType) location.reload(); };
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&updateWaiting) quietReload(); });
 async function checkUpdate(){
-  try{ const t=await (await fetch(location.pathname+"?u="+Date.now(),{cache:"no-store"})).text();
-    let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0;
-    if(pageSig===null){ pageSig=h; return; }
-    if(h===pageSig) return;
-    if(typing()||busy()||ui.planEdit||ui.addType){ if(!updateWaiting){ updateWaiting=true; setNotice("새 버전이 올라왔어요. 편집이 끝나면 자동으로 새로고침돼요."); } setTimeout(checkUpdate,3000); return; } // 위치 편집 중엔 새로고침하지 않아요
-    location.reload();
+  try{ if(!updateWaiting){ const t=await (await fetch(location.pathname+"?u="+Date.now(),{cache:"no-store"})).text();
+      let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0;
+      if(pageSig===null){ pageSig=h; return; }
+      if(h!==pageSig) updateWaiting=true; }
+    if(updateWaiting&&Date.now()-lastInteract>10*60*1000) quietReload();
   }catch(e){}
 }
 
