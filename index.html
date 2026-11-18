@@ -1538,7 +1538,7 @@ function planGroups(ms){
     if(c.length>1){ c.forEach(x=>used.add(x.id)); groups.push({id:"c:"+c.map(x=>x.id).sort()[0],name:"겹친 물품",x:c.reduce((s,x)=>s+x.x,0)/c.length,y:c.reduce((s,x)=>s+x.y,0)/c.length,ms:c}); } });
   return groups;
 }
-const itemsToPlace=()=>state.items.filter(i=>i.link!=="staff").sort((a,b)=>(a.order||0)-(b.order||0)); // 인원수에 맞춘 물품(비표 등)은 빼고
+const itemsToPlace=()=>state.items.filter(i=>i.link!=="staff").sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ko",{numeric:true})); // 가나다순 // 인원수에 맞춘 물품(비표 등)은 빼고
 const placeKey=i=>i.link&&i.link!==i.id&&BASE_TYPES.has(i.link)?i.link:i.id; // 배치도에 찍힐 종류
 function zPop(g){ // 묶음을 누르면: 사진 · 이름 · 개수 목록
   const rows={}; g.ms.forEach(m=>{ const k=m.type+"|"+(m.label||""); const r=rows[k]||(rows[k]={m,q:0,n:0,last:m}); r.q+=Number(m.qty)||1; r.n++; r.last=m; });
@@ -1619,7 +1619,7 @@ function planHTML(){
       <div class="plan-scroll"><div class="plan ${ui.planEdit?"editing":"locked"} ${ui.planEdit&&ui.addType?"adding":""} ${ui.labels?"":"nolabels"}" id="plan">
         <img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${zrects}${glines}${gbad}${marks}${zbadges}${sel&&!ui.planEdit&&sel.floor===ui.floor?mkPop(sel,whoAt(sel),cov):""}${openG&&!(sel&&!ui.planEdit)?zPop(openG):""}${gsel&&!sel&&!ui.planEdit&&!openG?gPop(gsel,gn[gsel.id],true):""}</div></div>
       ${ui.planEdit?`<div class="row small noprint"><span class="muted" style="margin-right:4px">구역</span>${zonesAll().filter(z=>z.floor===ui.floor).map(z=>`<span class="chip mchip"><button type="button" class="linkbtn small" data-zren="${esc(z.id)}" title="이름 바꾸기">${esc(z.name)}</button><button type="button" class="x" data-zdel="${esc(z.id)}" aria-label="${esc(z.name)} 구역 지우기">×</button></span>`).join("")}<button type="button" class="chip add" data-zadd aria-pressed="${!!ui.zDraw}">+ 구역 그리기</button>${ui.zDraw?`<span class="muted">${ui.zDraw.x==null?"도면에서 구역의 한쪽 모서리를 누르세요.":"반대쪽 모서리를 누르세요."}</span>`:`<span class="muted">구역 안의 물품은 하나로 묶여 보여요</span>`}</div>
-      <div class="row small noprint"><span class="muted" style="margin-right:4px">인력</span>${addChips}</div>${itemChips?`<div class="row small noprint"><span class="muted" style="margin-right:4px">물품</span>${itemChips}</div>`:""}${ui.addType&&TYPES[ui.addType]?`<div class="small muted noprint">도면을 누르면 <b>${esc(TYPES[ui.addType].name)}</b>이(가) 추가돼요.</div>`:""}`:""}
+      ${itemChips?`<div class="row small noprint"><span class="muted" style="margin-right:4px">물품</span>${itemChips}</div>`:""}${ui.addType&&TYPES[ui.addType]?`<div class="small muted noprint">도면을 누르면 <b>${esc(TYPES[ui.addType].name)}</b>이(가) 추가돼요.</div>`:""}`:""}
       ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted noprint">이 층에는 아직 표시한 항목이 없어요. '위치 편집'을 누른 뒤 '추가'에서 종류를 고르고 도면을 눌러 보세요.</div>`)}
     </div>
     <aside class="side">${editor}</aside>
