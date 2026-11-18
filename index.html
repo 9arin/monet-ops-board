@@ -130,6 +130,10 @@ td.r,th.r{text-align:right}
 .pinbtn.has{border-style:solid;border-color:var(--accent);color:var(--accent)}
 .pinbtn.placing{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .mapcard{margin-bottom:16px}
+.scont{margin:4px 0 0 2px;line-height:1.9}
+.scont .vtag{font-size:11px}
+details.spast{margin-bottom:8px}
+details.spast>summary{cursor:pointer;color:var(--accent);font-size:13px;padding:6px 0}
 details.fold #mapToggle{display:none}
 .mapcard .plan-scroll{max-width:1040px}
 .mapcard.closed .plan-scroll,.mapcard.closed .maphint{display:none}
@@ -620,6 +624,11 @@ tr[data-grow]{cursor:pointer}
 .phadd{width:110px;height:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px}
 @media print{.mkpop{display:none}}
 .gfl{margin:16px 0 8px}.gfl:first-child{margin-top:0}
+details.gmore>summary{cursor:pointer;font-size:13px;color:var(--accent);list-style:none}
+details.gmore>summary::-webkit-details-marker{display:none}
+details.gmore>summary::before{content:"▸ "}
+details.gmore[open]>summary::before{content:"▾ "}
+details.gmore[open]>summary{margin-bottom:8px}
 .gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px}
 .gcard{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;background:var(--panel);min-width:0}
 .gcard.rowsel{outline:2px solid var(--accent);outline-offset:-1px}
@@ -809,7 +818,7 @@ const dbCol=c=>VCOL[c]?VCOL[c].col:c;
 const state = {markers:[],items:[],staff:[],tasks:[],quotes:[],files:[],settings:[],graphics:[],nights:[],sched:[],docs:[],manual:[],people:[]};
 const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,files:false,settings:false,graphics:false,nights:false,sched:false,docs:false,manual:false,people:false};
 const ui = {tab:"plan",floor:"4F",hidden:new Set(),addType:null,sel:null,labels:true,taskFilter:"open",confirmDel:null,
-  mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,rotaWeek:null,editCell:null,mustOpen:null,mustMon:null,editPos:null,staffSub:"rota",personOpen:null,zoneOpen:null,zDraw:null,quotesOpen:false};
+  mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,rotaWeek:null,editCell:null,mustOpen:null,mustMon:null,editPos:null,staffSub:"rota",personOpen:null,zoneOpen:null,zDraw:null,gOpen:new Set(),quotesOpen:false};
 ui.vView=(()=>{ try{ return localStorage.getItem("mb-vview")||"box"; }catch(e){ return "box"; } })();
 try{const t=localStorage.getItem("mb-tab"); if(t) ui.tab=t; const f=localStorage.getItem("mb-floor"); if(f) ui.floor=f; if(localStorage.getItem("mb-map")==="0") ui.mapOpen=false; const ss=localStorage.getItem("mb-staffsub"); if(ss) ui.staffSub=ss;}catch(e){}
 let db=null, mode="loading";
@@ -1439,7 +1448,8 @@ document.addEventListener("submit",e=>{ const id=e.target.id; if(id) setTimeout(
 // 부가 정보는 접어 둬요 (펼친 건 이 기기에 기억)
 try{ ui.folds=new Set(JSON.parse(localStorage.getItem("mb-folds")||"[]")); }catch(e){ ui.folds=new Set(); }
 const fold=(id,title,sub,html)=>`<details class="panel fold" data-fold="${id}" ${ui.folds.has(id)?"open":""}><summary><span class="farr" aria-hidden="true"></span><h3>${title}</h3>${sub?`<span class="small muted">${sub}</span>`:""}</summary><div class="fbody">${html}</div></details>`;
-function bindFolds(){ document.querySelectorAll("details[data-fold]").forEach(d=>d.ontoggle=()=>{ d.open?ui.folds.add(d.dataset.fold):ui.folds.delete(d.dataset.fold); lsSet("mb-folds",JSON.stringify([...ui.folds])); }); }
+function bindGMore(){ document.querySelectorAll("details[data-gmore]").forEach(d=>{ const sm=d.querySelector("summary"); sm.onclick=e=>e.stopPropagation(); d.ontoggle=()=>{ d.open?ui.gOpen.add(d.dataset.gmore):ui.gOpen.delete(d.dataset.gmore); }; }); }
+function bindFolds(){ bindGMore(); document.querySelectorAll("details[data-fold]").forEach(d=>d.ontoggle=()=>{ d.open?ui.folds.add(d.dataset.fold):ui.folds.delete(d.dataset.fold); lsSet("mb-folds",JSON.stringify([...ui.folds])); }); }
 function render(){
   actCache=null; renderQueued=false; syncItemTypes(); // 지금 그리니까 기다리던 '나중에 그리기'는 없던 걸로 (안 그러면 걸려서 멈춰요)
   const a=document.activeElement, fid=a&&a.id&&$("#view").contains(a)?a.id:null, sel=fid&&typeof a.selectionStart==="number"?[a.selectionStart,a.selectionEnd]:null;
@@ -2865,8 +2875,7 @@ function gfxHTML(){
     <div class="gcard-h"><span class="gnum num" style="background:${gcolor(g.type)}">${num[g.id]}</span><b>${esc(g.label||"")}</b>${stp(g)}</div>
     ${sum?`<div class="gsum">${sum}</div>`:""}
     <div class="gvis">${g.image?`<button class="gcard-img" type="button" data-gzoom="${g.id}" aria-label="입면도 크게 보기"><img src="${esc(g.image)}" alt="${esc(g.label||"")} 입면도"><span class="small">크게 보기</span></button>`:""}${gMini(g)}</div>
-    ${g.note?`<div class="gnote small">${esc(g.note)}</div>`:""}
-    ${gContent(g.content)}
+    ${g.note||g.content?`<details class="gmore" data-gmore="${g.id}" ${ui.gOpen.has(g.id)||ui.printingAll?"open":""}><summary>내용 보기</summary>${g.note?`<div class="gnote small">${esc(g.note)}</div>`:""}${gContent(g.content)}</details>`:""}
     ${f?`<div class="row small" style="justify-content:space-between"><span class="muted">${esc(f.name)}</span><button class="btn small" type="button" data-gdl-row="${g.id}">V${f.v} 받기</button></div>`:""}
   </article>`; };
   const byFloor=["4F","3F"].map(fl=>{ const gs2=full.filter(g=>g.floor===fl); return gs2.length?`<h4 class="gfl">${fl==="4F"?"4층":"3층"} <span class="small muted">${gs2.length}개</span></h4><div class="gcards">${gs2.map(card).join("")}</div>`:""; }).join("");
@@ -3137,24 +3146,29 @@ const vstyle=(M,v)=>`style="--c:${M.color(v)}"`;
 function schedHTML(){
   const M=schedModel(), hide=ui.schedHide, shown=M.vendors.filter(v=>!hide.has(v));
   const bars=M.bars.filter(b=>!hide.has(b.vendor));
-  const chips=M.vendors.length?`<div class="schips" role="group" aria-label="업체 보기">${M.vendors.map(v=>`<button class="chip" data-sv="${esc(v)}" aria-pressed="${!hide.has(v)}" ${vstyle(M,v)}><span class="vtag">${esc(v)}</span> <small>${M.bars.filter(b=>b.vendor===v).length}</small></button>`).join("")}</div>`:"";
+  const chips=M.vendors.length?`<div class="schips" role="group" aria-label="업체 보기">${M.vendors.map(v=>`<button class="chip" data-sv="${esc(v)}" aria-pressed="${!hide.has(v)}" ${vstyle(M,v)} title="${esc(M.notes[v]||"")}"><span class="vtag">${esc(v)}</span> <small>${M.bars.filter(b=>b.vendor===v).length}</small></button>`).join("")}</div>`:"";
   const notes=shown.filter(v=>M.notes[v]).map(v=>`<div class="small" style="margin-top:6px"><span class="vtag" ${vstyle(M,v)}>${esc(v)}</span> ${esc(M.notes[v])}</div>`).join("");
   const top=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">시공 일정 <span class="small muted">${md(M.from)} ~ ${md(M.to)}</span></h3>
-    <div class="seg sviewseg" role="group" aria-label="보기 방식"><button data-sview="day" aria-pressed="${ui.schedView!=="bar"}">날짜별</button><button data-sview="bar" aria-pressed="${ui.schedView==="bar"}">공정표</button></div></div>${chips}${notes}`;
+    <div class="seg sviewseg" role="group" aria-label="보기 방식"><button data-sview="day" aria-pressed="${ui.schedView!=="bar"}">날짜별</button><button data-sview="bar" aria-pressed="${ui.schedView==="bar"}">공정표</button></div></div>${chips}`;
   const body=ui.schedView==="bar"?ganttHTML(M,shown,bars):agendaHTML(M,bars);
   return `<div class="panel">${top}<div style="margin-top:12px">${body}</div></div>${schedEditHTML(M)}`;
 }
 function agendaHTML(M,bars){
-  let out="", wk=-1;
-  M.days.forEach((d,i)=>{
-    const w=Math.floor(i/7); if(w!==wk){ wk=w; const e=M.days[Math.min(M.days.length-1,i+6)]; out+=`<div class="sweek">${w+1}주차 · ${md(d)} ~ ${md(e)}</div>`; }
+  // 지난 주는 접어 두고, 여러 날 걸리는 작업은 시작하는 날(과 주 첫날)에만 크게, 나머지 날엔 '계속' 한 줄로. 작업 없는 날은 숨겨요
+  const weeks=[]; M.days.forEach((d,i)=>{ const w=Math.floor(i/7); (weeks[w]=weeks[w]||[]).push({d,i}); });
+  const dayHTML=({d,i},first)=>{
     const dow=dowOf(d), mss=M.ms.filter(x=>x.date===d), hit=bars.filter(b=>sStart(b)<=d&&d<=sEnd(b));
+    if(!hit.length&&!mss.length&&d!==M.today) return "";
+    const fresh=hit.filter(b=>sStart(b)===d||first), cont=hit.filter(b=>!fresh.includes(b));
     const head=`<div class="sdhead"><span class="sdate">${md(d)} <span style="font-family:var(--f-ui)">${DAYS[dow]}</span></span>${d===M.today?`<span class="tpill">오늘</span>`:""}${mss.map(x=>`<span class="mpill">◆ ${esc(x.label||"")}</span>`).join("")}${!hit.length?`<span class="small">작업 없음</span>`:""}</div>`;
-    const sh=SHIFTS.map(k=>{ const L=hit.filter(b=>(b.shift||"주간")===k).sort((a,b)=>M.vendors.indexOf(a.vendor)-M.vendors.indexOf(b.vendor)); if(!L.length) return "";
-      return `<div class="sshift"><div class="k">${k}</div><div>${L.map(b=>{ const n=dayDiff(sStart(b),sEnd(b))+1, k2=dayDiff(sStart(b),d)+1;
-        return `<div class="sitem" ${vstyle(M,b.vendor)}><span class="vtag">${esc(b.vendor||"")}</span><span class="lbl">${esc(b.label||"")}</span><span class="rng">${n>1?`${md(sStart(b))}~${md(sEnd(b))} · ${n}일 중 ${k2}일째`:"하루"}</span></div>`; }).join("")}</div></div>`; }).join("");
-    out+=`<div class="sday ${dow>=5?"we":""} ${d===M.today?"today":""} ${hit.length?"":"empty"}" ${d===M.today?'id="sToday"':""}>${head}${sh}</div>`;
-  });
+    const sh=SHIFTS.map(k=>{ const L=fresh.filter(b=>(b.shift||"주간")===k).sort((a,b)=>M.vendors.indexOf(a.vendor)-M.vendors.indexOf(b.vendor)); if(!L.length) return "";
+      return `<div class="sshift"><div class="k">${k}</div><div>${L.map(b=>{ const n=dayDiff(sStart(b),sEnd(b))+1;
+        return `<div class="sitem" ${vstyle(M,b.vendor)}><span class="vtag">${esc(b.vendor||"")}</span><span class="lbl">${esc(b.label||"")}</span><span class="rng">${n>1?`${md(sStart(b))}~${md(sEnd(b))} · ${n}일`:"하루"}</span></div>`; }).join("")}</div></div>`; }).join("");
+    const ct=cont.length?`<div class="scont small"><span class="muted">계속</span> ${cont.map(b=>`<span class="vtag" ${vstyle(M,b.vendor)}>${esc(b.vendor||"")}</span> ${esc(b.label||"")}${sEnd(b)===d?` <span class="muted">(마감)</span>`:""}`).join(" · ")}</div>`:"";
+    return `<div class="sday ${dow>=5?"we":""} ${d===M.today?"today":""}" ${d===M.today?'id="sToday"':""}>${head}${sh}${ct}</div>`; };
+  const weekHTML=(W,w)=>{ const s0=W[0].d, e0=W[W.length-1].d; return `<div class="sweek">${w+1}주차 · ${md(s0)} ~ ${md(e0)}</div>${W.map((x,k)=>dayHTML(x,k===0)).join("")||`<p class="small muted" style="margin:6px 0">작업 없음</p>`}`; };
+  const past=weeks.map((W,w)=>({W,w})).filter(o=>o.W[o.W.length-1].d<M.today), rest=weeks.map((W,w)=>({W,w})).filter(o=>o.W[o.W.length-1].d>=M.today);
+  const out=(past.length?`<details class="spast"><summary>지난 일정 ${past.length}주 보기</summary>${past.map(o=>weekHTML(o.W,o.w)).join("")}</details>`:"")+rest.map(o=>weekHTML(o.W,o.w)).join("");
   return out||`<p class="muted">아직 일정이 없어요.</p>`;
 }
 function ganttHTML(M,shown,bars){
