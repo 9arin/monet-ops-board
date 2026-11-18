@@ -130,6 +130,7 @@ td.r,th.r{text-align:right}
 .pinbtn.has{border-style:solid;border-color:var(--accent);color:var(--accent)}
 .pinbtn.placing{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .mapcard{margin-bottom:16px}
+.help{display:none!important} /* 설명 문장은 숨겨요 */
 .scont{margin:4px 0 0 2px;line-height:1.9}
 .scont .vtag{font-size:11px}
 details.spast{margin-bottom:8px}
@@ -1589,10 +1590,10 @@ function copyVer4(from,to){
 function countBy(floor,ver){const c={};state.markers.filter(m=>(!floor||m.floor===floor)&&inVer(m,ver)).forEach(m=>{c[m.type]=(c[m.type]||0)+(Number(m.qty)||1);});return c;}
 // 배치도 옆: 도면 점과 연결된 물품 (물품 탭에서 고치면 바로 바뀌어요)
 function planItemsHTML(cf){
-  const its=state.items.filter(i=>i.link&&TYPES[i.link]);
-  if(!its.length) return "";
-  const byT=Object.keys(TYPES).map(k=>[k,its.filter(i=>i.link===k)]).filter(x=>x[1].length);
-  return `<h4 style="margin:16px 0 6px">연결된 물품</h4><div class="pitems">${byT.map(([k,L])=>L.map(i=>{ const need=Number(i.qty||0), placed=cf[k]||0;
+  const its=state.items.filter(i=>i.link&&i.link!=="staff"&&TYPES[i.link]&&cf[i.link]).sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ko",{numeric:true}));
+  if(!its.length) return `<p class="small muted" style="margin:12px 0 0">이 층에 놓인 물품이 없어요.</p>`;
+  const byT=its.map(i=>[i.link,[i]]);
+  return `<h4 style="margin:16px 0 6px">물품 <span class="small muted">${its.length}가지</span></h4><div class="pitems">${byT.map(([k,L])=>L.map(i=>{ const need=Number(i.qty||0), placed=cf[k]||0;
     return `<button class="pit" data-pit="${i.id}" type="button">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="noimg"><span class="dot" style="background:${tcolor(k)}"></span></span>`}
       <span class="pit-t"><b>${esc(i.name||"")}</b>${i.chosen?` <span class="pill ok">최종</span>`:""}<br><span class="small muted">${esc(i.status||"")} · 도면 ${placed}${need?` / 필요 ${need}`:""}${need&&placed<need?` <span style="color:var(--bad)">· ${need-placed} 부족</span>`:""}</span></span></button>`; }).join("")).join("")}</div>`;
 }
@@ -1678,10 +1679,10 @@ function planHTML(){
         <button class="btn" id="e-close">닫기</button>
         ${ui.planEdit?`<button class="btn danger" id="e-del">${ui.confirmDel===sel.id?"한 번 더 누르면 삭제":"삭제"}</button>`:""}
       </div></div></div>` : `
-    <div class="panel"><h3>${ui.floor==="4F"?"4층":"3층"} 배치 수량</h3>
-      <div class="legend">${Object.entries(TYPES).map(([k,t])=>`<div class="li"><span><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</span><span class="num">${cf[k]||0}<span class="muted small"> / 전체 ${ca[k]||0}</span></span></div>`).join("")}</div>
+    <div class="panel"><h3>${ui.floor==="4F"?"4층":"3층"} 배치</h3>
+      <div class="legend"><div class="li"><span><span class="dot" style="background:${tcolor("staff")}"></span>알바생 자리</span><span class="num">${cf.staff||0}</span></div></div>
       ${planItemsHTML(cf)}
-      <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"점을 끌어서 옮기고, 아래 '추가'에서 새 항목을 찍어요. 다 했으면 '편집 끝내기'를 눌러 주세요.":"점을 누르면 이름·수량을 볼 수 있어요. 위치를 옮기려면 '위치 편집'을 눌러요."} 수량이 2 이상이면 점 안에 숫자로 보여요.</p></div>`;
+      <p class="help small muted noprint" style="margin:12px 0 0">${ui.planEdit?"점을 끌어서 옮기고, 아래 '추가'에서 새 항목을 찍어요. 다 했으면 '편집 끝내기'를 눌러 주세요.":"점을 누르면 이름·수량을 볼 수 있어요. 위치를 옮기려면 '위치 편집'을 눌러요."} 수량이 2 이상이면 점 안에 숫자로 보여요.</p></div>`;
   return `
   <div class="row noprint" style="justify-content:space-between;margin-bottom:12px">
     <div class="row"><div class="seg" role="group" aria-label="층 선택"><button data-floor="4F" aria-pressed="${ui.floor==="4F"}">4층</button><button data-floor="3F" aria-pressed="${ui.floor==="3F"}">3층</button></div>${ui.floor==="4F"?ver4Seg():""}</div>
@@ -1836,7 +1837,7 @@ function mapCard(title,controls,pins,hint,adding){
       <div class="row noprint">${controls||""}<label class="row small muted"><input type="checkbox" id="lblToggle2" ${ui.labels?"checked":""}> 이름</label><button class="btn" id="mapToggle">${ui.mapOpen?"도면 접기":"도면 펴기"}</button></div>
     </div>
     <div class="plan-scroll"><div class="plan ${adding?"adding":""} ${ui.labels?"":"nolabels"}" id="miniPlan"><img src="${PLAN[ui.floor]}" alt="${ui.floor} 평면도">${marks}</div></div>
-    ${hint?`<p class="small muted maphint" style="margin:8px 0 0">${hint}</p>`:""}
+    ${hint?`<p class="help small muted maphint" style="margin:8px 0 0">${hint}</p>`:""}
   </div>`;
 }
 function bindMapCard(onPin,onPlace){
@@ -1983,7 +1984,7 @@ function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
 function printRota(){
   const {res,pos}=coverage(), dates=weekDates(curWeek()), f=d=>`${+d.slice(5,7)}/${+d.slice(8)}`;
   const html=`<section class="p-sec rotaprint"><div class="rp-head"><h2>MONET 100 주간 근무표</h2><b>${dates[0].slice(0,4)}. ${f(dates[0])} (월) ~ ${f(dates[6])} (일)</b></div>
-    ${rotaHTML(pos,res,true)}<p class="small muted" style="margin:6px 0 0">운영 시간 기준 · 자리마다 휴게 1시간 · ${new Date().toLocaleDateString("ko-KR")} 뽑음</p></section>`;
+    ${rotaHTML(pos,res,true)}<p class="small muted" style="margin:6px 0 0">${new Date().toLocaleDateString("ko-KR")} 뽑음</p></section>`;
   doPrint(html,`MONET100 근무표 ${dates[0]}~${dates[6].slice(5)}`,fitOnePage);
 }
 // A4 가로 한 장(여백 10mm → 277×190mm ≈ 1047×718px)에 다 들어가게 줄여요
@@ -2009,7 +2010,7 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   const secs={}; pos.forEach(x=>{ const g=brkGroupOf(x)||"~"+posTime(x); (secs[g]=secs[g]||[]).push(x); });
   const keys=Object.keys(secs).sort((a,b)=>a[0]==="~"&&b[0]==="~"?toMin(a.slice(1))-toMin(b.slice(1)):a.localeCompare(b));
   Object.values(secs).forEach(L=>L.sort((a,b)=>(posBrk(a)?toMin(posBrk(a)):1e4)-(posBrk(b)?toMin(posBrk(b)):1e4)));
-  const secTitle=k=>{ if(k[0]==="~"){ const t=k.slice(1); return [t,`휴게 1시간`]; }
+  const secTitle=k=>{ if(k[0]==="~"){ const t=k.slice(1); return [t,""]; }
     const g=BRK_GROUPS.find(x=>x[0]===k), L=secs[k], bs=L.map(posBrk).filter(Boolean).map(toMin).sort((a,b)=>a-b);
     const clash=bs.some((b,i)=>i&&b-bs[i-1]<60);
     return [`<span class="gl">${k}</span>${g[1]}`,clash?`<b style="color:var(--bad)">휴게 시간이 겹쳐요</b>`:""]; };
@@ -2019,7 +2020,7 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   const sec=(title,sub)=>`<tr class="sec"><th colspan="8">${title}${sub?` <span class="small">${sub}</span>`:""}</th></tr>`;
   const net=t=>{ const [a,b]=t.split("~").map(toMin); return a!=null&&b!=null?(b-a-60)/60:null; };
   const closed=`<td class="closed">휴관</td>`;
-  let body=keys.map(t=>sec(...secTitle(t))+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}<span class="brk">${esc(posTime(x))}${posBrk(x)?` · ☕ ${posBrk(x)}`:""}</span></td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
+  let body=keys.map(t=>sec(...secTitle(t))+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}<span class="brk">${esc(posTime(x))}</span></td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
       const c=plans[i].cells[x.id], key=dt+"|"+x.id; if(c.kind==="prep") return `<td class="closed">OT·시뮬</td>`; if(c.kind==="closed") return `<td class="closed">휴관</td>`;
       if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>(pl.allHands||!pl.working.has(p.id)||p.id===(c.who&&c.who.id))&&(pl.allHands||!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt)))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 덜 일한 사람 먼저
         const plusL=pl.plus[x.id]||[], addable=alba().filter(p=>!pl.working.has(p.id)&&!pl.crew.some(q=>q.id===p.id)&&!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0));
@@ -2033,7 +2034,7 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   const under=alba().map(p=>({p,h:wk[p.id]||0})).filter(o=>o.h<MAX_H).sort((a,b)=>a.h-b.h||(a.p.order||0)-(b.p.order||0));
   if(false) body+=sec(`이번 주 ${MAX_H}시간 미만`,"여유 있는 사람 · 야간이나 빈자리에 넣을 수 있어요")+`<tr class="under"><td class="rl">${under.length}명</td><td colspan="7" style="text-align:left">${under.map(o=>`<span class="chip uchip">${esc(pname(o.p))} <span class="num muted">${+o.h.toFixed(1)}h · ${Math.round(o.h/8*10)/10}일</span></span>`).join(" ")}</td></tr>`;
   const anyNight=plans.some((pl,i)=>open(dates[i])&&nightCfg().dates.includes(dates[i]));
-  if(anyNight) body+=sec(`야간 ${NIGHT_TIME}`,"휴게 없음")+`<tr class="night"><td class="rl">야간</td>${dates.map((dt,i)=>nightCfg().dates.includes(dt)?`<td class="nt">${[mgr?`<b>${esc(pname(mgr)||"매니저")}</b>`:"",...plans[i].crew.map(p=>`<span class="${over(p)?"overtxt":""}">${esc(pname(p))}</span>`)].filter(Boolean).join("<br>")}</td>`:`<td></td>`).join("")}</tr>`;
+  if(anyNight) body+=sec(`야간 ${NIGHT_TIME}`,"")+`<tr class="night"><td class="rl">야간</td>${dates.map((dt,i)=>nightCfg().dates.includes(dt)?`<td class="nt">${[mgr?`<b>${esc(pname(mgr)||"매니저")}</b>`:"",...plans[i].crew.map(p=>`<span class="${over(p)?"overtxt":""}">${esc(pname(p))}</span>`)].filter(Boolean).join("<br>")}</td>`:`<td></td>`).join("")}</tr>`;
   body+=`<tr class="mgrrow"><td class="rl">매니저</td>${dates.map(dt=>open(dt)?`<td>${esc(mgr?pname(mgr)||"매니저":"매니저")}</td>`:closed).join("")}</tr>`;
   body+=`<tr class="offrow"><td class="rl">휴무</td>${dates.map((dt,i)=>open(dt)?`<td>${plans[i].off.map(p=>esc(pname(p))).join("<br>")}</td>`:closed).join("")}</tr>`;
   body+=`<tr class="sum"><td class="rl">인원</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed; const t=Object.values(plans[i].cells).filter(c=>c.who).length, n=plans[i].crew.length;
@@ -2049,7 +2050,7 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   const hours=`<h3 style="margin:20px 0 8px">이번 주 근무 시간 <span class="small muted">사람별 · 주 ${MAX_H}시간 기준</span></h3>
     <div class="tbl-wrap"><table class="rota whours"><tr><th class="rl">이름</th>${dates.map((dt,i)=>`<th class="${i>=5?"we":""}">${DAYS[i]}<br><span class="small num">${+dt.slice(5,7)}/${+dt.slice(8)}</span></th>`).join("")}<th>합계</th></tr>
     ${hrs.map(p=>{ const t=wk[p.id]||0; return `<tr><td class="rl">${esc(pname(p))}</td>${dates.map((dt,i)=>`<td class="num">${hcell((wd[p.id]||{})[i]||0)}</td>`).join("")}<td class="num ${t>MAX_H?"bad":t<MAX_H?"":"ok"}"><b>${+t.toFixed(1)}</b><span class="small muted"> / ${MAX_H}</span></td></tr>`; }).join("")}</table></div>`;
-  return `${nav}<div class="tbl-wrap"><table class="rota">${head}${body}</table></div><p class="small muted rotalegend noprint">A~E는 휴게 교대 묶음이에요. 같은 묶음끼리 휴게 때 서로 자리를 채워요. 이름을 누르면 그날만 사람을 바꿀 수 있어요.</p>${hours}`;
+  return `${nav}<div class="tbl-wrap"><table class="rota">${head}${body}</table></div><p class="help small muted rotalegend noprint">A~E는 휴게 교대 묶음이에요. 같은 묶음끼리 휴게 때 서로 자리를 채워요. 이름을 누르면 그날만 사람을 바꿀 수 있어요.</p>${hours}`;
 }
 // 그 주 사람별 근무시간 (주간 + 야간) — 야간 고르는 목록에 써요
 function nightLoad(crews,pos){ const L={}; alba().forEach(p=>L[p.id]={}); Object.entries(crews).forEach(([d,cs])=>cs.forEach(p=>{ const k=weekKey(d); L[p.id][k]=(L[p.id][k]||0)+1; })); return L; }
@@ -2114,7 +2115,7 @@ function nightHTML(){
       <td><div class="row" style="gap:4px">${mgr?`<span class="chip nchip"><b>${esc(pname(mgr)||"매니저")}</b></span>`:""}${c.map(p=>`<span class="chip nchip">${esc(pname(p))}<button class="x" data-ncut="${p.id}" aria-label="빼기">×</button></span>`).join("")}
         <select class="nadd" data-nadd><option value="">+ 사람</option>${opts}</select>${man?`<button class="linkbtn small" data-nauto>자동으로</button>`:""}
         ${short?`<b style="color:var(--bad)">${+nc.alba-c.length}명 모자람</b>`:""}</div></td><td><button class="x" data-calrm="${ds}" aria-label="날짜 빼기">×</button></td></tr>`; }).join("");
-  return `<div class="panel" style="margin-top:16px"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">야간 ${NIGHT_TIME} <span class="small muted">휴게 없음 · 알바 ${nc.alba}명 + 운영매니저 · 2번 = 근무 1일 (한 사람 주 최대 ${NIGHT_MAX}번)</span></h3><span class="small muted">${nc.dates.length}일 선택</span></div>
+  return `<div class="panel" style="margin-top:16px"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">야간 ${NIGHT_TIME} <span class="small muted">알바 ${nc.alba}명 + 운영매니저</span></h3><span class="small muted">${nc.dates.length}일 선택</span></div>
     <div class="nightgrid"><div class="calbox noprint"><div class="row" style="justify-content:space-between"><button class="btn small" data-calnav="-1" ${mi<=0?"disabled":""}>‹</button><b>${y}년 ${m}월</b><button class="btn small" data-calnav="1" ${mi>=months.length-1?"disabled":""}>›</button></div>
       <div class="calgrid">${DAYS.map((d,i)=>`<span class="calh ${i>=5?"we":""}">${d}</span>`).join("")}${cells.join("")}</div></div>
       <div style="min-width:0">${list?`<div class="tbl-wrap"><table><thead><tr><th>날짜</th><th>야간 인원</th><th></th></tr></thead><tbody>${list}</tbody></table></div>`:`<p class="small muted" style="margin:0">달력에서 날짜를 누르면 야간이 추가돼요.</p>`}</div></div></div>`;
@@ -2252,7 +2253,7 @@ function staffHTML(){
     const free=state.people.filter(h=>!assignedTo(h));
     const roles=ALLG.map(g=>`<option value="${g.id}:담당">${g.name} · 고정</option><option value="${g.id}:대타">${g.name} · 대체</option>`).join("");
     return `<div class="panel"><div class="row" style="justify-content:space-between;align-items:baseline"><h3 style="margin:0">역할 부여</h3><span class="small muted">월급 모두 ${W(PAY_MONTHLY)}원 · 주 ${WORK_DAYS}일 ${MAX_H}시간</span></div>
-    <p class="small muted noprint" style="margin:6px 0 10px">역할을 누르면 고를 수 있어요(여러 개). 사람은 인원 명단에서 골라요.${free.length?` <b>자리 없는 사람 ${free.length}명</b>: ${free.map(h=>esc(h.name||"이름 없음")).join(", ")}`:""}</p>
+    <p class="help small muted noprint" style="margin:6px 0 10px">역할을 누르면 고를 수 있어요(여러 개). 사람은 인원 명단에서 골라요.${free.length?` <b>자리 없는 사람 ${free.length}명</b>: ${free.map(h=>esc(h.name||"이름 없음")).join(", ")}`:""}</p>
     <div class="row mgrline"><b>운영매니저</b><input id="mgrName" value="${esc(mgr?mgr.name:"")}" placeholder="이름" aria-label="운영매니저 이름" style="max-width:180px"><span class="small muted">매일 근무</span></div>
     ${byG}
     <form class="addform three noprint" id="addStaff"><label class="f">구역<select id="ns-role">${roles}</select></label>
@@ -2284,11 +2285,11 @@ function staffHTML(){
       <div class="pdocs">${docSlot(h,"idFile","신분증 사본")}${docSlot(h,"bankFile","통장 사본")}
         <div class="pdoc wide"><b>기타 서류 <span class="small muted">이력서·보건증·계약서 등</span></b>${docs.map((d,i)=>`<span class="chip mchip">${unlocked()?`<button class="linkbtn small" data-hdoc="${i}">${esc(d.name||"서류")}</button><button class="x" data-hdocdel="${i}" aria-label="지우기">×</button>`:`🔒 ${esc(d.name||"서류")}`}</span>`).join(" ")}
           ${unlocked()?`<div class="drop pdrop" data-hdocs>여러 개 끌어다 놓기 · 눌러서 고르기 · 붙여넣기</div>`:""}</div></div>
-      ${unlocked()?"":`<p class="small muted" style="margin:6px 0 0">🔒 신분증·통장·서류는 위의 잠금을 풀어야 올리고 볼 수 있어요.</p>`}
+      ${unlocked()?"":`<p class="help small muted" style="margin:6px 0 0">🔒 신분증·통장·서류는 위의 잠금을 풀어야 올리고 볼 수 있어요.</p>`}
       <div class="row" style="justify-content:space-between;margin-top:10px"><span class="small muted">${a?`자리: ${esc(where)} · 역할 부여에서 바꿔요`:"아직 자리 없음 · 역할 부여에서 이 사람을 고르면 들어가요"}</span><button type="button" class="btn small danger" data-pdel>${ui.confirmDel===h.id?"정말 삭제할까요?":"이 사람 삭제"}</button></div>
     </div></div>`; };
   const peoplePart=()=>`<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:6px"><h3 style="margin:0">인원 명단 <span class="small muted">${state.people.length}명</span></h3><button class="btn primary small" id="addPerson" type="button">+ 사람 추가</button></div>
-    <p class="small muted" style="margin:0 0 6px">사람을 누르면 정보가 열려요. 사진·파일은 끌어다 놓거나 붙여넣기로 넣어요.</p>
+    <p class="help small muted" style="margin:0 0 6px">사람을 누르면 정보가 열려요. 사진·파일은 끌어다 놓거나 붙여넣기로 넣어요.</p>
     ${lockBar()}
     <div class="plist">${people.length?people.map(pcard).join(""):`<p class="small muted">아직 아무도 없어요. '+ 사람 추가'를 눌러 주세요.</p>`}</div></div>`;
 
@@ -2414,7 +2415,7 @@ function quotesHTML(sum){
   return `<details class="panel qbox" id="quoteBox" ${ui.quotesOpen?"open":""}><summary><h3>견적서 <span class="num muted">${state.quotes.length}</span></h3><span class="small muted">업체·계좌·견적 파일</span></summary>
     <div class="drop noprint" id="quoteDrop"><b>견적서 파일을 여기로 끌어다 놓으세요</b><br><span class="small">PDF·사진 · 눌러서 고를 수도 있어요 · 회사명, 계좌, 금액, 연락처를 자동으로 읽어요 · 파일당 ${mb(MAX_FILE)}MB까지</span></div>
     ${cards?`<div class="qgrid">${cards}</div>`:""}
-    <p class="small muted" style="margin:8px 0 0">자동으로 읽은 내용은 꼭 한 번 확인해 주세요. 틀린 칸은 눌러서 바로 고치면 돼요. 회사명이 같은 견적서는 한 업체 카드로 묶여요. 같은 업체의 견적서를 더 넣으려면 카드 아래 '+ 이 업체 견적서 더 넣기'에 올리세요. 물품 표의 업체 칸에서 그 업체(또는 견적서)를 고르면 묶여요.</p></details>`;
+    <p class="help small muted" style="margin:8px 0 0">자동으로 읽은 내용은 꼭 한 번 확인해 주세요. 틀린 칸은 눌러서 바로 고치면 돼요. 회사명이 같은 견적서는 한 업체 카드로 묶여요. 같은 업체의 견적서를 더 넣으려면 카드 아래 '+ 이 업체 견적서 더 넣기'에 올리세요. 물품 표의 업체 칸에서 그 업체(또는 견적서)를 고르면 묶여요.</p></details>`;
 }
 function photosHTML(i){
   const ps=i.photos||[];
@@ -2431,14 +2432,14 @@ function candsHTML(i){
     ${csort}${cs.length?`<div class="cands">${cs.map(c=>`<div class="cand ${i.chosen===c.id?"chosen":""}" data-c="${c.id}">
       <div class="drop cimg" data-cimg title="사진을 끌어다 놓거나 눌러서 고르기">${c.image?`<img src="${esc(c.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="cimg-hint">사진 바꾸기</span>`:`<div class="noimg small muted">${c.loading?"불러오는 중…":"사진 없음<br>끌어다 놓거나 눌러서 넣기"}</div>`}</div>
       ${c.title&&!blockedTitle(c.title)?`<div class="t">${esc(c.title)}</div>`:`<label class="qrow">이름<input data-ctitle value="" placeholder="${c.loading?"…":"상품 이름 직접 입력"}"></label>`}
-      ${!c.loading&&isCoupang(c.url)&&(!c.image||!c.price)?`<p class="small muted" style="margin:0">쿠팡은 자동으로 못 읽어요. 쿠팡 화면의 상품 사진을 위 칸으로 끌어다 놓고 가격을 적어 주세요. 위 '쇼핑몰에서 찾기'에서 같은 상품을 담으면 사진·가격이 같이 들어가요.</p>`:""}
+      ${!c.loading&&isCoupang(c.url)&&(!c.image||!c.price)?`<p class="help small muted" style="margin:0">쿠팡은 자동으로 못 읽어요. 쿠팡 화면의 상품 사진을 위 칸으로 끌어다 놓고 가격을 적어 주세요. 위 '쇼핑몰에서 찾기'에서 같은 상품을 담으면 사진·가격이 같이 들어가요.</p>`:""}
       <div class="small muted">${esc(c.site||"")}</div>
       <label class="qrow">가격<input class="num" data-cprice value="${esc(c.price||"")}" inputmode="numeric" placeholder="${c.loading?"…":"직접 입력"}"></label>
       <label class="qrow">메모<input data-cmemo value="${esc(c.memo||"")}" placeholder="예: 색상 화이트, 배송 3일"></label>
       ${c.title&&!blockedTitle(c.title)?`<button class="linkbtn small" data-csim type="button" style="align-self:flex-start">비슷한 상품 가격 보기</button>`:""}
       <div class="row" style="justify-content:space-between"><a class="small" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">열기</a>
         <span class="row"><button class="x" data-cdel aria-label="후보 삭제">×</button>${i.chosen===c.id?`<button class="btn" data-cunpick type="button">선택 해제</button>`:`<button class="btn primary" data-cpick type="button">이걸로 선택</button>`}</span></div>
-    </div>`).join("")}</div>`:`<p class="small muted" style="margin:8px 0 0">쇼핑몰 링크를 넣으면 사진과 가격을 불러와요. 여러 개를 넣고 비교한 뒤 '이걸로 선택'을 누르면 물품 표에 사진·가격·업체가 들어가요. 가격을 못 읽는 쇼핑몰은 직접 적어 주세요.</p>`}`;
+    </div>`).join("")}</div>`:`<p class="help small muted" style="margin:8px 0 0">쇼핑몰 링크를 넣으면 사진과 가격을 불러와요. 여러 개를 넣고 비교한 뒤 '이걸로 선택'을 누르면 물품 표에 사진·가격·업체가 들어가요. 가격을 못 읽는 쇼핑몰은 직접 적어 주세요.</p>`}`;
 }
 // 물품 표 정렬 (이 기기에 기억): 제목 칸을 누르거나 '정렬' 고르기. 같은 칸을 다시 누르면 반대로.
 const ISORT=[["order","등록순"],["name","가나다순"],["amt","금액"],["price","단가"],["qty","수량"],["status","상태"],["kind","구분"],["vendor","업체"]];
@@ -2537,7 +2538,7 @@ function itemsHTML(){
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">물품</h3>
       <div class="isum">${kindsOf(base).filter(k=>!noCost(k)).map(k=>`<span class="isum-k"><span class="small muted">${esc(k)}</span><b class="num">${won(total(k))||0}<span class="small">원</span></b></span>`).join("")}<span class="isum-k isum-t"><span class="small">총 금액</span><b class="num">${won(base.reduce((s,i)=>s+amt(i),0))||0}<span class="small">원</span></b></span></div></div>
     ${kinds}<div class="ifilters noprint">${stagebar}<span class="row" style="gap:8px">${folderMode?`<div class="seg verseg" role="group" aria-label="보기 방식"><button type="button" data-vview="box" aria-pressed="${boxView}">업체별</button><button type="button" data-vview="table" aria-pressed="${!boxView}">표</button></div>`:""}${verbar}</span></div>${body}
-    <p class="small muted" style="margin:8px 0 0">금액 = 수량 × 단가 + 추가 비용. 수량이 비면 배치도에 찍은 개수로 계산해요. 제목 칸을 누르면 정렬돼요.</p>
+    <p class="help small muted" style="margin:8px 0 0">금액 = 수량 × 단가 + 추가 비용. 수량이 비면 배치도에 찍은 개수로 계산해요. 제목 칸을 누르면 정렬돼요.</p>
     <form class="addform" id="addItem"><label class="f">품목<input id="ni-name" placeholder="예: 무전기 이어폰" required></label>
       <label class="f">구분<select id="ni-kind">${ITEM_KIND.map(k=>`<option ${kf===k?"selected":""}>${k}</option>`).join("")}</select></label>
       <label class="f" id="ni-maker-f" ${kf==="구매"||!kf?"hidden":""}>업체<input id="ni-maker" placeholder="예: NGD"></label>
@@ -2576,7 +2577,7 @@ function priceStats(list,ref){
 function shopHTML(i){
   const S=ui.shop[i.id]||{}, q=S.q||shopQuery(i.name)||i.name||"";
   let out=`<div class="shop"><form class="row shopform" data-sform><input data-sq value="${esc(q)}" placeholder="물품 이름을 자세히 (예: 철제 접이식 의자 쿠션 블랙)" aria-label="찾을 물품"><button class="btn primary" type="submit">${S.loading?"찾는 중…":"쇼핑몰에서 찾기"}</button></form>`;
-  if(!S.q){ return out+`<p class="small muted" style="margin:6px 0 0">이름을 자세히 적을수록 잘 찾아요. 쿠팡·11번가·네이버 스마트스토어 등 국내 쇼핑몰에서 사진·가격·구매 링크를 가져오고, 마음에 드는 걸 '후보로 담기' 하면 아래 후보에 들어가요.</p></div>`; }
+  if(!S.q){ return out+`<p class="help small muted" style="margin:6px 0 0">이름을 자세히 적을수록 잘 찾아요. 쿠팡·11번가·네이버 스마트스토어 등 국내 쇼핑몰에서 사진·가격·구매 링크를 가져오고, 마음에 드는 걸 '후보로 담기' 하면 아래 후보에 들어가요.</p></div>`; }
   if(S.loading) return out+`<p class="small muted" style="margin:8px 0 0">'${esc(S.q)}' 찾는 중…</p></div>`;
   if(S.err) return out+`<p class="small" style="margin:8px 0 0">${esc(S.err)} ${shopLinks(S.q)}</p></div>`;
   const R=S.res||{}, nv=R.shop||{items:[]}, cp=R.coupang||{items:[]};
@@ -2865,7 +2866,7 @@ function gfxHTML(){
       ${ui.planEdit?`<button class="btn danger" id="g-del">${ui.confirmDel===sel.id?"한 번 더 누르면 삭제":"삭제"}</button>`:""}</div></div></div>`
     :`<div class="panel"><h3>${ui.floor==="4F"?"4층":"3층"} 그래픽</h3>
     <div class="legend">${Object.entries(GTYPES).map(([k,t])=>`<div class="li"><span><span class="dot" style="background:${gcolor(k)}"></span>${t.name}</span><span class="num">${cnt(k)}<span class="muted small"> / 전체 ${state.graphics.filter(g=>g.type===k).length}</span></span></div>`).join("")}</div>
-    <p class="small muted noprint" style="margin:12px 0 0">${ui.planEdit?"아래 '추가'에서 종류를 고르고, 도면에서 시작점과 끝점을 차례로 누르면 선이 그어져요. 번호를 끌면 선이 통째로, 끝의 네모를 끌면 길이가 바뀌어요.":guest?"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 시안 파일도 올릴 수 있어요.":"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 위치를 바꾸려면 '위치 편집'을 눌러요."}</p></div>`;
+    <p class="help small muted noprint" style="margin:12px 0 0">${ui.planEdit?"아래 '추가'에서 종류를 고르고, 도면에서 시작점과 끝점을 차례로 누르면 선이 그어져요. 번호를 끌면 선이 통째로, 끝의 네모를 끌면 길이가 바뀌어요.":guest?"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 시안 파일도 올릴 수 있어요.":"번호를 누르면 무엇이 들어가는지 보고 고칠 수 있어요. 위치를 바꾸려면 '위치 편집'을 눌러요."}</p></div>`;
   const all=state.graphics.slice().sort((a,b)=>a.floor===b.floor?a.id.localeCompare(b.id):a.floor==="4F"?-1:1);
   const stp=g=>`<span class="pill ${g.status==="설치 완료"?"s-done":g.status&&g.status!=="내용 정리"?"s-mid":"s-need"}">${esc(g.status||"내용 정리")}</span>`;
   const tname=g=>esc((GTYPES[g.type]||{}).name||"");
@@ -3196,7 +3197,7 @@ function ganttHTML(M,shown,bars){
   });
   const sel=bars.find(b=>b.id===ui.schedSel);
   const det=sel?`<div class="sdetail" ${vstyle(M,sel.vendor)}><div class="grow"><span class="vtag">${esc(sel.vendor||"")}</span> <span class="small muted">${esc(sel.shift||"주간")}</span><br><b>${esc(sel.label||"")}</b><br><span class="small">${md(sStart(sel))}(${DAYS[dowOf(sStart(sel))]})${sEnd(sel)!==sStart(sel)?` ~ ${md(sEnd(sel))}(${DAYS[dowOf(sEnd(sel))]}) · ${dayDiff(sStart(sel),sEnd(sel))+1}일`:" · 하루"}</span></div><button class="x" data-gbx aria-label="닫기">×</button></div>`
-    :`<p class="small muted" style="margin:8px 0 0">막대를 누르면 내용이 크게 보여요. 옆으로 밀어서 날짜를 넘겨 보세요.</p>`;
+    :`<p class="help small muted" style="margin:8px 0 0">막대를 누르면 내용이 크게 보여요. 옆으로 밀어서 날짜를 넘겨 보세요.</p>`;
   return `<div class="gwrap" id="gwrap"><div class="gantt" style="grid-template-columns:${labW}px repeat(${N},${colW}px);grid-template-rows:auto auto repeat(${lanes.length},minmax(46px,auto))">${html}</div></div>${det}`;
 }
 function schedEditHTML(M){
