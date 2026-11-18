@@ -1898,12 +1898,17 @@ const weekDates=mon=>DAYS.map((_,i)=>{ const d=new Date(mon+"T00:00"); d.setDate
 const curWeek=()=>{ const lo=weekKey(WORK_FROM), hi=weekKey(OPEN_TO), t=weekKey(ymd(new Date())); const w=ui.rotaWeek||(t<lo?lo:t>hi?hi:t); return w<lo?lo:w>hi?hi:w; };
 // 날짜별 계산에 필요한 것 한 번에: 주간표, 남는 사람(지원), 야간 인원, 야간 주에 빼는 날
 function planCtx(){ const {res,extra,pos}=coverage(), crews=nightCrews().crews; return {res,extra,pos,crews,drops:nightDrops(pos,extra,crews,res),first:firstWeekOff(pos)}; }
-function firstWeekOff(pos){ // 첫 주 12/3~6 중 쉬는 하루: 층마다 그날 자리가 모자라지 않게 고르게 (매주 필수 휴무 요일 먼저)
+function firstWeekOff(pos){ // 첫 주 12/5·6: 전원 근무일(12/1~4) 시간을 더해 주 40시간을 넘지 않게 쉬는 날을 정해요 (층마다 날짜별로 고르게, 매주 필수 휴무 먼저)
   const ds=[]; for(let d=OPEN_FROM;d<=FIRST_END;d=addDay(d,1)) if(!ALL_HANDS.includes(d)) ds.push(d); // 전원 근무일엔 안 쉬어요
-  const off={}; ALLG.forEach(g=>{ const mem=alba().filter(p=>pgroup(p)===g.id).sort((a,b)=>(a.order||0)-(b.order||0)), P=pos.filter(x=>x.group===g.id).length, cap={}; ds.forEach(d=>cap[d]=Math.max(0,mem.length-P));
+  const wk0=weekKey(FIRST_END), ah=ALL_HANDS.filter(d=>weekKey(d)===wk0).reduce((s,d)=>s+netH(DAY_TIME[d]),0);
+  const allowed=Math.max(0,Math.floor((MAX_H-ah)/8)), need=Math.max(0,ds.length-allowed); // 남은 시간으로 하루 8시간을 며칠 설 수 있나
+  const off={}; ALLG.forEach(g=>{ const mem=alba().filter(p=>pgroup(p)===g.id).sort((a,b)=>(a.order||0)-(b.order||0)), P=pos.filter(x=>x.group===g.id).length, cnt={}; ds.forEach(d=>cnt[d]=0);
     const mustOff=(p,d)=>mustDates(p).includes(d)||mustDow(p).includes(dowOf(d));
-    mem.forEach(p=>{ const m=ds.find(d=>mustOff(p,d)); if(m){ off[p.id]=m; ds.forEach(d=>{ if(mustOff(p,d)) cap[d]=Math.max(0,cap[d]-1); }); } }); // 원래 쉬는 날이 있는 사람은 그날로 (자리 여유에서 빼요)
-    mem.forEach((p,i)=>{ if(off[p.id]) return; const d=ds.slice().sort((a,b)=>cap[b]-cap[a]||ds.indexOf(a)-ds.indexOf(b))[0]; if(d&&cap[d]>0){ off[p.id]=d; cap[d]--; } }); }); // 남는 인원만 하루 쉬고, 나머지는 5·6일 둘 다 근무
+    mem.forEach(p=>{ off[p.id]=ds.filter(d=>mustOff(p,d)); off[p.id].forEach(d=>cnt[d]++); }); // 원래 쉬는 날
+    mem.forEach(p=>{ // 40시간을 넘지 않게 더 쉬어요. 쉬는 사람이 적은 날부터
+      while(off[p.id].length<need){ const d=ds.filter(x=>!off[p.id].includes(x)).sort((a,b)=>cnt[a]-cnt[b]||ds.indexOf(a)-ds.indexOf(b))[0]; if(!d) break; off[p.id].push(d); cnt[d]++; } });
+    if(!need){ const cap={}; ds.forEach(d=>cap[d]=Math.max(0,mem.length-P-cnt[d])); // 시간 여유가 있으면: 자리보다 남는 인원만 하루 쉬어요
+      mem.forEach(p=>{ if(off[p.id].length) return; const d=ds.slice().sort((a,b)=>cap[b]-cap[a]||ds.indexOf(a)-ds.indexOf(b))[0]; if(d&&cap[d]>0){ off[p.id].push(d); cap[d]--; } }); } });
   return off;
 }
 function nightDrops(pos,extra,crews,res){ // 야간을 해서 40시간이 넘는 사람은 그 주에 지원 인원이 있는 날 하루를 쉬어요
@@ -1960,7 +1965,7 @@ function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
     const w=ppl.filter(p=>!mustDates(p).includes(date)), cells={}; pos.forEach(x=>cells[x.id]={who:null,kind:"prep"});
     return {cells,crew:[],off:ppl.filter(p=>!w.includes(p)),working:new Set(w.map(p=>p.id)),extras:[],prep:w}; }
   if(date>=OPEN_FROM&&date<=FIRST_END){ // 첫 주: 각자 정해진 하루만 쉬고 나머지는 근무
-    const w=ALL_HANDS.includes(date)?ppl.slice():ppl.filter(p=>ctx.first[p.id]!==date&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)), left=new Set(w.map(p=>p.id)), cells={};
+    const w=ALL_HANDS.includes(date)?ppl.slice():ppl.filter(p=>!(ctx.first[p.id]||[]).includes(date)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)), left=new Set(w.map(p=>p.id)), cells={};
     pos.forEach(x=>{ const base=res[x.id][d].who, o=ov[x.id]&&byId(ov[x.id]); let who=o&&left.has(o.id)?o:base&&left.has(base.id)?base:null; if(who){ cells[x.id]={who,kind:o?"swap":"main"}; left.delete(who.id); } });
     pos.forEach(x=>{ if(cells[x.id]) return; const q=w.find(p=>left.has(p.id)&&pgroup(p)===x.group)||w.find(p=>left.has(p.id)); if(q){ cells[x.id]={who:q,kind:"cover"}; left.delete(q.id); } else cells[x.id]={who:null,kind:"gap"}; });
     let spare=w.filter(p=>left.has(p.id));
