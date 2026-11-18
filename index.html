@@ -598,9 +598,13 @@ tr[data-grow]{cursor:pointer}
 .zpop [data-zput]{width:100%;font-size:13px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 .zrow{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:4px;border-radius:8px;cursor:pointer;width:100%}
 .zrow:hover,.zrow:focus-visible{background:var(--soft)}
-.plan .zrow img{position:static;inset:auto;filter:none;width:40px;height:40px;flex:0 0 40px;object-fit:cover;border-radius:6px;background:var(--soft)}
-.zdot{width:40px;height:40px;flex:0 0 40px;border-radius:8px;opacity:.85}
-.zrow .zt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.zrow img,.plan .zrow img{position:static;inset:auto;filter:none;width:44px;height:44px;flex:0 0 44px;object-fit:cover;border-radius:8px;background:var(--soft)}
+.zdot{width:44px;height:44px;flex:0 0 44px;border-radius:8px;opacity:.85}
+.zrow .zt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.35;font-size:14px;color:var(--ink)}
+.zrow .zt b{font-weight:600;overflow-wrap:anywhere}
+.zrow .zt .small{font-size:12px}
+.zpop.zside{padding:12px 14px}
+.zpop.zside .zlist{gap:6px}
 .zrow .zq{font-size:15px;font-weight:700;white-space:nowrap}
 .plan.editing .pg,.plan.editing .pgb{opacity:.35;pointer-events:none}
 .plan .pgb{z-index:1}
