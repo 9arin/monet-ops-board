@@ -669,6 +669,7 @@ details.gmore[open]>summary{margin-bottom:8px}
 .gart{font-size:13px}.gart th,.gart td{padding:4px 6px}.gart td:first-child,.gart td:last-child{white-space:nowrap}
 .glist{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
 .lightbox{position:fixed;inset:0;z-index:100;background:var(--scrim);color:var(--scrim-ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;cursor:zoom-out}
+:is([data-thumb],.pit,.zpop,.pitems,[data-pphoto],.cimg,.cand,.docthumb) img,img.vthumb{cursor:zoom-in}
 .lightbox img{max-width:100%;max-height:calc(100vh - 90px);object-fit:contain;background:var(--panel);border-radius:6px}
 @media print{.gcard{break-inside:avoid}.gcard-img span{display:none}}
 tr.rowsel td{background:var(--warnbg)}
@@ -2765,6 +2766,14 @@ function zoomImg(src,label,fileId){
   box.onclick=close; document.addEventListener("keydown",k); document.body.appendChild(box);
   if(fileId) fileBlob(fileId).then(b=>{ if(b&&box.isConnected) box.querySelector("img").src=URL.createObjectURL(b); }).catch(()=>{});
 }
+// 사진을 누르면 크게 (물품 표·업체 박스·배치도 목록·인원 사진·쇼핑 검색 결과·후보). 사진이 없는 칸은 원래대로 눌러서 올려요
+const ZOOM_SEL="[data-thumb] img, img.vthumb, .pit img, .zpop img, .pitems img, [data-pphoto] img, .cimg img, .cand img, .docthumb img";
+document.addEventListener("click",e=>{ const im=e.target.closest&&e.target.closest("img"); if(!im||!im.matches(ZOOM_SEL)||im.dataset.itzoom!=null||!im.getAttribute("src")) return;
+  e.preventDefault(); e.stopPropagation();
+  const host=im.closest("[data-id],[data-pit],[data-vgo]"), id=host&&(host.dataset.pit||host.dataset.vgo||host.dataset.id), it=id&&state.items.find(x=>x.id===id);
+  const ph=it&&(it.photos||[]).find(p=>p.thumb===im.getAttribute("src"));
+  const card=im.closest(".cand"), lbl=it?it.name:card?(card.querySelector(".t")||{}).textContent:(im.closest(".pcard")?(im.closest(".pcard").querySelector(".pc-main b")||{}).textContent:"");
+  zoomImg(im.getAttribute("src"),lbl||"",ph&&ph.fileId); },true);
 async function setThumb(itemId,file){
   if(!/^image\//.test(file.type)){ toast("사진 파일만 넣을 수 있어요."); return; }
   const it=curItem(itemId); if(!it) return;
