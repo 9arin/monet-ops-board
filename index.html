@@ -137,6 +137,8 @@ td.r,th.r{text-align:right}
 .ptime input[type=time]{font-size:12px;padding:2px 4px;width:auto}
 .ptm{display:block;font-size:10.5px;color:var(--muted);font-weight:400}
 .ptm.mustw{color:var(--bad);font-weight:600}
+table.rota tr.plusrow td.rl{padding-left:14px}
+table.rota tr.plusrow td,table.rota tr.plusrow th{border-top-style:dashed}
 .help{display:none!important} /* 설명 문장은 숨겨요 */
 .scont{margin:4px 0 0 2px;line-height:1.9}
 .scont .vtag{font-size:11px}
@@ -1444,7 +1446,7 @@ function coverage(){
       const gp=pos.filter(x=>x.group===g.id), used=new Set();
       const work=ppl.filter(p=>pgroup(p)===g.id&&on(p,d)).sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0)); // 고정 먼저
       const fill=(x,w)=>{used.add(w.id); res[x.id][d]={who:w,kind:w.kind==="대타"?"cover":"main"};};
-      const hasR=p=>(p.roles||[]).length, okR=(p,x)=>!hasR(p)||p.roles.includes(jobName(x.label)); // 역할을 골라 둔 사람은 그 역할 자리에만 먼저
+      const hasR=p=>rolesOf(p).length, okR=(p,x)=>!hasR(p)||roleFits(p,x); // 역할(A~E)을 골라 둔 사람은 그 묶음 자리에만 먼저
       const home=(p,x)=>p.pos===x.id||(!p.pos&&p.slot&&x.slot&&p.slot===x.slot.id);
       gp.forEach(x=>{const w=work.find(p=>!used.has(p.id)&&hasR(p)&&okR(p,x)&&home(p,x)); if(w) fill(x,w);}); // 역할을 고른 사람: 원래 자리가 역할에 맞으면 거기
       gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)&&hasR(p)&&okR(p,x)); if(w) fill(x,w); }); // 아니면 역할이 맞는 다른 자리
@@ -1892,6 +1894,10 @@ const fmtH=h=>`${+h.toFixed(1)}시간`;
 // 휴게 교대 묶음: 같은 묶음끼리 휴게 시간에 서로 자리를 채워요 (자리 이름으로 나눠요)
 const BRK_GROUPS=[["A","리셉션 · 대기 안내",/리셉션|대기/],["B","살롱~산업혁명 · 튜브물감~모네작품",/살롱|산업혁명|튜브|모네/],["C","미디어 갤러리 안전 안내 · 출구 안내",/미디어/],["D","제2전시장 티켓관리 · 굿즈샵",/티켓|역무|굿즈/],["E","제2전시장 순회",/순회/]];
 const brkGroupOf=x=>{ const n=jobName(x.label||""); const g=BRK_GROUPS.find(([, ,r])=>r.test(n)); return g?g[0]:""; };
+// 역할 = A~E 묶음. 예전에 자리 이름으로 고른 역할도 그 자리의 묶음으로 읽어요
+const roleLetter=r=>{ if(BRK_GROUPS.some(g=>g[0]===r)) return r; const g=BRK_GROUPS.find(([, ,re])=>re.test(r||"")); return g?g[0]:""; };
+const rolesOf=p=>[...new Set((p.roles||[]).map(roleLetter).filter(Boolean))].sort();
+const roleFits=(p,x)=>rolesOf(p).includes(brkGroupOf(x));
 const brkMates=(x,pos)=>{ const g=brkGroupOf(x); return g?pos.filter(y=>y!==x&&brkGroupOf(y)===g):[]; };
 const posBrk=x=>{ const b=(posCfg()[x.id]||{}).brk||(x.slot&&x.slot.brk)||""; return /\d:\d\d/.test(b)?b.split("~")[0]:""; };
 // 날짜별 주간 근무표: 매주 같은 휴무표를 실제 날짜에 펼치고, 그날만 사람을 바꿀 수 있어요 (cfg-ovr: {날짜:{자리:사람}})
@@ -1947,9 +1953,9 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
 // 전원 필수 근무일: 알바 전원을 역할 부여대로 자리에 세워요 (고른 역할 → 맡은 자리 → 그 요일 근무표 자리). 같은 자리에 두 명 이상이면 '+ 이름'으로
 function allHandsPlan(ctx,date){
   const {pos,res}=ctx, d=dowOf(date), ppl=alba(), cells={}, plus={};
-  const order=ppl.slice().sort((a,b)=>((b.roles||[]).length?1:0)-((a.roles||[]).length?1:0)||(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0));
+  const order=ppl.slice().sort((a,b)=>(rolesOf(b).length?1:0)-(rolesOf(a).length?1:0)||(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0));
   const wants=p=>{ const gp=pos.filter(x=>x.group===pgroup(p)), L=gp.length?gp:pos, out=[];
-    (p.roles||[]).forEach(r=>L.filter(x=>jobName(x.label)===r).forEach(x=>out.push(x)));
+    rolesOf(p).forEach(r=>L.filter(x=>brkGroupOf(x)===r).forEach(x=>out.push(x)));
     if(out.length) return out; // 역할을 고른 사람은 그 역할 자리에만 (자리가 차 있으면 '+ 이름'으로 같이)
     const h=L.find(x=>x.id===p.pos); if(h) out.push(h);
     const b=pos.find(x=>res[x.id]&&res[x.id][d]&&res[x.id][d].who===p); if(b) out.push(b);
@@ -1959,7 +1965,7 @@ function allHandsPlan(ctx,date){
   pos.forEach(x=>{ if(cells[x.id]) return; // 빈 자리: 자리 없는 사람 → 같은 층에서 겹친 사람
     let i=left.findIndex(p=>pgroup(p)===x.group); if(i<0) i=left.length?0:-1; if(i>=0){ cells[x.id]={who:left.splice(i,1)[0],kind:"cover"}; return; }
     const cand=[]; Object.keys(plus).forEach(id=>{ if((pos.find(y=>y.id===id)||{}).group===x.group) plus[id].forEach(p=>cand.push({id,p})); });
-    cand.sort((a,b)=>((a.p.roles||[]).length?1:0)-((b.p.roles||[]).length?1:0)); // 역할을 고른 사람은 그 자리에 두고, 역할 없는 사람부터 빈 자리로
+    cand.sort((a,b)=>(rolesOf(a.p).length?1:0)-(rolesOf(b.p).length?1:0)); // 역할을 고른 사람은 그 자리에 두고, 역할 없는 사람부터 빈 자리로
     if(cand.length){ const {id,p}=cand[0]; plus[id]=plus[id].filter(q=>q!==p); if(!plus[id].length) delete plus[id]; cells[x.id]={who:p,kind:"cover"}; return; }
     cells[x.id]={who:null,kind:"gap"}; });
   const cnt={}; left.forEach(p=>{ const gp=pos.filter(x=>x.group===pgroup(p)), L=gp.length?gp:pos, x=L.slice().sort((a,b)=>(cnt[a.id]||0)-(cnt[b.id]||0))[0]; if(!x) return; cnt[x.id]=(cnt[x.id]||0)+1; (plus[x.id]=plus[x.id]||[]).push(p); });
@@ -2065,6 +2071,12 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   const sec=(title,sub)=>`<tr class="sec"><th colspan="8">${title}${sub?` <span class="small">${sub}</span>`:""}</th></tr>`;
   const net=t=>{ const [a,b]=t.split("~").map(toMin); return a!=null&&b!=null?(b-a-60)/60:null; };
   const closed=`<td class="closed">휴관</td>`;
+  // 같은 자리에 더 넣은 사람은 한 칸에 한 명씩, 자리 아래 줄로
+  const plusRows=x=>{ const n=Math.max(0,...dates.map((dt,i)=>open(dt)&&plans[i].plus?(plans[i].plus[x.id]||[]).length:0)); let h="";
+    for(let k=0;k<n;k++) h+=`<tr class="plusrow"><td class="rl"><span class="small muted">↳ ${esc(jobName(x.label))} 추가</span></td>${dates.map((dt,i)=>{ if(!open(dt)) return closed; const q=(plans[i].plus[x.id]||[])[k];
+      if(!q) return `<td></td>`; const t=pTimeSet(dt,x,q.id)?`<span class="ptm num">${esc(pTime(dt,x,q.id).replace(/,/g," · "))}</span>`:"", mw=!pr&&mustOn(q,dt)?`<span class="ptm mustw">⚠ 근무 불가 날</span>`:"";
+      return pr?`<td>${esc(pname(q))}${t}</td>`:`<td class="${over(q)?"over":""}"><button class="cellbtn" data-cell="${dt}|${x.id}" title="이 칸 고치기">${esc(pname(q))}</button>${mw}${t}</td>`; }).join("")}</tr>`;
+    return h; };
   let body=keys.map(t=>sec(...secTitle(t))+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}<span class="brk">${esc(posTime(x))}</span></td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
       const c=plans[i].cells[x.id], key=dt+"|"+x.id; if(c.kind==="prep") return `<td class="closed">OT·시뮬</td>`; if(c.kind==="closed") return `<td class="closed">휴관</td>`;
       if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().slice().sort((a,b)=>(pl.working.has(a.id)?1:0)-(pl.working.has(b.id)?1:0)||(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 그날 쉬는 사람 먼저, 덜 일한 사람 먼저
@@ -2078,9 +2090,8 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
         return `<td class="editing"><select data-swap="${key}"><option value="">${ovv?"원래대로":"그대로"}</option><option value="-" ${ovv==="-"?"selected":""}>빈자리로 두기</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${mustOn(p,dt)?" ⚠ 근무 불가 날":""}${where(p)}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select>${plusUI}</td>`; }
       const cls=c.kind==="gap"?"gap":c.kind==="swap"||c.kind==="auto"?"swp":"";
       const tm=p=>(p&&mustOn(p,dt)&&!pr?`<span class="ptm mustw" title="역할 부여에서 근무 불가로 고른 날이에요">⚠ 근무 불가 날</span>`:"")+(p&&pTimeSet(dt,x,p.id)?`<span class="ptm num">${esc(pTime(dt,x,p.id).replace(/,/g," · "))}</span>`:"");
-      const plusH=(plans[i].plus[x.id]||[]).map(p=>`<span class="plusp ${!pr&&over(p)?"overtxt":""}">+ ${esc(pname(p))}${tm(p)}</span>`).join("");
-      if(pr) return `<td class="${cls}">${c.who?esc(pname(c.who)):"빈자리"}${tm(c.who)}${plusH}</td>`;
-      return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="${c.kind==="auto"?esc(pname(c.base))+" "+(c.why||"")+" → 자동 대체":"이날만 사람 바꾸기"}">${c.who?esc(pname(c.who)):"빈자리"}</button>${tm(c.who)}${plusH}<button type="button" class="cellplus noprint" data-cell="${key}" data-plusfocus="1" aria-label="${+dt.slice(5,7)}/${+dt.slice(8)} ${esc(jobName(x.label))}에 사람 더 넣기" title="이 칸에 사람 더 넣기">+</button></td>`; }).join("")}</tr>`).join("")).join("");
+      if(pr) return `<td class="${cls}">${c.who?esc(pname(c.who)):"빈자리"}${tm(c.who)}</td>`;
+      return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="${c.kind==="auto"?esc(pname(c.base))+" "+(c.why||"")+" → 자동 대체":"이날만 사람 바꾸기"}">${c.who?esc(pname(c.who)):"빈자리"}</button>${tm(c.who)}<button type="button" class="cellplus noprint" data-cell="${key}" data-plusfocus="1" aria-label="${+dt.slice(5,7)}/${+dt.slice(8)} ${esc(jobName(x.label))}에 사람 더 넣기" title="이 칸에 사람 더 넣기">+</button></td>`; }).join("")}</tr>${plusRows(x)}`).join("")).join("");
   if(plans.some(pl=>pl.prep)) body+=sec("OT · 시뮬레이션","전원 8시간")+`<tr><td class="rl">전원 근무</td>${dates.map((dt,i)=>plans[i].prep?`<td class="nt">${plans[i].prep.length}명</td>`:open(dt)?`<td></td>`:closed).join("")}</tr>`;
   const under=alba().map(p=>({p,h:wk[p.id]||0})).filter(o=>o.h<MAX_H).sort((a,b)=>a.h-b.h||(a.p.order||0)-(b.p.order||0));
   if(false) body+=sec(`이번 주 ${MAX_H}시간 미만`,"여유 있는 사람 · 야간이나 빈자리에 넣을 수 있어요")+`<tr class="under"><td class="rl">${under.length}명</td><td colspan="7" style="text-align:left">${under.map(o=>`<span class="chip uchip">${esc(pname(o.p))} <span class="num muted">${+o.h.toFixed(1)}h · ${Math.round(o.h/8*10)/10}일</span></span>`).join(" ")}</td></tr>`;
@@ -2294,8 +2305,8 @@ function staffHTML(){
   };
 
   /* --- 역할 부여 --- */
-  const roleBox=p=>{ const r=p.roles||[], groups=ALLG.filter(g=>g.id===pgroup(p)&&pos.some(x=>x.group===g.id)); // 그 사람 층의 자리만
-    return `<div class="rolebox noprint" data-rolebox>${groups.map(g=>`<div class="small muted" style="margin:2px 0">${esc(g.name)}</div><div class="rolechk">${[...new Set(pos.filter(x=>x.group===g.id).map(x=>jobName(x.label)))].map(n=>`<label><input type="checkbox" data-rolechk value="${esc(n)}" ${r.includes(n)?"checked":""}> ${esc(n)}</label>`).join("")}</div>`).join("")}
+  const roleBox=p=>{ const r=rolesOf(p);
+    return `<div class="rolebox noprint" data-rolebox><div class="rolechk">${BRK_GROUPS.map(([k,nm])=>`<label><input type="checkbox" data-rolechk value="${k}" ${r.includes(k)?"checked":""}> <b>${k}</b> ${esc(nm)}</label>`).join("")}</div>
       <div class="row" style="justify-content:space-between;margin-top:6px"><button type="button" class="linkbtn small" data-roleclear>모두 해제</button><button type="button" class="btn small" data-roleopen>닫기</button></div></div>`; };
   const people=state.people.slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"ko"));
   const profPick=p=>{ const h=personOf(p);
@@ -2303,8 +2314,8 @@ function staffHTML(){
       ${people.map(x=>{ const o=assignedTo(x), mine=o&&o.id===p.id; return `<option value="${x.id}" ${mine?"selected":""} ${o&&!mine?"disabled":""}>${esc(x.name||"(이름 없음)")}${o&&!mine?` · ${esc(jobOf(o)||"배정됨")}`:""}</option>`; }).join("")}
       <option value="__new">+ 새 사람 등록</option></select></div>
 `; };
-  const row=p=>{const job=jobOf(p), r=(p.roles||[]).filter(n=>ROLES.includes(n)), open=ui.roleOpen===p.id, cell=L.per[p.id]||{days:0,nights:0};
-    return `<tr data-id="${p.id}"><td style="min-width:200px;max-width:270px"><div class="jobtag small">${personOf(p)?"":`<b>${esc(pname(p))}</b> · `}<button type="button" class="rolebtn" data-roleopen aria-expanded="${open}" title="역할 고르기 (여러 개 가능)">${r.length?r.map(n=>`<span class="rchip">${esc(n)}</span>`).join(""):`<span class="muted">${job?esc(job)+" (자동)":"역할 고르기"}</span>`} ▾</button></div>${open?roleBox(p):""}${p.kind==="대타"&&job&&!r.length?`<div class="small muted" style="margin-bottom:3px">들어가는 자리: ${esc(job)}</div>`:""}${profPick(p)}</td>
+  const row=p=>{const job=jobOf(p), r=rolesOf(p), open=ui.roleOpen===p.id, cell=L.per[p.id]||{days:0,nights:0};
+    return `<tr data-id="${p.id}"><td style="min-width:200px;max-width:270px"><div class="jobtag small">${personOf(p)?"":`<b>${esc(pname(p))}</b> · `}<button type="button" class="rolebtn" data-roleopen aria-expanded="${open}" title="역할 고르기 (A~E, 여러 개 가능)">${r.length?r.map(n=>`<span class="rchip" title="${esc((BRK_GROUPS.find(g=>g[0]===n)||[])[1]||"")}">${n}</span>`).join(""):`<span class="muted">${job?esc(job)+" (자동)":"역할 고르기"}</span>`} ▾</button></div>${open?roleBox(p):""}${p.kind==="대타"&&job&&!r.length?`<div class="small muted" style="margin-bottom:3px">들어가는 자리: ${esc(job)}</div>`:""}${profPick(p)}</td>
       <td style="min-width:190px"><div class="days" title="매주 쉬어야 하는 요일">${DAYS.map((d,i)=>`<button data-must="${i}" aria-pressed="${mustDow(p).includes(i)}" aria-label="매주 ${d}요일 필수 휴무">${d}</button>`).join("")}</div>
         <div class="row" style="gap:4px;margin-top:4px">${mustDates(p).map(d=>`<span class="chip mchip">${+d.slice(5,7)}/${+d.slice(8)}<button class="x" data-mrm="${d}" aria-label="빼기">×</button></span>`).join("")}<button class="linkbtn small noprint" data-mcal>${ui.mustOpen===p.id?"달력 닫기":"+ 날짜"}</button></div></td>
       <td class="r num" style="color:${actDays(p)*personNet(p,pos)>MAX_H?"var(--bad)":actDays(p)<WORK_DAYS?"var(--warn)":"inherit"}">${actDays(p)}일 · ${+(actDays(p)*personNet(p,pos)).toFixed(1)}h${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(nightCrews().total[p.id]||0)}</td>
@@ -2332,7 +2343,7 @@ function staffHTML(){
     if(!unlocked()) return `<div class="pdoc"><b>${label}</b><span class="small ${has?"":"muted"}">${has?"🔒 올려 둠":"없음"}</span></div>`;
     return `<div class="pdoc"><b>${label}</b>${has?`<span class="row" style="flex-wrap:nowrap"><button class="linkbtn small" data-hview="${k}">보기</button><button class="x" data-hdel="${k}" aria-label="${label} 지우기">×</button></span>`:`<div class="drop pdrop" data-hdrop="${k}">끌어다 놓기 · 눌러서 고르기 · 붙여넣기</div>`}</div>`; };
   const pcard=h=>{ const a=assignedTo(h), open=ui.personOpen===h.id, g=a&&ALLG.find(x=>x.id===pgroup(a)), docs=h.docs||[];
-    const where=a?`${g?g.name+" · ":""}${((a.roles||[]).length?a.roles.join(", "):jobOf(a))||pname(a)}`:"";
+    const where=a?`${g?g.name+" · ":""}${(rolesOf(a).length?rolesOf(a).join(", "):jobOf(a))||pname(a)}`:"";
     const head=`<button type="button" class="pc-head" data-popen aria-expanded="${open}">${avatar(h,"big")}<span class="pc-main"><b>${esc(h.name||"이름 없음")}</b><span class="small muted">${[h.gender,h.phone].filter(Boolean).map(esc).join(" · ")||"연락처 없음"}</span></span>
       <span class="pc-tags">${a?`<span class="pill pc-on">${esc(where)}</span>`:`<span class="pill pc-off">자리 없음</span>`}<span class="small muted">${[h.idFile?"신분증":"",h.bankFile?"통장":"",docs.length?`서류 ${docs.length}`:""].filter(Boolean).join(" · ")}</span></span><span class="muted" aria-hidden="true">${open?"▴":"▾"}</span></button>`;
     if(!open) return `<div class="pcard" data-pid="${h.id}">${head}</div>`;
@@ -2398,7 +2409,7 @@ function bindAssign(){
     const mc=tr.querySelector("[data-mcal]"); if(mc) mc.onclick=()=>{ ui.mustOpen=ui.mustOpen===p().id?null:p().id; ui.mustMon=null; render(); };
     tr.querySelectorAll("[data-f]").forEach(el=>el.onchange=()=>save("staff",{...p(),[el.dataset.f]:el.value.trim()}));
     tr.querySelectorAll("[data-roleopen]").forEach(b=>b.onclick=()=>{ ui.roleOpen=ui.roleOpen===p().id?null:p().id; render(); });
-    tr.querySelectorAll("[data-rolechk]").forEach(c=>c.onchange=()=>{ const r=new Set(p().roles||[]); c.checked?r.add(c.value):r.delete(c.value); save("staff",{...p(),roles:[...r]}); });
+    tr.querySelectorAll("[data-rolechk]").forEach(c=>c.onchange=()=>{ const r=new Set(rolesOf(p())); c.checked?r.add(c.value):r.delete(c.value); save("staff",{...p(),roles:[...r].sort()}); });
     const rc=tr.querySelector("[data-roleclear]"); if(rc) rc.onclick=()=>save("staff",{...p(),roles:[]});
     const ps=tr.querySelector("[data-prof]"); if(ps) ps.onchange=()=>{ const v=ps.value;
       if(v==="__new"){ newPerson(p()); return; }
