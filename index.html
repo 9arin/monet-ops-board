@@ -375,6 +375,8 @@ table.rota th,table.rota td{border:1px solid var(--line);padding:5px 4px;text-al
 table.rota th{background:var(--soft);color:var(--ink);font-size:13px}
 table.rota th.we{color:var(--accent)}
 table.rota .rl{text-align:left;font-weight:600;white-space:nowrap;min-width:120px;background:var(--panel)}
+table.rota td.rl,table.rota th.rl{position:sticky;left:0;z-index:2} /* 옆으로 넘겨도 자리 이름은 고정 */
+@media print{table.rota td.rl,table.rota th.rl{position:static}}
 table.rota tr.sec th{text-align:left;background:var(--bg);color:var(--ink);font-size:12.5px;padding:7px 8px 5px;border-left:0;border-right:0}
 table.rota tr.sec th .small{color:var(--muted);font-weight:400}
 table.rota .gl{display:inline-block;min-width:18px;margin-right:8px;padding:0 5px;border-radius:5px;background:var(--brand);color:var(--panel);text-align:center;font-weight:700}
