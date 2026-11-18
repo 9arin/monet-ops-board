@@ -655,7 +655,11 @@ tr.rowsel td{background:var(--warnbg)}
 .pfav img{width:100%;height:100%;object-fit:cover}
 .pfav.big{width:42px;height:42px;font-size:16px}
 .pfline{margin-top:3px;line-height:1.35}
-.plist{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.plist{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px}
+.plist .pcard.open{grid-column:1/-1}
+.plist .pc-head{flex-wrap:wrap}
+.plist .pcard:not(.open) .pc-tags{flex-basis:100%;align-items:flex-start;text-align:left}
+.mgrline{gap:10px;align-items:center;margin:4px 0 14px}
 .pcard{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
 .pcard.open{border-color:var(--accent)}
 .pc-head{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer}
@@ -2220,27 +2224,26 @@ function staffHTML(){
     return `<div class="pfpick">${avatar(h)}<select data-prof aria-label="${esc(pname(p))} 사람 고르기"><option value="">${h?"— 비우기 —":"사람 고르기"}</option>
       ${people.map(x=>{ const o=assignedTo(x), mine=o&&o.id===p.id; return `<option value="${x.id}" ${mine?"selected":""} ${o&&!mine?"disabled":""}>${esc(x.name||"(이름 없음)")}${o&&!mine?` · ${esc(jobOf(o)||"배정됨")}`:""}</option>`; }).join("")}
       <option value="__new">+ 새 사람 등록</option></select></div>
-      ${h?`<div class="small muted pfline">${[h.gender,h.phone,h.birth?h.birth.slice(0,4)+"년생":"",(h.career||"").split("\n")[0].slice(0,40)].filter(Boolean).map(esc).join(" · ")}</div>`:""}`; };
+`; };
   const row=p=>{const job=jobOf(p), r=(p.roles||[]).filter(n=>ROLES.includes(n)), open=ui.roleOpen===p.id, cell=L.per[p.id]||{days:0,nights:0};
     return `<tr data-id="${p.id}"><td style="min-width:200px;max-width:270px"><div class="jobtag small">${personOf(p)?"":`<b>${esc(pname(p))}</b> · `}<button type="button" class="rolebtn" data-roleopen aria-expanded="${open}" title="역할 고르기 (여러 개 가능)">${r.length?r.map(n=>`<span class="rchip">${esc(n)}</span>`).join(""):`<span class="muted">${job?esc(job)+" (자동)":"역할 고르기"}</span>`} ▾</button></div>${open?roleBox(p):""}${p.kind==="대타"&&job&&!r.length?`<div class="small muted" style="margin-bottom:3px">들어가는 자리: ${esc(job)}</div>`:""}${profPick(p)}</td>
       <td style="min-width:190px"><div class="days" title="매주 쉬어야 하는 요일">${DAYS.map((d,i)=>`<button data-must="${i}" aria-pressed="${mustDow(p).includes(i)}" aria-label="매주 ${d}요일 필수 휴무">${d}</button>`).join("")}</div>
         <div class="row" style="gap:4px;margin-top:4px">${mustDates(p).map(d=>`<span class="chip mchip">${+d.slice(5,7)}/${+d.slice(8)}<button class="x" data-mrm="${d}" aria-label="빼기">×</button></span>`).join("")}<button class="linkbtn small noprint" data-mcal>${ui.mustOpen===p.id?"달력 닫기":"+ 날짜"}</button></div></td>
       <td class="r num" style="color:${actDays(p)*personNet(p,pos)>MAX_H?"var(--bad)":actDays(p)<WORK_DAYS?"var(--warn)":"inherit"}">${actDays(p)}일 · ${+(actDays(p)*personNet(p,pos)).toFixed(1)}h${(k=>k?`<br><span class="small muted">야간 ${k}회</span>`:"")(nightCrews().total[p.id]||0)}</td>
-      <td class="r num" style="white-space:nowrap">월 ${W(PAY_MONTHLY)}<br><b>합계 ${W(Object.keys(L.months).reduce((s,k)=>s+L.base(k),0))}원</b><br><span class="small muted">주간 ${cell.days}일 · 야간 ${cell.nights}회</span></td>
       <td><select data-f="status">${STAFF_STATUS.map(x=>`<option ${p.status===x?"selected":""}>${x}</option>`).join("")}</select></td>
-      <td style="min-width:180px"><input data-f="memo" value="${esc(p.memo||"")}" placeholder="예: 주말 선호, 교육 필요"></td>
+      <td style="min-width:180px"><input data-f="memo" value="${esc(p.memo||"")}" placeholder="메모"></td>
       <td><button class="x" data-del aria-label="이 자리 삭제">${ui.confirmDel===p.id?"삭제?":"×"}</button></td></tr>
-      ${ui.mustOpen===p.id?`<tr class="mustrow noprint" data-mfor="${p.id}"><td colspan="7">${mustCal(p)}</td></tr>`:""}`;};
-  const table=gp=>gp.length?`<div class="tbl-wrap"><table><thead><tr><th>역할 · 사람</th><th>필수 휴무 <span class="small">(매주 요일 · 날짜)</span></th><th class="r">주 근무</th><th class="r">급여 <span class="small">(고정)</span></th><th>상태</th><th>특이사항</th><th></th></tr></thead><tbody>
+      ${ui.mustOpen===p.id?`<tr class="mustrow noprint" data-mfor="${p.id}"><td colspan="6">${mustCal(p)}</td></tr>`:""}`;};
+  const table=gp=>gp.length?`<div class="tbl-wrap"><table><thead><tr><th>역할 · 사람</th><th>쉬는 날 <span class="small">(매주 요일 · 날짜)</span></th><th class="r">주 근무</th><th>상태</th><th>메모</th><th></th></tr></thead><tbody>
     ${gp.sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0)).map(row).join("")}</tbody></table></div>`:`<p class="small muted" style="margin:0">아직 없어요.</p>`;
   const assignPart=()=>{
-    const byG=shown.map(g=>`<div class="group-h"><h4>${g.name} <span class="muted small">자리 ${P(g)}개 · 필요 ${N(g)}명 · 지금 ${M(g)}명 · 사람 정함 ${ppl.filter(p=>pgroup(p)===g.id&&personOf(p)).length}명</span></h4></div>${table(ppl.filter(p=>pgroup(p)===g.id))}`).join("")
+    const byG=shown.map(g=>`<div class="group-h"><h4>${g.name} <span class="muted small">${M(g)}명${ppl.filter(p=>pgroup(p)===g.id&&!personOf(p)).length?` · 사람 안 정한 자리 ${ppl.filter(p=>pgroup(p)===g.id&&!personOf(p)).length}`:""}</span></h4></div>${table(ppl.filter(p=>pgroup(p)===g.id))}`).join("")
       +(loose.length?`<div class="group-h"><h4>배치 없음 <span class="muted small">${loose.length}명 · 자리가 정해지지 않은 사람</span></h4></div>${table(loose)}`:"");
     const free=state.people.filter(h=>!assignedTo(h));
     const roles=ALLG.map(g=>`<option value="${g.id}:담당">${g.name} · 고정</option><option value="${g.id}:대타">${g.name} · 대체</option>`).join("");
-    return `<div class="panel"><h3>역할 부여</h3><p class="small muted noprint" style="margin:-4px 0 8px">줄마다 역할(여러 개)을 고르고, '사람 고르기'에서 인원 명단의 사람을 고르면 이름·연락처·사진이 함께 들어와요.${free.length?` 아직 자리 없는 사람 <b>${free.length}명</b>: ${free.map(h=>esc(h.name||"이름 없음")).join(", ")}`:""}</p>
-    <div class="group-h"><h4>운영매니저 <span class="muted small">매일 근무 · 1명</span></h4></div>
-    <label class="f" style="max-width:240px">이름<input id="mgrName" value="${esc(mgr?mgr.name:"")}" placeholder="운영매니저 이름"></label>
+    return `<div class="panel"><div class="row" style="justify-content:space-between;align-items:baseline"><h3 style="margin:0">역할 부여</h3><span class="small muted">월급 모두 ${W(PAY_MONTHLY)}원 · 주 ${WORK_DAYS}일 ${MAX_H}시간</span></div>
+    <p class="small muted noprint" style="margin:6px 0 10px">역할을 누르면 고를 수 있어요(여러 개). 사람은 인원 명단에서 골라요.${free.length?` <b>자리 없는 사람 ${free.length}명</b>: ${free.map(h=>esc(h.name||"이름 없음")).join(", ")}`:""}</p>
+    <div class="row mgrline"><b>운영매니저</b><input id="mgrName" value="${esc(mgr?mgr.name:"")}" placeholder="이름" aria-label="운영매니저 이름" style="max-width:180px"><span class="small muted">매일 근무</span></div>
     ${byG}
     <form class="addform three noprint" id="addStaff"><label class="f">구역<select id="ns-role">${roles}</select></label>
       <span></span><button class="btn primary" type="submit">자리 추가</button></form></div>`;
@@ -2275,7 +2278,7 @@ function staffHTML(){
       <div class="row" style="justify-content:space-between;margin-top:10px"><span class="small muted">${a?`자리: ${esc(where)} · 역할 부여에서 바꿔요`:"아직 자리 없음 · 역할 부여에서 이 사람을 고르면 들어가요"}</span><button type="button" class="btn small danger" data-pdel>${ui.confirmDel===h.id?"정말 삭제할까요?":"이 사람 삭제"}</button></div>
     </div></div>`; };
   const peoplePart=()=>`<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:6px"><h3 style="margin:0">인원 명단 <span class="small muted">${state.people.length}명</span></h3><button class="btn primary small" id="addPerson" type="button">+ 사람 추가</button></div>
-    <p class="small muted" style="margin:0 0 6px">사람을 눌러서 정보를 적어요. 사진·파일은 끌어다 놓거나, 칸 위에 마우스를 올리고 붙여넣기(⌘V / Ctrl+V)로 넣을 수 있어요.</p>
+    <p class="small muted" style="margin:0 0 6px">사람을 누르면 정보가 열려요. 사진·파일은 끌어다 놓거나 붙여넣기로 넣어요.</p>
     ${lockBar()}
     <div class="plist">${people.length?people.map(pcard).join(""):`<p class="small muted">아직 아무도 없어요. '+ 사람 추가'를 눌러 주세요.</p>`}</div></div>`;
 
