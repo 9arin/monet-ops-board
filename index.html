@@ -130,6 +130,7 @@ td.r,th.r{text-align:right}
 .pinbtn.has{border-style:solid;border-color:var(--accent);color:var(--accent)}
 .pinbtn.placing{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .mapcard{margin-bottom:16px}
+details.fold #mapToggle{display:none}
 .mapcard .plan-scroll{max-width:1040px}
 .mapcard.closed .plan-scroll,.mapcard.closed .maphint{display:none}
 .mk.static{cursor:pointer}
@@ -429,7 +430,9 @@ table.rota .cellbtn:hover{text-decoration:underline}
 table.rota td{position:relative}
 table.rota .cellplus{position:absolute;right:1px;top:1px;width:16px;height:16px;line-height:14px;padding:0;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--muted);font-size:12px;cursor:pointer;opacity:.55}
 table.rota td:hover .cellplus,table.rota .cellplus:focus-visible{opacity:1;color:var(--accent);border-color:var(--accent)}
-@media (hover:none){table.rota .cellplus{opacity:.9}}
+@media (hover:hover){table.rota .cellplus{opacity:0}}
+@media (hover:none){table.rota .cellplus{opacity:.6}}
+table.rota tr.mgrrow td,table.rota tr.mgrrow .rl{border-top:2px solid var(--line)}
 table.rota .plusp{display:block;font-size:11.5px;color:var(--ink)}
 table.rota td.editing{min-width:130px}
 table.rota td.editing .pchip{display:flex;justify-content:space-between;margin-top:4px;font-size:11.5px}
@@ -2015,8 +2018,8 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   if(false) body+=sec(`이번 주 ${MAX_H}시간 미만`,"여유 있는 사람 · 야간이나 빈자리에 넣을 수 있어요")+`<tr class="under"><td class="rl">${under.length}명</td><td colspan="7" style="text-align:left">${under.map(o=>`<span class="chip uchip">${esc(pname(o.p))} <span class="num muted">${+o.h.toFixed(1)}h · ${Math.round(o.h/8*10)/10}일</span></span>`).join(" ")}</td></tr>`;
   const anyNight=plans.some((pl,i)=>open(dates[i])&&nightCfg().dates.includes(dates[i]));
   if(anyNight) body+=sec(`야간 ${NIGHT_TIME}`,"휴게 없음")+`<tr class="night"><td class="rl">야간</td>${dates.map((dt,i)=>nightCfg().dates.includes(dt)?`<td class="nt">${[mgr?`<b>${esc(pname(mgr)||"매니저")}</b>`:"",...plans[i].crew.map(p=>`<span class="${over(p)?"overtxt":""}">${esc(pname(p))}</span>`)].filter(Boolean).join("<br>")}</td>`:`<td></td>`).join("")}</tr>`;
-  body+=sec("운영매니저","매일")+`<tr><td class="rl">매니저</td>${dates.map(dt=>open(dt)?`<td>${esc(mgr?pname(mgr)||"매니저":"매니저")}</td>`:closed).join("")}</tr>`;
-  body+=sec("휴무","")+`<tr class="offrow"><td class="rl">휴무</td>${dates.map((dt,i)=>open(dt)?`<td>${plans[i].off.map(p=>esc(pname(p))).join("<br>")}</td>`:closed).join("")}</tr>`;
+  body+=`<tr class="mgrrow"><td class="rl">매니저</td>${dates.map(dt=>open(dt)?`<td>${esc(mgr?pname(mgr)||"매니저":"매니저")}</td>`:closed).join("")}</tr>`;
+  body+=`<tr class="offrow"><td class="rl">휴무</td>${dates.map((dt,i)=>open(dt)?`<td>${plans[i].off.map(p=>esc(pname(p))).join("<br>")}</td>`:closed).join("")}</tr>`;
   body+=`<tr class="sum"><td class="rl">인원</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed; const t=Object.values(plans[i].cells).filter(c=>c.who).length, n=plans[i].crew.length;
     if(plans[i].prep) return `<td class="ok">전원 ${plans[i].prep.length}</td>`;
     if(plans[i].allHands) return `<td class="ok">전원 ${plans[i].working.size}</td>`;
@@ -2513,8 +2516,9 @@ function itemsHTML(){
     text:markerText(m),label:`${m.label}${(Number(m.qty)||1)>1?" ×"+m.qty:""}`,faded:ui.itemFocus&&m.type!==ui.itemFocus,focus:ui.itemFocus&&m.type===ui.itemFocus}));
   const cf=countBy(ui.floor,ui.itemVer||"exh");
   const chips=`<button class="chip" data-ifocus="" aria-pressed="${!ui.itemFocus}">전체</button>`+linked.map(k=>`<button class="chip" data-ifocus="${k}" aria-pressed="${ui.itemFocus===k}"><span class="dot" style="background:${tcolor(k)}"></span>${TYPES[k]?TYPES[k].name:k}<span class="num muted">${cf[k]||0}</span></button>`).join("");
-  const map=mapCard("물품 위치",chips,pins,"도면의 점을 누르면 아래 표의 그 물품 줄로 내려가요. 표의 '도면' 버튼을 누르면 그 물품 위치만 도면 가운데에 진하게 보여요.");
-  return `${map}<div class="panel">
+  const mo=ui.mapOpen; ui.mapOpen=true; const map=mapCard("물품 위치",chips,pins,"도면의 점을 누르면 아래 표의 그 물품 줄로 내려가요. 표의 '도면' 버튼을 누르면 그 물품 위치만 도면 가운데에 진하게 보여요.");
+  ui.mapOpen=mo;
+  return `<div class="panel">
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">물품</h3>
       <div class="isum">${kindsOf(base).filter(k=>!noCost(k)).map(k=>`<span class="isum-k"><span class="small muted">${esc(k)}</span><b class="num">${won(total(k))||0}<span class="small">원</span></b></span>`).join("")}<span class="isum-k isum-t"><span class="small">총 금액</span><b class="num">${won(base.reduce((s,i)=>s+amt(i),0))||0}<span class="small">원</span></b></span></div></div>
     ${kinds}<div class="ifilters noprint">${stagebar}<span class="row" style="gap:8px">${folderMode?`<div class="seg verseg" role="group" aria-label="보기 방식"><button type="button" data-vview="box" aria-pressed="${boxView}">업체별</button><button type="button" data-vview="table" aria-pressed="${!boxView}">표</button></div>`:""}${verbar}</span></div>${body}
@@ -2524,7 +2528,7 @@ function itemsHTML(){
       <label class="f" id="ni-maker-f" ${kf==="구매"||!kf?"hidden":""}>업체<input id="ni-maker" placeholder="예: NGD"></label>
       <label class="f">수량<input id="ni-qty" type="number" min="0"></label>
       <label class="f">배치도 연결<select id="ni-link"><option value="">없음 (배치도 '물품'에서 찍을 수 있어요)</option><option value="staff">알바생 수만큼 (인력)</option></select></label>
-      <button class="btn primary" type="submit">추가</button></form></div>${quotesHTML(sum)}`;
+      <button class="btn primary" type="submit">추가</button></form></div>${quotesHTML(sum)}${fold("items-map","물품 위치","도면에서 보기",map)}`;
 }
 const curItem=id=>state.items.find(x=>x.id===id);
 function updCand(itemId,cid,patch,quiet){ const it=curItem(itemId); if(!it) return; save("items",{...it,cands:(it.cands||[]).map(c=>c.id===cid?{...c,...patch}:c)},quiet); }
@@ -2703,7 +2707,7 @@ function bindItems(){
     const ms=state.markers.filter(m=>inVer(m,iv)&&m.type===k);
     if(!ms.length){ toast(`도면에 '${(TYPES[k]||{}).name||k}' 표시가 아직 없어요. 배치도 탭에서 찍어 주세요.`); render(); return; }
     if(!ms.some(m=>m.floor===ui.floor)){ ui.floor=ms[0].floor; try{localStorage.setItem("mb-floor",ui.floor)}catch(e){} }
-    ui.mapOpen=true; render(); focusPins();});
+    ui.mapOpen=true; ui.folds.add("items-map"); render(); const fm=document.querySelector('[data-fold="items-map"]'); if(fm) fm.scrollIntoView({behavior:"smooth",block:"start"}); focusPins();});
   dropZone($("#quoteDrop"),{onFiles:addQuoteFiles,accept:"application/pdf,image/*"});
   document.querySelectorAll(".qcard").forEach(card=>{
     const g=()=>quoteGroups().find(x=>x.key===card.dataset.qg)||{qs:[]};
@@ -3236,7 +3240,7 @@ function tasksHTML(){
   const hint=placing?`<b>${esc(placing.title)}</b>: 도면에서 위치를 누르세요. <button class="linkbtn" id="cancelPlace">취소</button>`
     :"할 일 옆 '위치'를 누른 뒤 도면을 누르면 그 자리에 번호가 찍혀요. 번호를 누르면 해당 할 일로 이동해요.";
   const ctx=opMarkers().filter(m=>m.floor===ui.floor).map(m=>({id:"ctx-"+m.id,x:m.x,y:m.y,color:tcolor(m.type),text:"",label:m.label,faded:true,ctx:true}));
-  const map=mapCard("할 일 위치","",ctx.concat(pins),hint,!!placing);
+  const mo=ui.mapOpen; ui.mapOpen=true; const map=mapCard("할 일 위치","",ctx.concat(pins),hint,!!placing); ui.mapOpen=mo;
   const list = state.tasks.length ? (groups.length? groups.map(([c,a])=>`<div class="group-h"><h4>${c}</h4><span class="small muted">${a.length}</span></div>
     ${a.map(t=>`<div class="task ${t.done?"done":""} ${!t.done&&t.due&&t.due<today?"overdue":""} ${ui.taskSel===t.id?"sel":""}" data-id="${t.id}" id="task-${t.id}">
       <input type="checkbox" data-f="done" ${t.done?"checked":""} aria-label="완료">
@@ -3247,14 +3251,14 @@ function tasksHTML(){
       <button class="x" data-del aria-label="삭제">${ui.confirmDel===t.id?"삭제?":"×"}</button>
       <textarea class="t-sol" data-f="solution" rows="1" placeholder="어떻게 해결했는지 적어 주세요">${esc(t.solution||"")}</textarea></div>`).join("")}`).join("") : `<div class="empty">${ui.taskFilter==="done"?"아직 끝낸 일이 없어요.":"남은 할 일이 없어요."}</div>`)
     : loadingOrEmpty("tasks","아직 등록한 할 일이 없어요. 아래에서 추가해 보세요.");
-  return `${map}<div class="panel"><div class="row" style="justify-content:space-between"><h3 style="margin:0">할 일</h3>
+  return `${placing?map:""}<div class="panel"><div class="row" style="justify-content:space-between"><h3 style="margin:0">할 일</h3>
     <div class="seg" role="group" aria-label="보기">${[["open","남은 일"],["all","전체"],["done","완료"]].map(([k,n])=>`<button data-tf="${k}" aria-pressed="${ui.taskFilter===k}">${n}</button>`).join("")}</div></div>
     ${list}
     <form class="addform" id="addTask"><label class="f">할 일<input id="nt-title" required placeholder="예: 무전기 대여 업체 견적"></label>
       <label class="f">분류<select id="nt-cat">${TASK_CATS.map(c=>`<option>${c}</option>`).join("")}</select></label>
       <label class="f">마감일<input id="nt-due" type="date"></label>
       <label class="f">담당<input id="nt-owner"></label>
-      <button class="btn primary" type="submit">추가</button></form></div>`;
+      <button class="btn primary" type="submit">추가</button></form></div>${placing?"":fold("tasks-map","할 일 위치","도면에서 보기",map)}`;
 }
 function bindTasks(){
   bindMapCard(id=>{
