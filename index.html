@@ -136,6 +136,7 @@ td.r,th.r{text-align:right}
 .ptime .seg1{display:inline-flex;align-items:center;gap:2px}
 .ptime input[type=time]{font-size:12px;padding:2px 4px;width:auto}
 .ptm{display:block;font-size:10.5px;color:var(--muted);font-weight:400}
+.ptm.mustw{color:var(--bad);font-weight:600}
 .help{display:none!important} /* 설명 문장은 숨겨요 */
 .scont{margin:4px 0 0 2px;line-height:1.9}
 .scont .vtag{font-size:11px}
@@ -919,6 +920,7 @@ const segsOf=t=>String(t||"").split(",").map(x=>x.split("~").map(y=>toMin(y))).f
 const segNet=m=>m-(m>510?60:m>270?30:0); // 한 번에 4시간 30분 넘게 서면 휴게 30분, 8시간 30분 넘으면 1시간
 const netH=t=>{ const S=segsOf(t); return S.length?S.reduce((s,[a,b])=>s+segNet(b-a),0)/60:8; };
 const mustDow=p=>p.mustDow||[], mustDates=p=>p.mustDates||[]; // 필수 휴무: 매주 요일 / 특정 날짜
+const mustOn=(p,dt)=>!!p&&(mustDates(p).includes(dt)||mustDow(p).includes(dowOf(dt))); // 역할 부여에서 근무 불가로 고른 날
 const personNet=(p,pos)=>{ const x=pos.find(y=>y.id===p.pos); return x?netH(posTime(x)):Math.max(8,...pos.filter(y=>y.group===pgroup(p)).map(y=>netH(posTime(y)))); };
 const poolDays=(gid,pos)=>{ const hs=pos.filter(x=>x.group===gid).map(x=>netH(posTime(x))); return Math.max(1,Math.min(WORK_DAYS,Math.floor(MAX_H/Math.max(1,...hs)))); };
 const nightCfg=()=>{ const c=state.settings.find(x=>x.id==="cfg-night")||{}; return {alba:4,...c,dates:Array.isArray(c.dates)?c.dates.slice().sort():[]}; };
@@ -1926,13 +1928,13 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
   const pl=dayPlan0(ctx,date); pl.plus=pl.plus||{}; if(pl.closed||pl.prep) return pl;
   const ov=ovrAll()[date]||{}, d=dowOf(date), ppl=alba(), crew=pl.crew||[];
   ctx.pos.forEach(x=>{ const ids=ov[x.id+"+"]; if(!Array.isArray(ids)) return;
-    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!pl.working.has(p.id)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)&&!crew.some(c=>c.id===p.id));
+    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!pl.working.has(p.id)&&!crew.some(c=>c.id===p.id)); // 직접 넣은 사람은 근무 불가 날이어도 넣어요 (넣을 때 확인 팝업)
     if(L.length){ pl.plus[x.id]=(pl.plus[x.id]||[]).concat(L); L.forEach(p=>pl.working.add(p.id)); } });
   // 근무표에서 직접 고친 칸을 마지막에 꼭 반영해요: '-'는 빈자리, 다른 자리에 선 사람을 고르면 두 사람이 자리를 맞바꿔요
-  const byId=id=>ppl.find(p=>p.id===id), isMust=p=>!pl.allHands&&(mustDates(p).includes(date)||mustDow(p).includes(d));
+  const byId=id=>ppl.find(p=>p.id===id);
   ctx.pos.forEach(x=>{ const v=ov[x.id], c=pl.cells[x.id]; if(!v||!c) return; const cur=c.who;
     if(v==="-"){ pl.cells[x.id]={who:null,kind:"gap",base:cur,manual:true}; return; }
-    const t=byId(v); if(!t||t===cur||isMust(t)) return;
+    const t=byId(v); if(!t||t===cur) return;
     const y=ctx.pos.find(z=>z.id!==x.id&&pl.cells[z.id]&&pl.cells[z.id].who===t);
     if(y) pl.cells[y.id]={who:cur,kind:cur?"swap":"gap",base:t};
     else Object.keys(pl.plus).forEach(k=>{ if(pl.plus[k].includes(t)){ pl.plus[k]=pl.plus[k].map(q=>q===t?cur:q).filter(Boolean); if(!pl.plus[k].length) delete pl.plus[k]; } });
@@ -2064,17 +2066,17 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   const closed=`<td class="closed">휴관</td>`;
   let body=keys.map(t=>sec(...secTitle(t))+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}<span class="brk">${esc(posTime(x))}</span></td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
       const c=plans[i].cells[x.id], key=dt+"|"+x.id; if(c.kind==="prep") return `<td class="closed">OT·시뮬</td>`; if(c.kind==="closed") return `<td class="closed">휴관</td>`;
-      if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>pl.allHands||!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(pl.working.has(a.id)?1:0)-(pl.working.has(b.id)?1:0)||(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 그날 쉬는 사람 먼저, 덜 일한 사람 먼저
+      if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().slice().sort((a,b)=>(pl.working.has(a.id)?1:0)-(pl.working.has(b.id)?1:0)||(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 그날 쉬는 사람 먼저, 덜 일한 사람 먼저
         const where=p=>{ if(c.who&&c.who.id===p.id) return ""; const y=pos.find(z=>pl.cells[z.id]&&pl.cells[z.id].who&&pl.cells[z.id].who.id===p.id); if(y) return ` (${jobName(y.label)}와 맞바꿈)`; const k=Object.keys(pl.plus).find(id=>pl.plus[id].some(q=>q.id===p.id)); if(k) return ` (${jobName((pos.find(z=>z.id===k)||{}).label||"")}에 더 들어감)`; return " (쉬는 날)"; };
-        const plusL=pl.plus[x.id]||[], addable=alba().filter(p=>!pl.working.has(p.id)&&!pl.crew.some(q=>q.id===p.id)&&!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0));
+        const plusL=pl.plus[x.id]||[], addable=alba().filter(p=>!pl.working.has(p.id)&&!pl.crew.some(q=>q.id===p.id)).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0));
         const tUI=p=>{ const S=segsOf(pTime(dt,x,p.id)).map(([a,b])=>[a,b].map(m=>`${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`)), k=`${key}|${p.id}`;
           return `<div class="ptime" data-ptime="${k}"><b>${esc(pname(p))}</b>${S.map(([a,b],j)=>`<span class="seg1"><input type="time" step="1800" value="${a}" data-ta="${j}" aria-label="시작">~<input type="time" step="1800" value="${b}" data-tb="${j}" aria-label="끝">${S.length>1?`<button type="button" class="x" data-tdel="${j}" aria-label="이 시간 빼기">×</button>`:""}</span>`).join("")}<span class="small muted num">${fmtH(netH(pTime(dt,x,p.id)))}</span><button type="button" class="linkbtn small" data-tadd>+ 시간 나누기</button>${pTimeSet(dt,x,p.id)?`<button type="button" class="linkbtn small" data-treset>기본 시간으로</button>`:""}</div>`; };
         const timeUI=`<div class="ptimes">${[c.who,...plusL].filter(Boolean).map(tUI).join("")}</div>`;
-        const plusUI=`${timeUI}${plusL.map(p=>`<span class="chip pchip">+ ${esc(pname(p))}<button type="button" class="x" data-plusrm="${key}|${p.id}" aria-label="빼기">×</button></span>`).join("")}<select data-plus="${key}" aria-label="이 칸에 사람 더 넣기"><option value="">+ 사람 더 넣기</option>${addable.map(p=>`<option value="${p.id}">${esc(pname(p))} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select><button type="button" class="linkbtn small" data-celldone>닫기</button>`;
+        const plusUI=`${timeUI}${plusL.map(p=>`<span class="chip pchip">+ ${esc(pname(p))}<button type="button" class="x" data-plusrm="${key}|${p.id}" aria-label="빼기">×</button></span>`).join("")}<select data-plus="${key}" aria-label="이 칸에 사람 더 넣기"><option value="">+ 사람 더 넣기</option>${addable.map(p=>`<option value="${p.id}">${esc(pname(p))}${mustOn(p,dt)?" ⚠ 근무 불가 날":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select><button type="button" class="linkbtn small" data-celldone>닫기</button>`;
         const ovv=(ovrAll()[dt]||{})[x.id];
-        return `<td class="editing"><select data-swap="${key}"><option value="">${ovv?"원래대로":"그대로"}</option><option value="-" ${ovv==="-"?"selected":""}>빈자리로 두기</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${where(p)}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select>${plusUI}</td>`; }
+        return `<td class="editing"><select data-swap="${key}"><option value="">${ovv?"원래대로":"그대로"}</option><option value="-" ${ovv==="-"?"selected":""}>빈자리로 두기</option>${free.map(p=>`<option value="${p.id}" ${c.who&&c.who.id===p.id?"selected":""}>${esc(pname(p))}${mustOn(p,dt)?" ⚠ 근무 불가 날":""}${where(p)}${pl.crew.some(q=>q.id===p.id)?" (야간)":""} · 주${+(wk[p.id]||0).toFixed(1)}시간</option>`).join("")}</select>${plusUI}</td>`; }
       const cls=c.kind==="gap"?"gap":c.kind==="swap"||c.kind==="auto"?"swp":"";
-      const tm=p=>p&&pTimeSet(dt,x,p.id)?`<span class="ptm num">${esc(pTime(dt,x,p.id).replace(/,/g," · "))}</span>`:"";
+      const tm=p=>(p&&mustOn(p,dt)&&!pr?`<span class="ptm mustw" title="역할 부여에서 근무 불가로 고른 날이에요">⚠ 근무 불가 날</span>`:"")+(p&&pTimeSet(dt,x,p.id)?`<span class="ptm num">${esc(pTime(dt,x,p.id).replace(/,/g," · "))}</span>`:"");
       const plusH=(plans[i].plus[x.id]||[]).map(p=>`<span class="plusp ${!pr&&over(p)?"overtxt":""}">+ ${esc(pname(p))}${tm(p)}</span>`).join("");
       if(pr) return `<td class="${cls}">${c.who?esc(pname(c.who)):"빈자리"}${tm(c.who)}${plusH}</td>`;
       return `<td class="${cls} ${over(c.who)?"over":""}"><button class="cellbtn" data-cell="${key}" title="${c.kind==="auto"?esc(pname(c.base))+" "+(c.why||"")+" → 자동 대체":"이날만 사람 바꾸기"}">${c.who?esc(pname(c.who)):"빈자리"}</button>${tm(c.who)}${plusH}<button type="button" class="cellplus noprint" data-cell="${key}" data-plusfocus="1" aria-label="${+dt.slice(5,7)}/${+dt.slice(8)} ${esc(jobName(x.label))}에 사람 더 넣기" title="이 칸에 사람 더 넣기">+</button></td>`; }).join("")}</tr>`).join("")).join("");
@@ -2187,7 +2189,10 @@ function bindRota(){
   const ovPut=(dt,f)=>{ const c=state.settings.find(x=>x.id==="cfg-ovr")||{id:"cfg-ovr",days:{}}, day={...(c.days||{})[dt]}; f(day);
     const days={...(c.days||{}),[dt]:day}; if(!Object.keys(day).length) delete days[dt]; save("settings",{...c,days}); };
   const inCellNow=el=>{ const td=el.closest("td"); return td&&td.contains(document.activeElement); };
-  document.querySelectorAll("[data-plus]").forEach(sel=>{ sel.onchange=()=>{ const [dt,pid]=sel.dataset.plus.split("|"), v=sel.value; if(!v) return;
+  const mustOK=(dt,id)=>{ const p=alba().find(q=>q.id===id); if(!p||!mustOn(p,dt)) return true;
+    const why=mustDates(p).includes(dt)?`${+dt.slice(5,7)}/${+dt.slice(8)}`:`매주 ${DAYS[dowOf(dt)]}요일`;
+    return confirm(`${pname(p)||"이 사람"}님은 역할 부여에서 ${why}을 근무 불가로 골라 뒀어요.\n그래도 ${+dt.slice(5,7)}/${+dt.slice(8)} 근무로 넣을까요?`); };
+  document.querySelectorAll("[data-plus]").forEach(sel=>{ sel.onchange=()=>{ const [dt,pid]=sel.dataset.plus.split("|"), v=sel.value; if(!v) return; if(!mustOK(dt,v)){ sel.value=""; return; }
       ovPut(dt,day=>{ const L=Array.isArray(day[pid+"+"])?day[pid+"+"]:[]; if(!L.includes(v)) day[pid+"+"]=[...L,v]; }); toast("이 칸에 사람을 더 넣었어요"); };
     sel.onblur=()=>setTimeout(()=>{ if(ui.editCell===sel.dataset.plus&&!inCellNow(sel)){ ui.editCell=null; render(); } },150); });
   document.querySelectorAll("[data-plusrm]").forEach(b=>b.onclick=()=>{ const [dt,pid,who]=b.dataset.plusrm.split("|");
@@ -2207,6 +2212,7 @@ function bindRota(){
     const rs=box.querySelector("[data-treset]"); if(rs) rs.onclick=()=>put([]); });
   document.querySelectorAll("[data-swap]").forEach(sel=>{ const done=()=>{ ui.editCell=null; render(); };
     sel.onchange=()=>{ const [dt,pid]=sel.dataset.swap.split("|"), c=state.settings.find(x=>x.id==="cfg-ovr")||{id:"cfg-ovr",days:{}}, day={...(c.days||{})[dt]};
+      if(sel.value&&sel.value!=="-"&&!mustOK(dt,sel.value)){ render(); return; }
       if(sel.value) day[pid]=sel.value; else delete day[pid];
       const days={...(c.days||{}),[dt]:day}; if(!Object.keys(day).length) delete days[dt];
       save("settings",{...c,days}); };
