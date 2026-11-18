@@ -882,6 +882,7 @@ function showLogin(on){ $("#login").hidden=!on; $("#tabs").hidden=on; $("#view")
 function applyRow(row){ if(!row||!COLS.includes(row.col)||String(row.id).includes("~")) return; const c=vcolOf(row.col,row.id); // ~ = 파일 조각
   const o=c==="files"?{id:row.id,...((row.data||{}).meta||{})}:{id:row.id,...row.data}; // 파일 본문(b64)은 필요할 때만 받아요
   const i=state[c].findIndex(x=>x.id===row.id); if(i>=0) state[c][i]=o; else state[c].push(o); }
+let lastLoadSig=null;
 async function loadAll(){
   const [r1,r2]=await Promise.all([
     db.from(TABLE).select("col,id,data").not("id","like","f-%").limit(5000),
@@ -889,6 +890,9 @@ async function loadAll(){
   if(r2.error) console.error(r2.error); // 파일 목록이 안 와도 보드는 열리게
   const error=r1.error;
   if(error){ setNotice("데이터를 불러오지 못했어요. 새로고침해 주세요."); console.error(error); return; }
+  // 10초마다 받아 와도 바뀐 게 없으면 화면을 다시 그리지 않아요 (위치 편집 중 화면이 계속 새로 그려지던 문제)
+  { const rows=r1.data.slice().sort((x,y)=>(x.col+x.id<y.col+y.id?-1:1)); const t=JSON.stringify(rows)+"|"+JSON.stringify(r2.data||[]); let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0; const sig=h+":"+t.length;
+    if(sig===lastLoadSig&&!Object.keys(unsaved).length&&!Object.keys(unremoved).length) return; lastLoadSig=sig; }
   ALLC.forEach(c=>{state[c]=[];loaded[c]=true;});
   r1.data.forEach(applyRow); (r2.data||[]).forEach(r=>applyRow({col:r.col,id:r.id,data:{meta:r.meta}}));
   Object.values(unsaved).forEach(({col,obj})=>{ const i=state[col].findIndex(x=>x.id===obj.id); if(i>=0) state[col][i]=obj; else state[col].push(obj); }); // 방금 고친 건 내 것으로
@@ -1145,7 +1149,7 @@ async function checkUpdate(){
     let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0;
     if(pageSig===null){ pageSig=h; return; }
     if(h===pageSig) return;
-    if(typing()||busy()){ if(!updateWaiting){ updateWaiting=true; setNotice("새 버전이 올라왔어요. 지금 입력이 끝나면 자동으로 새로고침돼요."); } setTimeout(checkUpdate,3000); return; }
+    if(typing()||busy()||ui.planEdit||ui.addType){ if(!updateWaiting){ updateWaiting=true; setNotice("새 버전이 올라왔어요. 편집이 끝나면 자동으로 새로고침돼요."); } setTimeout(checkUpdate,3000); return; } // 위치 편집 중엔 새로고침하지 않아요
     location.reload();
   }catch(e){}
 }
