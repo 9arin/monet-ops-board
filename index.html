@@ -1498,7 +1498,7 @@ function renderInner(){
   if(guest) v.querySelectorAll("#planEditBtn,#g-del,[data-gfdel]").forEach(e=>e.remove()); /* 손님: 내용·시안은 고칠 수 있고, 위치 이동·삭제는 안 돼요 */
 }
 /* ---------- 3D 보기 (board3d.js): 배치도 점·인력 배정·물품을 그대로 읽어서 그려요. 배치도에서 추가·이동하면 바로 바뀌어요 ---------- */
-const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=10"];
+const T3_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js","https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js","board3d.js?v=11"];
 let t3load=null;
 function load3d(){
   if(!t3load) t3load=T3_LIBS.reduce((p,src)=>p.then(()=>new Promise((ok,no)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=ok; sc.onerror=()=>no(new Error(src)); document.head.append(sc); })),Promise.resolve())
