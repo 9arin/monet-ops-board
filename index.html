@@ -378,6 +378,9 @@ table.rota tr.sec th{text-align:left;background:var(--brand);color:var(--panel);
 table.rota tr.sec th .small{opacity:.8;font-weight:400}
 table.rota tr.sec select{font-size:12px;padding:0 2px;border-radius:4px;border:0}
 table.rota .brk{display:block;font-weight:400;font-size:11px;color:var(--muted)}
+table.whours td{text-align:center}
+table.whours td.bad{color:var(--bad)}
+table.whours td.ok{color:var(--ok)}
 table.rota td.cov{background:var(--warnbg)}
 table.rota td.gap{background:var(--badbg);color:var(--bad);font-weight:700}
 table.rota td.nt{background:var(--okbg);line-height:1.5}
@@ -1439,7 +1442,8 @@ function data3d(){
   const cov=coverage(), week={}, slots={};
   cov.pos.forEach(x=>{ if(!x.marker) return;
     week[x.id]=cov.res[x.id].map(r=>r&&r.who?{c:pname(r.who),k:r.kind}:{c:"",k:"gap"});
-    slots[x.id]=x.slot?{name:x.slot.name,time:x.slot.time,brk:x.slot.brk,cover:x.slot.cover}:{name:x.label}; });
+    const mates=brkMates(x,cov.pos).map(y=>jobName(y.label)).join(", "), cv=mates?`${brkGroupOf(x)}조 (${mates})`:"";
+    slots[x.id]=x.slot?{name:x.slot.name,time:x.slot.time,brk:x.slot.brk,cover:cv||x.slot.cover}:{name:x.label,cover:cv}; });
   return {markers:viewMarkers().filter(m=>m.type!=="note"&&(m.floor==="4F"||m.floor==="3F")), items:state.items, types:TYPES, days:DAYS, week, slots, ver4:ui.ver4, vers:VER4, setVer4:v=>{ ui.ver4=v; try{localStorage.setItem("mb-ver4",v)}catch(e){}; render(); },
     walls3d:(state.settings.find(x=>x.id==="cfg-3dwalls")||{}).walls, tour3d:(state.settings.find(x=>x.id==="cfg-3dtour")||{}).legs,
     saveWalls:w=>save("settings",{id:"cfg-3dwalls",walls:w,at:new Date().toISOString()},true),
@@ -1813,6 +1817,10 @@ const toMin=t=>{const m=String(t||"").match(/(\d{1,2}):(\d{2})/); return m?(+m[1
 /* ----- 근무표 (요일 × 근무 시간대, 이름) ----- */
 const posCfg=()=>(state.settings.find(x=>x.id==="cfg-pos")||{}).pos||{};
 const posTime=x=>(posCfg()[x.id]||{}).time||(x.slot&&x.slot.time)||"11:00~20:00";
+// 휴게 교대 묶음: 같은 묶음끼리 휴게 시간에 서로 자리를 채워요 (자리 이름으로 나눠요)
+const BRK_GROUPS=[["A","리셉션 · 대기 안내",/리셉션|대기/],["B","살롱~산업혁명 · 튜브물감~모네작품",/살롱|산업혁명|튜브|모네/],["C","미디어 갤러리 안전 안내 · 출구 안내",/미디어/],["D","제2전시장 티켓관리 · 굿즈샵",/티켓|역무|굿즈/],["E","제2전시장 순회",/순회/]];
+const brkGroupOf=x=>{ const n=jobName(x.label||""); const g=BRK_GROUPS.find(([, ,r])=>r.test(n)); return g?g[0]:""; };
+const brkMates=(x,pos)=>{ const g=brkGroupOf(x); return g?pos.filter(y=>y!==x&&brkGroupOf(y)===g):[]; };
 const posBrk=x=>{ const b=(posCfg()[x.id]||{}).brk||(x.slot&&x.slot.brk)||""; return /\d:\d\d/.test(b)?b.split("~")[0]:""; };
 // 날짜별 주간 근무표: 매주 같은 휴무표를 실제 날짜에 펼치고, 그날만 사람을 바꿀 수 있어요 (cfg-ovr: {날짜:{자리:사람}})
 const ovrAll=()=>(state.settings.find(x=>x.id==="cfg-ovr")||{}).days||{};
@@ -1947,10 +1955,19 @@ function rotaHTML(pos,res,pr){ // pr: 인쇄용 (버튼·편집 없이)
   const ctx=planCtx(), plans=dates.map(dt=>dayPlan(ctx,dt));
   // 그 주 근무일 (주간+야간) → 5일 넘으면 빨간 테두리
   // 그 주 근무시간 (주간: 자리 시간에서 휴게 1시간 뺌, 야간 3시간) → 40시간 넘으면 빨간 테두리
-  const wk={}; plans.forEach((pl,i)=>{ if(!open(dates[i])) return; if(ALL_HANDS.includes(dates[i])){ const h=HALF_DAYS.includes(dates[i])?HALF_H:8; pl.working.forEach(id=>wk[id]=(wk[id]||0)+h); return; } /* 전원 필수일: 12/1·2는 4시간, 12/3·4는 8시간 */ (pl.prep||[]).forEach(p=>wk[p.id]=(wk[p.id]||0)+8); pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) wk[c.who.id]=(wk[c.who.id]||0)+netH(posTime(x)); (pl.plus[x.id]||[]).forEach(p=>wk[p.id]=(wk[p.id]||0)+netH(posTime(x))); }); pl.extras.forEach(p=>wk[p.id]=(wk[p.id]||0)+personNet(p,pos)); pl.crew.forEach(p=>wk[p.id]=(wk[p.id]||0)+NIGHT_H); });
+  const wk={}, wd={}; // wk: 그 주 합계, wd[id][i]: 날마다
+  plans.forEach((pl,i)=>{ if(!open(dates[i])) return; const A=(id,h)=>{ wk[id]=(wk[id]||0)+h; (wd[id]=wd[id]||{})[i]=((wd[id]||{})[i]||0)+h; };
+    if(ALL_HANDS.includes(dates[i])){ const h=HALF_DAYS.includes(dates[i])?HALF_H:8; pl.working.forEach(id=>A(id,h)); return; } /* 전원 필수일: 12/1·2는 4시간, 12/3·4는 8시간 */
+    (pl.prep||[]).forEach(p=>A(p.id,8)); pos.forEach(x=>{ const c=pl.cells[x.id]; if(c.who) A(c.who.id,netH(posTime(x))); (pl.plus[x.id]||[]).forEach(p=>A(p.id,netH(posTime(x)))); }); pl.extras.forEach(p=>A(p.id,personNet(p,pos))); pl.crew.forEach(p=>A(p.id,NIGHT_H)); });
   const over=p=>p&&(wk[p.id]||0)>MAX_H;
-  const secs={}; pos.forEach(x=>(secs[posTime(x)]=secs[posTime(x)]||[]).push(x));
-  const keys=Object.keys(secs).sort((a,b)=>toMin(a)-toMin(b));
+  // 줄 묶음: 휴게 교대 묶음 A~E (같은 묶음끼리 휴게 때 서로 채워요). 어느 묶음에도 안 맞는 자리는 시간별로
+  const secs={}; pos.forEach(x=>{ const g=brkGroupOf(x)||"~"+posTime(x); (secs[g]=secs[g]||[]).push(x); });
+  const keys=Object.keys(secs).sort((a,b)=>a[0]==="~"&&b[0]==="~"?toMin(a.slice(1))-toMin(b.slice(1)):a.localeCompare(b));
+  Object.values(secs).forEach(L=>L.sort((a,b)=>(posBrk(a)?toMin(posBrk(a)):1e4)-(posBrk(b)?toMin(posBrk(b)):1e4)));
+  const secTitle=k=>{ if(k[0]==="~"){ const t=k.slice(1); return [t,`휴게 1시간`]; }
+    const g=BRK_GROUPS.find(x=>x[0]===k), L=secs[k], bs=L.map(posBrk).filter(Boolean).map(toMin).sort((a,b)=>a-b);
+    const clash=bs.some((b,i)=>i&&b-bs[i-1]<60);
+    return [`${k} · ${g[1]}`,`휴게 때 서로 채워요${clash?` · <b style="color:var(--bad)">휴게 시간이 겹쳐요</b>`:""}`]; };
   const lo=weekKey(WORK_FROM), hi=weekKey(OPEN_TO);
   const nav=`<div class="row noprint" style="justify-content:space-between;margin-bottom:8px"><button class="btn small" data-wk="-7" ${mon<=lo?"disabled":""}>‹ 지난주</button>
     <b>${+dates[0].slice(5,7)}/${+dates[0].slice(8)} ~ ${+dates[6].slice(5,7)}/${+dates[6].slice(8)}</b><button class="btn small" data-wk="7" ${mon>=hi?"disabled":""}>다음주 ›</button></div>`;
@@ -1958,7 +1975,7 @@ function rotaHTML(pos,res,pr){ // pr: 인쇄용 (버튼·편집 없이)
   const sec=(title,sub)=>`<tr class="sec"><th colspan="8">${title}${sub?` <span class="small">${sub}</span>`:""}</th></tr>`;
   const net=t=>{ const [a,b]=t.split("~").map(toMin); return a!=null&&b!=null?(b-a-60)/60:null; };
   const closed=`<td class="closed">휴관</td>`;
-  let body=keys.map(t=>sec(t,`휴게 1시간 · 하루 ${net(t)}시간`)+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}${posBrk(x)?`<span class="brk">☕ ${posBrk(x)}</span>`:""}</td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
+  let body=keys.map(t=>sec(...secTitle(t))+secs[t].map(x=>`<tr data-pos="${x.id}" class="${ui.hiPos===x.id?"rowsel":""}"><td class="rl">${pr?esc(jobName(x.label)):ui.editPos===x.id?`<input class="posname" data-posname="${x.id}" value="${esc(x.label)}">`:`<button class="poslbl" data-posedit="${x.id}" title="눌러서 자리 이름 바꾸기">${esc(x.label)}</button>`}<span class="brk">${esc(posTime(x))}${posBrk(x)?` · ☕ ${posBrk(x)}`:""}</span></td>${dates.map((dt,i)=>{ if(!open(dt)) return closed;
       const c=plans[i].cells[x.id], key=dt+"|"+x.id; if(c.kind==="prep") return `<td class="closed">OT·시뮬</td>`; if(c.kind==="closed") return `<td class="closed">휴관</td>`;
       if(!pr&&ui.editCell===key){ const pl=plans[i], free=alba().filter(p=>(pl.allHands||!pl.working.has(p.id)||p.id===(c.who&&c.who.id))&&(pl.allHands||!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt)))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0)); // 덜 일한 사람 먼저
         const plusL=pl.plus[x.id]||[], addable=alba().filter(p=>!pl.working.has(p.id)&&!pl.crew.some(q=>q.id===p.id)&&!mustDates(p).includes(dt)&&!mustDow(p).includes(dowOf(dt))).sort((a,b)=>(wk[a.id]||0)-(wk[b.id]||0)||(a.order||0)-(b.order||0));
@@ -1983,7 +2000,12 @@ function rotaHTML(pos,res,pr){ // pr: 인쇄용 (버튼·편집 없이)
     return `<td class="${t===DAILY_ALBA?"ok":"bad"}">알바 ${t}${pn?` <span class="small">+${pn}</span>`:""}${nightCfg().dates.includes(dt)?`<br>+야간 ${n}`:""}</td>`; }).join("")}</tr>`;
   const closedBar=`<div class="row small noprint" style="gap:6px;margin-bottom:8px"><span class="muted">휴관일</span>${closedDays().slice().sort().map(d=>`<span class="chip mchip">${+d.slice(5,7)}/${+d.slice(8)} (${DAYS[dowOf(d)]})<button class="x" data-closedrm="${d}" aria-label="휴관 취소">×</button></span>`).join("")}<input type="date" id="closedAdd" min="${OPEN_FROM}" max="${OPEN_TO}" style="font-size:12px"></div>`;
   if(pr) return `<table class="rota">${head}${body}</table>`;
-  return `${nav}${closedBar}<div class="tbl-wrap"><table class="rota">${head}${body}</table></div>`;
+  const hrs=alba().slice().sort((a,b)=>(wk[b.id]||0)-(wk[a.id]||0)||(a.order||0)-(b.order||0));
+  const hcell=h=>h?`${+h.toFixed(1)}`:`<span class="muted">–</span>`;
+  const hours=`<h3 style="margin:18px 0 8px">인원별 금주 근무 시간 <span class="small muted">주 ${MAX_H}시간 기준 · 휴게 1시간 뺀 시간</span></h3>
+    <div class="tbl-wrap"><table class="rota whours"><tr><th class="rl">이름</th>${dates.map((dt,i)=>`<th class="${i>=5?"we":""}">${DAYS[i]}<br><span class="small num">${+dt.slice(5,7)}/${+dt.slice(8)}</span></th>`).join("")}<th>합계</th></tr>
+    ${hrs.map(p=>{ const t=wk[p.id]||0; return `<tr><td class="rl">${esc(pname(p))}</td>${dates.map((dt,i)=>`<td class="num">${hcell((wd[p.id]||{})[i]||0)}</td>`).join("")}<td class="num ${t>MAX_H?"bad":t<MAX_H?"":"ok"}"><b>${+t.toFixed(1)}</b><span class="small muted"> / ${MAX_H}</span></td></tr>`; }).join("")}</table></div>`;
+  return `${nav}${closedBar}<div class="tbl-wrap"><table class="rota">${head}${body}</table></div>${hours}`;
 }
 // 그 주 사람별 근무시간 (주간 + 야간) — 야간 고르는 목록에 써요
 function nightLoad(crews,pos){ const L={}; alba().forEach(p=>L[p.id]={}); Object.entries(crews).forEach(([d,cs])=>cs.forEach(p=>{ const k=weekKey(d); L[p.id][k]=(L[p.id][k]||0)+1; })); return L; }
