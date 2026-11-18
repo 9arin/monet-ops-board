@@ -1555,7 +1555,10 @@ function planHTML(){
   const ms=viewMarkers().filter(m=>m.floor===ui.floor);
   const cf=countBy(ui.floor,ui.ver4), ca=countBy(null,ui.ver4);
   const sel=state.markers.find(m=>m.id===ui.sel);
-  const chips=Object.entries(TYPES).filter(([k,t])=>!t.item||ca[k]).map(([k,t])=>`<button class="chip" data-vis="${k}" aria-pressed="${!ui.hidden.has(k)}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}<span class="num muted">${cf[k]||0}</span></button>`).join("");
+  // 보기: 인력(알바생 자리) / 물품(그 밖의 모든 점) 두 묶음으로만 켜고 꺼요
+  const layerOf=m=>m.type==="staff"?"L-staff":"L-items";
+  const nStaff=ms.filter(m=>m.type==="staff").length, nItems=ms.length-nStaff;
+  const chips=[["L-staff","인력",tcolor("staff"),nStaff],["L-items","물품","var(--t-stanchion)",nItems]].map(([k,n,c,cnt])=>`<button class="chip" data-vis="${k}" aria-pressed="${!ui.hidden.has(k)}"><span class="dot" style="background:${c}"></span>${n}<span class="num muted">${cnt}</span></button>`).join("");
   const addChips=Object.entries(TYPES).filter(([k,t])=>!t.item).map(([k,t])=>`<button class="chip add" data-add="${k}" aria-pressed="${ui.addType===k}"><span class="dot" style="background:${tcolor(k)}"></span>${t.name}</button>`).join("");
   // 물품 탭의 물품 중 아직 기본 항목과 이어지지 않은 것 (4층은 지금 버전에 들어가는 물품만)
   // 물품 탭의 물품 전부 (3층·4층, 버전 상관없이 같은 목록). 기본 항목(차단봉 등)과 이어진 물품은 그 항목으로 찍혀요
@@ -1565,7 +1568,7 @@ function planHTML(){
   const d=ui.staffDay, cov=loaded.staff&&ms.some(m=>m.type==="staff")&&!(ui.floor==="4F"&&ui.ver4!=="exh")?coverage().res:null; // 근무자 배정은 전시 버전만
   const whoAt=m=>{ if(!cov||m.type!=="staff") return null; const c=cov[m.id]&&cov[m.id][d];
     if(!cov[m.id]) return {txt:"",faded:true}; if(!c||c.kind==="gap") return {txt:"",gap:true}; return {txt:pname(c.who)}; }; // 도면엔 하는 일 · 이름만
-  const vis=ms.filter(m=>!ui.hidden.has(m.type)), groups=planGroups(vis), openG=groups.find(g=>g.id===ui.zoneOpen);
+  const vis=ms.filter(m=>!ui.hidden.has(layerOf(m))), groups=planGroups(vis), openG=groups.find(g=>g.id===ui.zoneOpen);
   const hid=new Set(); groups.forEach(g=>{ if(g!==openG) g.ms.forEach(m=>hid.add(m.id)); });
   const zrects=groups.filter(g=>g.zone&&(g.ms.length||ui.planEdit||g===openG)).map(g=>{ const z=g.zone, x=Math.min(z.x1,z.x2), y=Math.min(z.y1,z.y2);
     return `<div class="zrect ${g===openG?"open":""}" style="left:${x}%;top:${y}%;width:${Math.abs(z.x2-z.x1)}%;height:${Math.abs(z.y2-z.y1)}%"><span>${esc(z.name)}</span></div>`; }).join("");
@@ -1574,14 +1577,13 @@ function planHTML(){
   const marks=vis.filter(m=>!hid.has(m.id)).map(m=>{
     const q=Number(m.qty)||1, w=whoAt(m); let txt=m.type==="sticker"?(m.glyph||"→"):(q>1?q:(m.type==="staff"?"●":""));
     if(w&&w.gap) txt="!";
-    const lbl=jobName(m.label)+(w&&w.txt&&!ui.hidden.has("L-who")?` · ${w.txt}`:"");
+    const lbl=jobName(m.label)+(w&&w.txt?` · ${w.txt}`:"");
     return `<button class="mk ${TYPES[m.type]&&TYPES[m.type].dark?"dark-text":""} ${ui.sel===m.id?"sel":""} ${w&&w.faded?"faded":""}" data-id="${m.id}" style="left:${m.x}%;top:${m.y}%;background:${w&&w.gap?"var(--bad)":tcolor(m.type)}" aria-label="${esc((TYPES[m.type]||{}).name)} ${esc(lbl)}">${esc(txt)}<span class="lbl">${esc(lbl)}</span></button>`;}).join("");
   // 그래픽: 그래픽 탭에서 그린 벽 선과 번호를 그대로 겹쳐 보여요 (고치는 건 그래픽 탭에서)
   const gs=ui.hidden.has("L-gfx")?[]:state.graphics.filter(g=>g.floor===ui.floor&&!ui.hidden.has("g-"+g.type)), gn=gnum(), gsel=gs.find(g=>g.id===ui.planG);
   const glines=gs.length?`<svg class="glines pg" viewBox="0 0 100 100" preserveAspectRatio="none">${gs.map(g=>`<line x1="${g.x1}" y1="${g.y1}" x2="${g.x2}" y2="${g.y2}" class="gl ${ui.planG===g.id?"sel":""}" style="stroke:${gcolor(g.type)}" vector-effect="non-scaling-stroke"/>`).join("")}</svg>`:"";
   const gbad=gs.map(g=>`<button class="mk gbadge pgb ${ui.planG===g.id?"sel":""}" data-pg="${g.id}" style="left:${(g.x1+g.x2)/2}%;top:${(g.y1+g.y2)/2}%;background:${gcolor(g.type)}" aria-label="그래픽 ${gn[g.id]}번 ${esc(g.label||"")}">${gn[g.id]}<span class="lbl">${esc(g.label||"")}</span></button>`).join("");
-  const layerChips=`<button class="chip" data-vis="L-gfx" aria-pressed="${!ui.hidden.has("L-gfx")}"><span class="dot" style="background:var(--brand)"></span>그래픽<span class="num muted">${state.graphics.filter(g=>g.floor===ui.floor).length}</span></button>`
-    +(cov?`<button class="chip" data-vis="L-who" aria-pressed="${!ui.hidden.has("L-who")}"><span class="dot" style="background:${tcolor("staff")}"></span>근무자 이름</button>`:"");
+  const layerChips=`<button class="chip" data-vis="L-gfx" aria-pressed="${!ui.hidden.has("L-gfx")}"><span class="dot" style="background:var(--brand)"></span>그래픽<span class="num muted">${state.graphics.filter(g=>g.floor===ui.floor).length}</span></button>`;
   const dayseg=cov?`<div class="row small noprint"><span class="muted" style="margin-right:4px">근무 요일</span><div class="seg daypick" role="group" aria-label="요일">${DAYS.map((x,i)=>`<button data-pday="${i}" aria-pressed="${d===i}">${x}</button>`).join("")}</div>${(()=>{ const gaps=ms.filter(m=>{const w=whoAt(m); return w&&w.gap;}).length; return gaps?`<span class="pill" style="background:var(--badbg);color:var(--bad)">빈자리 ${gaps}</span>`:`<span class="small muted">빈자리 없음</span>`; })()}</div>`:"";
   const editor = sel ? `
     <div class="panel"><h3>선택한 항목</h3>
