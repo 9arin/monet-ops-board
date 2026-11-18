@@ -1713,7 +1713,7 @@ function planHTML(){
       ${itemChips?`<div class="row small noprint"><span class="muted" style="margin-right:4px">물품</span>${itemChips}</div>`:""}${ui.addType&&TYPES[ui.addType]?`<div class="small muted noprint">도면을 누르면 <b>${esc(TYPES[ui.addType].name)}</b>이(가) 추가돼요.</div>`:""}`:""}
       ${!loaded.markers?`<div class="small muted">배치 데이터를 불러오는 중…</div>`:(ms.length?"":`<div class="small muted noprint">이 층에는 아직 표시한 항목이 없어요. '위치 편집'을 누른 뒤 '추가'에서 종류를 고르고 도면을 눌러 보세요.</div>`)}
     </div>
-    <aside class="side">${openG&&!(sel&&!ui.planEdit)?zPop(openG):editor}</aside>
+    <aside class="side">${openG&&!sel?zPop(openG):editor}</aside>
   </div>`;
 }
 function bindPlan(){
@@ -1789,7 +1789,7 @@ function bindPlan(){
       else { ui.sel = ui.sel===m.id?null:m.id; ui.confirmDel=null; render(); } };
     mk.addEventListener("pointermove",mv); mk.addEventListener("pointerup",up); mk.addEventListener("pointercancel",up);
   });
-  const sel=state.markers.find(m=>m.id===ui.sel); if(!sel) return;
+  const sel=state.markers.find(m=>m.id===ui.sel); if(!sel||!$("#e-type")) return; // 편집 칸이 안 그려졌으면 건너뛰어요
   const upd=patch=>save("markers",{...state.markers.find(m=>m.id===ui.sel),...patch});
   $("#e-type").onchange=e=>upd({type:e.target.value});
   $("#e-label").onchange=e=>upd({label:e.target.value.trim()});
