@@ -296,6 +296,8 @@ table.itbl .kvend{margin-top:4px}
 table.itbl .kvend .qsel{font-size:12px;width:100%}
 .shoptag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--soft);color:var(--ink)}
 .verbar{gap:8px;align-items:center;margin-bottom:10px}
+.isearch{display:flex;gap:8px;align-items:center;margin:0 0 10px}
+.isearch input{flex:1;max-width:420px;min-width:0}
 .ifilters{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin:10px 0}
 .stagebox{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .stagechk{display:inline-flex;gap:5px;align-items:center;font-size:13px;cursor:pointer;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--bg)}
@@ -2584,9 +2586,16 @@ function vendorSel(i,qq){
   const v=i.vendor||i.maker||"", loose=!qq&&v?`<option value="__txt" selected>${esc(v)}</option>`:"";
   return `<select data-vq class="qsel" aria-label="업체" style="--qc:${qq?qcolor(qq):"transparent"}" title="${state.quotes.length?"올린 견적서의 업체에서 골라요":"견적서를 올리면 그 업체가 여기 나와요"}"><option value="" ${!qq&&!v?"selected":""}>업체 없음</option>${loose}${opts}<option value="__new">직접 입력…</option></select>`;
 }
+// 물품 검색: 띄어 쓴 낱말이 모두 들어 있으면 보여요. 초성(ㅁㅈㄱ)으로도 찾아요
+const CHO="ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+const choOf=t=>String(t||"").replace(/[가-힣]/g,c=>CHO[Math.floor((c.charCodeAt(0)-0xAC00)/588)]);
+const itemText=i=>{ const q=itemQuote(i); return [i.name,i.note,i.maker,i.vendor,i.kind,i.extraNote,i.status,q&&q.vendor,shopOf(i)].filter(Boolean).join(" ").toLowerCase(); };
+const itemHit=(i,q)=>{ const t=itemText(i), c=choOf(t); return q.toLowerCase().split(/\s+/).filter(Boolean).every(w=>t.includes(w)||(/^[ㄱ-ㅎ]+$/.test(w)&&c.includes(w))); };
+try{ ui.iq=sessionStorage.getItem("mb-iq")||""; }catch(e){ ui.iq=""; }
 function itemsHTML(){
   const iv=ui.itemVer||"", counts=countBy(null,iv||"exh"); // '도면' 수량은 고른 버전의 배치도 기준 (전체면 전시)
-  const all=state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0)).filter(i=>!iv||itemVers(i).includes(iv));
+  const all0=state.items.slice().sort((a,b)=>(a.order||0)-(b.order||0)).filter(i=>!iv||itemVers(i).includes(iv));
+  const iq=(ui.iq||"").trim(), all=iq?all0.filter(i=>itemHit(i,iq)):all0;
   const qOf=itemQuote;
   const f=ui.quoteFilter;
   if(f) ui.quoteFilter=null; // 견적 라벨 줄은 없앴어요 (업체별 폴더로)
@@ -2633,7 +2642,7 @@ function itemsHTML(){
       </tbody></table></section>`).join("")}</div>`;
   const body = boxView&&rows.length? boxes : rows.length? `${selbar}<div class="tbl-wrap"><table class="itbl"><thead><tr><th class="noprint ck"><input type="checkbox" id="isel-all" aria-label="보이는 물품 모두 선택" ${allOn?"checked":""}></th><th>사진</th>${th("name","품목","fc")}${th("kind","구분","fc")}<th>버전</th>${th("qty","수량","r fc")}${th("price","단가(원)","r fc")}<th class="r fc">추가 비용(원)</th>${th("amt","금액(원)","r")}${th("status","상태","fc")}<th class="fc">메모</th><th class="acts noprint">도면 · 후보 · 삭제</th></tr></thead><tbody>
     ${rows.map(rowHTML).join("")}
-    </tbody></table></div>` : (all.length?`<div class="empty">${kf?`'${kf}' 물품이 없어요.`:"이 조건에 맞는 물품이 없어요."}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
+    </tbody></table></div>` : (all0.length?`<div class="empty">${iq&&!all.length?`'${esc(iq)}'에 맞는 물품이 없어요. <button class="linkbtn" type="button" data-iqclear>검색 지우기</button>`:kf?`'${kf}' 물품이 없어요.`:"이 조건에 맞는 물품이 없어요."}</div>`:loadingOrEmpty("items","아직 등록한 물품이 없어요. 아래에서 첫 품목을 추가해 보세요."));
   const kinds=`<div class="seg kindseg" role="group" aria-label="구분">${[["","전체"]].concat(kindsOf(base).map(k=>[k,k])).map(([k,n])=>`<button data-kf="${k}" aria-pressed="${(kf||"")===k}">${n} <span class="num">${k?base.filter(i=>i.kind===k).length:base.length}</span></button>`).join("")}</div>`;
   const linked=[...new Set(all.map(i=>i.link).filter(Boolean))];
   const pins=state.markers.filter(m=>inVer(m,ui.itemVer||"exh")&&m.floor===ui.floor&&linked.includes(m.type)).map(m=>({id:m.id,x:m.x,y:m.y,color:tcolor(m.type),dark:TYPES[m.type]&&TYPES[m.type].dark,
@@ -2645,6 +2654,7 @@ function itemsHTML(){
   return `<div class="panel">
     <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">물품</h3>
       <div class="isum">${kindsOf(base).filter(k=>!noCost(k)).map(k=>`<span class="isum-k"><span class="small muted">${esc(k)}</span><b class="num">${won(total(k))||0}<span class="small">원</span></b></span>`).join("")}<span class="isum-k isum-t"><span class="small">총 금액</span><b class="num">${won(base.reduce((s,i)=>s+amt(i),0))||0}<span class="small">원</span></b></span></div></div>
+    <div class="isearch noprint"><input type="search" id="iq" value="${esc(ui.iq||"")}" placeholder="물품 검색 (이름·업체·메모, 초성도 돼요)" aria-label="물품 검색" autocomplete="off">${iq?`<span class="small muted num">${all.length}개</span><button class="linkbtn small" type="button" data-iqclear>지우기</button>`:""}</div>
     ${kinds}<div class="ifilters noprint">${stagebar}<span class="row" style="gap:8px">${folderMode?`<div class="seg verseg" role="group" aria-label="보기 방식"><button type="button" data-vview="box" aria-pressed="${boxView}">업체별</button><button type="button" data-vview="table" aria-pressed="${!boxView}">표</button></div>`:""}${verbar}</span></div>${body}
     <p class="help small muted" style="margin:8px 0 0">금액 = 수량 × 단가 + 추가 비용. 수량이 비면 배치도에 찍은 개수로 계산해요. 제목 칸을 누르면 정렬돼요.</p>
     <form class="addform" id="addItem"><label class="f">품목<input id="ni-name" placeholder="예: 무전기 이어폰" required></label>
@@ -2818,6 +2828,11 @@ function focusPins(){ // 진하게 표시한 점들이 화면과 도면 가운�
   window.scrollTo({top:Math.max(0,(Math.min(...ys)+Math.max(...ys))/2-window.innerHeight/2),behavior:"smooth"});
 }
 function bindItems(){
+  const iqEl=document.querySelector("#iq"); let iqT=null;
+  const setIq=v=>{ ui.iq=v; try{ sessionStorage.setItem("mb-iq",v); }catch(e){} };
+  if(iqEl){ iqEl.oninput=()=>{ clearTimeout(iqT); iqT=setTimeout(()=>{ const pos=iqEl.selectionStart; setIq(iqEl.value); render(); const n=document.querySelector("#iq"); if(n){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(e){} } },180); };
+    iqEl.onkeydown=e=>{ if(e.key==="Escape"&&iqEl.value){ e.preventDefault(); setIq(""); render(); const n=document.querySelector("#iq"); if(n) n.focus(); } }; }
+  document.querySelectorAll("[data-iqclear]").forEach(b=>b.onclick=()=>{ setIq(""); render(); const n=document.querySelector("#iq"); if(n) n.focus(); });
   bindMapCard(id=>{ // 도면의 점 → 그 물품 줄로
     const m=state.markers.find(x=>x.id===id); if(!m) return;
     if(!state.items.some(i=>i.link===m.type)){ toast(`'${(TYPES[m.type]||{}).name||"이 항목"}'은 물품 표에 연결된 품목이 없어요.`); return; }
