@@ -2661,7 +2661,7 @@ function itemsHTML(){
       <label class="f">구분<select id="ni-kind">${ITEM_KIND.map(k=>`<option ${kf===k?"selected":""}>${k}</option>`).join("")}</select></label>
       <label class="f" id="ni-maker-f" ${kf==="구매"||!kf?"hidden":""}>업체<input id="ni-maker" placeholder="예: NGD"></label>
       <label class="f">수량<input id="ni-qty" type="number" min="0"></label>
-      <label class="f">배치도 연결<select id="ni-link"><option value="">없음 (배치도 '물품'에서 찍을 수 있어요)</option><option value="staff">알바생 수만큼 (인력)</option></select></label>
+      <label class="f">배치도<select id="ni-link"><option value="self" selected>배치도에 바로 넣기</option><option value="staff">알바생 수만큼 (인력)</option><option value="">배치도에 안 넣기</option></select></label>
       <button class="btn primary" type="submit">추가</button></form></div>${quotesHTML(sum)}${fold("items-map","물품 위치","도면에서 보기",map)}`;
 }
 const curItem=id=>state.items.find(x=>x.id===id);
@@ -2933,7 +2933,8 @@ function bindItems(){
   { const nk=$("#ni-kind"), mf=$("#ni-maker-f"); if(nk&&mf){ const t=()=>{ mf.hidden=nk.value==="구매"; }; nk.addEventListener("change",t); t(); } }
   $("#addItem").onsubmit=e=>{e.preventDefault(); const n=$("#ni-name").value.trim(); if(!n) return;
     const max=Math.max(0,...state.items.map(i=>i.order||0)); const qf=qOfFilter(ui.quoteFilter), gq=qf&&qf.group, q=gq?gq.qs[0]:qf, f=gq?"":q?q.id:"";
-    save("items",{id:uid("i"),order:max+1,name:n,kind:$("#ni-kind").value,maker:"",qty:$("#ni-qty").value,link:$("#ni-link").value,price:"",vendor:q?q.vendor||"":($("#ni-kind").value!=="구매"?$("#ni-maker").value.trim():""),quote:f,...(gq?{quoteGroup:gq.key}:{}),due:"",status:$("#ni-kind").value===OWNED?"준비 완료":"필요",note:"",vers:[ui.itemVer||"exh"]}); toast(ui.itemVer?`${verName(ui.itemVer)} 버전 물품으로 추가했어요`:"추가했어요");};
+    const nid=uid("i"), lk=$("#ni-link").value; // self = 이 물품 그대로 배치도 항목 (위치 편집 '물품'에 바로 나와요)
+    save("items",{id:nid,order:max+1,name:n,kind:$("#ni-kind").value,maker:"",qty:$("#ni-qty").value,link:lk==="self"?nid:lk,price:"",vendor:q?q.vendor||"":($("#ni-kind").value!=="구매"?$("#ni-maker").value.trim():""),quote:f,...(gq?{quoteGroup:gq.key}:{}),due:"",status:$("#ni-kind").value===OWNED?"준비 완료":"필요",note:"",vers:[ui.itemVer||"exh"]}); toast((ui.itemVer?`${verName(ui.itemVer)} 버전 물품으로 추가했어요`:"추가했어요")+(lk==="self"?" · 배치도 '위치 편집'에서 바로 찍을 수 있어요":""));};
 }
 
 /* ----- graphics ----- */
