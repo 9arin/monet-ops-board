@@ -2101,7 +2101,8 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
       const opt=x=>{ const c=pl.cells[x.id], q=c&&c.who, me=j&&j.x.id===x.id, nm=esc(jobName(x.label));
         if(me) return `<option value="${x.id}" selected>${nm}${j.plus?" (추가)":""}</option>`;
         if(!q) return `<option value="${x.id}">${nm} · 사람 없음</option>`;
-        return `<option value="${x.id}">${nm} · ${esc(pname(q))}${j&&!j.plus?"와 맞바꿈":" 대신"}</option><option value="${x.id}|plus">${nm} · ${esc(pname(q))}와 같이 (추가)</option>`; };
+        const qn=pname(q)||"", wa=(c=>c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?"과":"와")(qn.charCodeAt(qn.length-1)); // 받침 있으면 '과'
+        return `<option value="${x.id}">${nm} · ${esc(qn)}${j&&!j.plus?wa+" 맞바꿈":" 대신"}</option><option value="${x.id}|plus">${nm} · ${esc(qn)}${wa} 같이 (추가)</option>`; };
       return `<td class="editing"><select data-pjob="${key}" aria-label="${esc(pname(p))} ${+dt.slice(5,7)}/${+dt.slice(8)} 맡을 일"><option value="-off" ${j?"":"selected"}>휴무</option>${mine.map(opt).join("")}${other.length?`<optgroup label="다른 조 일">${other.map(opt).join("")}</optgroup>`:""}</select>${j?tUI(dt,j.x,p):""}<button type="button" class="linkbtn small" data-celldone>닫기</button></td>`; }
     const cls=!j?"offc":j.c&&(j.c.kind==="swap"||j.c.kind==="auto")?"swp":"";
     return `<td class="${cls}"><button class="cellbtn" data-cell="${key}" title="눌러서 맡을 일 고르기">${lbl}</button>${mw}${tm}${nt}</td>`; };
