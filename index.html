@@ -848,6 +848,7 @@ const tcolor=t=>`var(${(TYPES[t]||TYPES.note).c})`;
 function toast(msg){if(undoToast._done) undoToast._done(); const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2200);}
 const pending={}, inflight={};
 const unsaved={}, unremoved={}; // 서버에 아직 안 들어간 저장·삭제 (10초 새로고침이 덮어쓰지 않게)
+const recentSave={}, recentRm={}; // 방금 저장·삭제한 것: 그보다 먼저 출발한 10초 새로고침 결과가 덮어쓰지 않게 (고른 이름이 사라지던 문제)
 const typing=()=>{const a=document.activeElement; return !!a&&$("#view").contains(a)&&(a.tagName==="TEXTAREA"||(a.tagName==="INPUT"&&!/^(checkbox|radio|file|button|submit)$/.test(a.type)));};
 const busy=()=>Object.keys(unsaved).length+Object.keys(unremoved).length>0;
 async function save(col,obj,quiet){ // quiet: 입력 중이면 화면 새로 그리기를 미룸 (자동 입력 결과 등)
@@ -856,6 +857,7 @@ async function save(col,obj,quiet){ // quiet: 입력 중이면 화면 새로 그
   (quiet||typing())?scheduleRender():render(); // 글자 치는 중엔 화면을 다시 그리지 않아요 (커서 유지)
   if(!db||(guest&&col!=="graphics")) return; /* 손님은 그래픽 내용만 저장돼요 */
   const key=col+"/"+obj.id; const {id,...data}=obj;
+  recentSave[key]={col,obj,t:Date.now()}; delete recentRm[key];
   unsaved[key]={col,obj}; pending[key]=data; if(inflight[key]) return;
   inflight[key]=true;
   while(pending[key]){const d=pending[key]; delete pending[key];
@@ -865,7 +867,7 @@ async function save(col,obj,quiet){ // quiet: 입력 중이면 화면 새로 그
 }
 async function remove(col,id){
   state[col]=state[col].filter(x=>x.id!==id); render();
-  if(db&&!guest){ const key=col+"/"+id; unremoved[key]={col,id}; delete unsaved[key];
+  if(db&&!guest){ const key=col+"/"+id; unremoved[key]={col,id}; delete unsaved[key]; recentRm[key]={col,id,t:Date.now()}; delete recentSave[key];
     const {error}=await db.from(TABLE).delete().eq("col",dbCol(col)).eq("id",id); delete unremoved[key]; if(error) handleErr(error);
     if(col==="files") db.from(TABLE).delete().eq("col","items").like("id",id+"~%").then(()=>{}); } // 조각도 같이 지움
 }
@@ -894,6 +896,7 @@ function applyRow(row){ if(!row||!COLS.includes(row.col)||String(row.id).include
   const i=state[c].findIndex(x=>x.id===row.id); if(i>=0) state[c][i]=o; else state[c].push(o); }
 let lastLoadSig=null;
 async function loadAll(){
+  const t0=Date.now();
   const [r1,r2]=await Promise.all([
     db.from(TABLE).select("col,id,data").not("id","like","f-%").limit(5000),
     db.from(TABLE).select("col,id,meta:data->meta").eq("col","items").like("id","f-%").not("id","like","%~%").limit(2000)]);
@@ -907,6 +910,9 @@ async function loadAll(){
   r1.data.forEach(applyRow); (r2.data||[]).forEach(r=>applyRow({col:r.col,id:r.id,data:{meta:r.meta}}));
   Object.values(unsaved).forEach(({col,obj})=>{ const i=state[col].findIndex(x=>x.id===obj.id); if(i>=0) state[col][i]=obj; else state[col].push(obj); }); // 방금 고친 건 내 것으로
   Object.values(unremoved).forEach(({col,id})=>{ state[col]=state[col].filter(x=>x.id!==id); });
+  // 받아 오기 시작한 뒤(또는 직전)에 저장·삭제한 건 서버 결과가 옛것일 수 있어서 내 것으로 둬요
+  const fresh=t=>t>=t0-3000; Object.entries(recentSave).forEach(([k,r])=>{ if(Date.now()-r.t>60000){ delete recentSave[k]; return; } if(!fresh(r.t)) return; const i=state[r.col].findIndex(x=>x.id===r.obj.id); if(i>=0) state[r.col][i]=r.obj; else state[r.col].push(r.obj); });
+  Object.entries(recentRm).forEach(([k,r])=>{ if(Date.now()-r.t>60000){ delete recentRm[k]; return; } if(fresh(r.t)) state[r.col]=state[r.col].filter(x=>x.id!==r.id); });
   if(guest){ setNotice(""); scheduleRender(); return; } /* 손님: 그래픽만 받아 오고, 아무것도 고치지 않아요 */
   const {data:ok}=await db.rpc("can_board");
   if(ok===false) setNotice("들어올 권한이 없어요. 팀 비밀번호가 바뀌었을 수 있어요. 로그아웃 후 다시 들어와 주세요.");
