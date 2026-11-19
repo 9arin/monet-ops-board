@@ -2421,8 +2421,8 @@ function bindStaff(){
   document.querySelectorAll("tr[data-ptime] input").forEach(el=>el.onchange=()=>{ const id=el.closest("tr").dataset.ptime, v=el.value.trim();
     if(v&&!/^\d{1,2}:\d{2}\s*~\s*\d{1,2}:\d{2}$/.test(v)){ toast("예: 11:00~20:00 처럼 적어 주세요"); return; }
     const c=state.settings.find(x=>x.id==="cfg-pos")||{id:"cfg-pos",pos:{}}; save("settings",{...c,pos:{...c.pos,[id]:{...(c.pos||{})[id],time:v.replace(/\s/g,"")}}}); });
-  $("#slotEditBtn").onclick=()=>{ui.slotEdit=!ui.slotEdit;render();};
-  $("#rotaPrint").onclick=printRota;
+  const seb=$("#slotEditBtn"); if(seb) seb.onclick=()=>{ui.slotEdit=!ui.slotEdit;render();}; // 근무표 화면에만 있어요
+  const rpb=$("#rotaPrint"); if(rpb) rpb.onclick=printRota;
   document.querySelectorAll("tr[data-slot]").forEach(tr=>tr.querySelectorAll("[data-sk]").forEach(el=>el.onchange=()=>{
     const cfg=state.settings.find(x=>x.id==="cfg-slots")||{id:"cfg-slots",slots:{}}; const id=tr.dataset.slot, k=el.dataset.sk;
     save("settings",{...cfg,slots:{...cfg.slots,[id]:{...(cfg.slots||{})[id],[k]:el.value.trim()}}}); }));
