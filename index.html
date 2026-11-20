@@ -2053,7 +2053,9 @@ function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
   let extras=ctx.extra[d].filter(p=>!dropped.has(p.id)&&!isMust(p)&&!inCell().has(p.id));
   extras.sort((a,b)=>(post.has(a.id)?1:0)-(post.has(b.id)?1:0)); // 어제 야간한 사람은 대신 서는 데 맨 뒤로
   const fill=(x,base,why)=>{ if(optSeat(x)){ cells[x.id]={who:null,kind:"opt",base,why}; return true; } const ok=q=>!post.has(q.id); /* 어제 야간한 사람은 되도록 안 불러요 */ let i=extras.findIndex(q=>ok(q)&&canDo(q,x)&&pgroup(q)===x.group); if(i<0) i=extras.findIndex(q=>ok(q)&&canDo(q,x)); /* 같은 층 먼저, 없으면 다른 층 (같은 조 일만) */
-    if(i<0&&!/야간 다음날/.test(why)) i=extras.findIndex(q=>canDo(q,x)); if(i>=0){ cells[x.id]={who:extras[i],kind:"auto",base,why}; extras.splice(i,1); return true; } return false; };
+    if(i<0&&!/야간 다음날/.test(why)) i=extras.findIndex(q=>canDo(q,x));
+    if(i<0){ const y=pos.find(z=>optSeat(z)&&cells[z.id]&&cells[z.id].who&&canDo(cells[z.id].who,x)&&!post.has(cells[z.id].who.id)); // 지원 인원이 없으면 대기 안내에 선 사람이 꼭 필요한 자리로
+      if(y){ const w=cells[y.id].who; cells[x.id]={who:w,kind:"auto",base,why}; cells[y.id]={who:null,kind:"opt",base:w}; return true; } } if(i>=0){ cells[x.id]={who:extras[i],kind:"auto",base,why}; extras.splice(i,1); return true; } return false; };
   // 야간 주에 빠지는 사람 → 같은 층 지원 인원이 그 자리로
   pos.forEach(x=>{ const c=cells[x.id]; if(c.kind!=="swap"&&c.who&&dropped.has(c.who.id)) fill(x,c.who,"야간 주 휴무"); });
   // 필수 휴무 날짜인 사람 → 지원 인원 먼저, 없으면 그날 쉬는 사람 (40시간 안 넘는 사람 먼저)
