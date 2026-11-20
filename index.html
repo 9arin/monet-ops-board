@@ -1005,7 +1005,8 @@ function syncRoster(){
   const nc=nightCfg(), need={}; pos.forEach(x=>need[x.group]=(need[x.group]||0)+1);
   const ns=nightStats(), nightSig=`night:${nightBase()}+${nightExtra()}`;
   const mustSig="must:"+alba().map(p=>mustDow(p).length?p.id+mustDow(p).join(""):"").filter(Boolean).sort().join(",");
-  const sig="all5|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig;
+  const roleSig="role:"+alba().map(p=>p.id+(rolesOf(p).join("")||"-")).sort().join(","); // 사람을 더하거나 역할(A~E)을 바꾸면 다시 짜요
+  const sig="all5|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig+"|"+roleSig;
   const cfg=state.settings.find(x=>x.id==="cfg-roster3");
   // 자리 구성·야간이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 딱 맞지 않으면 다시 짜요
   const exact=()=>{ const {res}=coverage(); return DAYS.every((_,d)=>pos.every(x=>res[x.id][d].who)); }; // 남는 사람은 지원 근무
@@ -1058,11 +1059,20 @@ function syncRoster(){
     return m.every(p=>(p.off||[]).length>=7-D&&fits(p,p.off||[]))&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length>=P)
       &&(!sz||m.map(p=>(p.off||[]).length).sort().join()===sz.slice().sort().join()); }); // 계획한 근무일 구성인지
   const missed=new Set();
-  if(!allOk||!cfg||!String(cfg.sig).endsWith(mustSig+"|"+nightSig)){ // 필수 휴무·야간 날짜 구성이 바뀌어도 다시 짜요
+  if(!allOk||!cfg||!String(cfg.sig).endsWith(mustSig+"|"+nightSig+"|"+roleSig)){ // 필수 휴무·야간 날짜·사람·역할 구성이 바뀌어도 다시 짜요
     zones.forEach(g=>{ const P=need[g.id], m=mem[g.id], D=poolDays(g.id,pos);
       const w=ns.byDow.some(x=>x)?ns.byDow:DAYS.map((_,i)=>i===4?1:0);
       const score=r=>-blocks(m.length,P,r,D,g.id).flat().filter(d=>d>=4).length; // 금·토·일에 쉬는 사람이 적게 (지원 인원이 주말에)
-      let offs=null; for(const r of [0,1,2,3,4,5,6].sort((a,b)=>score(b)-score(a))){ offs=match(m,blocks(m.length,P,r,D,g.id)); if(offs) break; }
+      // 역할(A~E) 맞추기: 날마다 그 역할 자리를 그 역할 사람이 최대한 채우도록 쉬는 요일을 사람끼리 바꿔 봐요
+      const gpos=pos.filter(x=>x.group===g.id), seatN={}; gpos.forEach(x=>{ const k=brkGroupOf(x); seatN[k]=(seatN[k]||0)+1; });
+      const cost=O=>{ let c=0; for(let d=0;d<7;d++){ const need={...seatN}; let free=0;
+          m.map((p,i)=>[p,i]).filter(([p,i])=>!O[i].includes(d)).sort((a,b)=>rolesOf(a[0]).length-rolesOf(b[0]).length).forEach(([p])=>{ const R=rolesOf(p); if(!R.length){ free++; return; } const k=R.find(k=>need[k]>0); if(k) need[k]--; });
+          c+=Math.max(0,Object.values(need).reduce((s,v)=>s+v,0)-free); } return c; };
+      const climb=O=>{ O=O.map(o=>o.slice()); let best=cost(O), imp=true, guard=0;
+        while(imp&&guard++<50){ imp=false; for(let i=0;i<m.length;i++) for(let j=i+1;j<m.length;j++){ if(!fits(m[i],O[j])||!fits(m[j],O[i])) continue;
+          [O[i],O[j]]=[O[j],O[i]]; const c=cost(O); if(c<best){ best=c; imp=true; } else [O[i],O[j]]=[O[j],O[i]]; } }
+        return {O,c:best}; };
+      let offs=null, bestC=Infinity; for(const r of [0,1,2,3,4,5,6].sort((a,b)=>score(b)-score(a))){ const o=match(m,blocks(m.length,P,r,D,g.id)); if(!o) continue; const t=climb(o); if(t.c<bestC){ bestC=t.c; offs=t.O; } if(!bestC) break; }
       if(!offs){ const gr=greedy(m,P,D,g.id); offs=gr.res; gr.miss.forEach(d=>missed.add(DAYS[d])); }
       mem[g.id]=m.map((p,i)=>{ changed.set(p.id,true); return {...p,off:offs[i]}; }); });
     zones.forEach(g=>{ mem[g.id]=mem[g.id].map(p=>{ if(p.night){ changed.set(p.id,true); const {night,...q}=p; return q; } return p; }); });
