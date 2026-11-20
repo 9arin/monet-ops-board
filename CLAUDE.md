@@ -4,7 +4,7 @@ Static single-page app served by GitHub Pages from a PUBLIC repo (no build step)
 
 ## Structure
 - `index.html`: all CSS + JS inline. Key parts in the script:
-  - `TYPES` (marker types, colors match whiteboard pens), `GROUPS` (staff slots: rec-am, rec-pm, s2, s3, s4, s5, s8, s6a, s6b), `DAYS`.
+  - `TYPES` (marker types, colors match whiteboard pens), `GROUPS` (staff slots: rec-am, rec-pm, s2, s3, s4, s5, s8, s6a, s6b), `DAYS` (index 0=월…6=일, stored that way; weeks start on Sunday: `weekKey` = that week's Sunday, `WK` = display order 일→토).
   - `state` = {markers, items, staff, tasks}; `ui` = view state (some persisted in localStorage `mb-*`).
   - `save(col,obj)` / `remove(col,id)`: optimistic local update, then Supabase upsert/delete.
   - Boot section "boot (Supabase)": two ways in — team password (sent as `x-board-key` header, sha256 of the password sent as header, hash stored in localStorage `mb-teamkey-h`, 10s polling) or admin magic-link (realtime channel). `can_board()` RPC checks access.

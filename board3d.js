@@ -679,7 +679,7 @@ function showCard(id){
     if(m.note) kv("메모",m.note);
     card.append(dl);
     if(s){ card.append(el("div","small muted","요일별 근무")); const wk=el("div","t3-week");
-      D.days.forEach((dn,i)=>{ const ww=D.week[m.id][i], c=el("div",(i===ui.day?"today ":"")+(ww&&ww.k==="cover"?"cov":"")+(ww&&!ww.c?" gap":"")); c.append(el("b",null,dn),ww&&ww.c?ww.c:"공석"); wk.append(c); });
+      [6,0,1,2,3,4,5].forEach(i=>{ const dn=D.days[i], ww=D.week[m.id][i], c=el("div",(i===ui.day?"today ":"")+(ww&&ww.k==="cover"?"cov":"")+(ww&&!ww.c?" gap":"")); c.append(el("b",null,dn),ww&&ww.c?ww.c:"공석"); wk.append(c); });
       card.append(wk); }
   } else {
     kv("수량",Math.max(1,+m.qty||1)+"개"); if(m.glyph&&shapeOf(m)==="sticker") kv("방향",m.glyph);
