@@ -1960,7 +1960,8 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
   const pl=dayPlan0(ctx,date); pl.plus=pl.plus||{}; if(pl.closed||pl.prep) return pl;
   const ov=ovrAll()[date]||{}, d=dowOf(date), ppl=alba(), crew=pl.crew||[];
   ctx.pos.forEach(x=>{ const ids=ov[x.id+"+"]; if(!Array.isArray(ids)) return;
-    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!pl.working.has(p.id)&&!crew.some(c=>c.id===p.id)); // 직접 넣은 사람은 근무 불가 날이어도 넣어요 (넣을 때 확인 팝업)
+    const inCell=id=>Object.values(pl.cells).some(c=>c.who&&c.who.id===id)||Object.values(pl.plus).some(L=>L.some(q=>q.id===id)); // '남는 사람'은 근무 중이 아니에요 (예전엔 이걸 근무로 봐서 추가가 빠졌어요)
+    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!inCell(p.id)&&!crew.some(c=>c.id===p.id)); // 직접 넣은 사람은 근무 불가 날이어도 넣어요 (넣을 때 확인 팝업)
     if(L.length){ pl.plus[x.id]=(pl.plus[x.id]||[]).concat(L); L.forEach(p=>pl.working.add(p.id)); } });
   // 근무표에서 직접 고친 칸을 마지막에 꼭 반영해요: '-'는 빈자리, 다른 자리에 선 사람을 고르면 두 사람이 자리를 맞바꿔요
   const byId=id=>ppl.find(p=>p.id===id);
