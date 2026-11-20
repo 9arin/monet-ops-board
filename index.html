@@ -2124,13 +2124,14 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
   const GKEYS=[...BRK_GROUPS.map(g=>g[0]),"~"], byG={}; alba().forEach(p=>{ const k=grpOf(p); (byG[k]=byG[k]||[]).push(p); });
   const tUI=(dt,x,p)=>{ const S=segsOf(pTime(dt,x,p.id)).map(([a,b])=>[a,b].map(m=>`${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`));
     return `<div class="ptime" data-ptime="${dt}|${x.id}|${p.id}"><span class="small muted">근무 시간</span>${S.map(([a,b],j)=>`<span class="seg1"><input type="time" step="1800" value="${a}" data-ta="${j}" aria-label="시작">~<input type="time" step="1800" value="${b}" data-tb="${j}" aria-label="끝">${S.length>1?`<button type="button" class="x" data-tdel="${j}" aria-label="이 시간 빼기">×</button>`:""}</span>`).join("")}<span class="small muted num">${fmtH(netH(pTime(dt,x,p.id)))}</span><button type="button" class="linkbtn small" data-tadd>+ 시간 나누기</button>${pTimeSet(dt,x,p.id)?`<button type="button" class="linkbtn small" data-treset>기본 시간으로</button>`:""}</div>`; };
+  const nogoOn=(p,dt)=>!ALL_HANDS.includes(dt)&&mustOn(p,dt); // 전원 근무일엔 불가 없음
   const cellOf=(p,dt,i,grp)=>{ if(!open(dt)) return closed; const pl=plans[i]; if(pl.closed) return closed;
-    if(pl.prep) return pl.prep.some(q=>q.id===p.id)?`<td class="nt">OT·시뮬</td>`:mustOn(p,dt)?`<td class="offc nogo">불가</td>`:`<td class="offc">휴무</td>`;
+    if(pl.prep) return pl.prep.some(q=>q.id===p.id)?`<td class="nt">OT·시뮬</td>`:nogoOn(p,dt)?`<td class="offc nogo">불가</td>`:`<td class="offc">휴무</td>`;
     const j=jobAt(pl,p), key=`${dt}|p|${p.id}`, night=pl.crew.some(q=>q.id===p.id);
     const tm=j&&pTimeSet(dt,j.x,p.id)?`<span class="ptm num">${esc(pTime(dt,j.x,p.id).replace(/,/g," · "))}</span>`:"";
-    const mw=(j||night)&&mustOn(p,dt)?`<span class="ptm mustw" title="역할 부여에서 근무 불가로 고른 날이에요">⚠ 근무 불가 날</span>`:"";
-    const nt=night?`<span class="ptm nightm">+ 야간</span>`:"", lbl=j?esc(jobName(j.x.label))+(j.plus?` <span class="small muted">(추가)</span>`:""):mustOn(p,dt)?"불가":"휴무";
-    if(pr) return `<td class="${j?"":mustOn(p,dt)?"offc nogo":"offc"}">${lbl}${tm}${nt}</td>`;
+    const mw=(j||night)&&nogoOn(p,dt)?`<span class="ptm mustw" title="역할 부여에서 근무 불가로 고른 날이에요">⚠ 근무 불가 날</span>`:"";
+    const nt=night?`<span class="ptm nightm">+ 야간</span>`:"", lbl=j?esc(jobName(j.x.label))+(j.plus?` <span class="small muted">(추가)</span>`:""):nogoOn(p,dt)?"불가":"휴무";
+    if(pr) return `<td class="${j?"":nogoOn(p,dt)?"offc nogo":"offc"}">${lbl}${tm}${nt}</td>`;
     if(ui.editCell===key){
       const mine=pos.filter(x=>brkGroupOf(x)===grp), other=pos.filter(x=>brkGroupOf(x)!==grp);
       const opt=x=>{ const c=pl.cells[x.id], q=c&&c.who, me=j&&j.x.id===x.id, nm=esc(jobName(x.label));
@@ -2138,8 +2139,8 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
         if(!q) return `<option value="${x.id}">${nm} · 사람 없음</option>`;
         const qn=pname(q)||"", wa=(c=>c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?"과":"와")(qn.charCodeAt(qn.length-1)); // 받침 있으면 '과'
         return `<option value="${x.id}">${nm} · ${esc(qn)}${j&&!j.plus?wa+" 맞바꿈":" 대신"}</option><option value="${x.id}|plus">${nm} · ${esc(qn)}${wa} 같이 (추가)</option>`; };
-      return `<td class="editing"><select data-pjob="${key}" aria-label="${esc(pname(p))} ${+dt.slice(5,7)}/${+dt.slice(8)} 맡을 일"><option value="-off" ${j?"":"selected"}>${mustOn(p,dt)?"불가 (쉬어요)":"휴무"}</option>${mine.map(opt).join("")}${other.length?`<optgroup label="다른 조 일">${other.map(opt).join("")}</optgroup>`:""}</select>${j?tUI(dt,j.x,p):""}<button type="button" class="linkbtn small" data-celldone>닫기</button></td>`; }
-    const cls=!j?(mustOn(p,dt)?"offc nogo":"offc"):j.c&&(j.c.kind==="swap"||j.c.kind==="auto")?"swp":"";
+      return `<td class="editing"><select data-pjob="${key}" aria-label="${esc(pname(p))} ${+dt.slice(5,7)}/${+dt.slice(8)} 맡을 일"><option value="-off" ${j?"":"selected"}>${nogoOn(p,dt)?"불가 (쉬어요)":"휴무"}</option>${mine.map(opt).join("")}${other.length?`<optgroup label="다른 조 일">${other.map(opt).join("")}</optgroup>`:""}</select>${j?tUI(dt,j.x,p):""}<button type="button" class="linkbtn small" data-celldone>닫기</button></td>`; }
+    const cls=!j?(nogoOn(p,dt)?"offc nogo":"offc"):j.c&&(j.c.kind==="swap"||j.c.kind==="auto")?"swp":"";
     return `<td class="${cls}"><button class="cellbtn" data-cell="${key}" title="눌러서 맡을 일 고르기">${lbl}</button>${mw}${tm}${nt}</td>`; };
   let body=GKEYS.filter(k=>byG[k]&&byG[k].length).map(k=>{ const L=byG[k].slice().sort(ko), mine=pos.filter(x=>brkGroupOf(x)===(k==="~"?"":k));
     const emptyRow=mine.length?`<tr class="plusrow"><td class="rl"><span class="small muted">↳ 사람 없는 일</span></td>${dates.map((dt,i)=>{ if(!open(dt)||plans[i].closed||plans[i].prep) return open(dt)?`<td></td>`:closed;
