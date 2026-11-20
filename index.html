@@ -2140,14 +2140,14 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
     const j=jobAt(pl,p), key=`${dt}|p|${p.id}`, night=pl.crew.some(q=>q.id===p.id);
     const tm=j&&pTimeSet(dt,j.x,p.id)?`<span class="ptm num">${esc(pTime(dt,j.x,p.id).replace(/,/g," · "))}</span>`:"";
     const mw=(j||night)&&nogoOn(p,dt)?`<span class="ptm mustw" title="역할 부여에서 근무 불가로 고른 날이에요">⚠ 근무 불가 날</span>`:"";
-    const nt=night?`<span class="ptm nightm">+ 야간</span>`:"", lbl=j?esc(jobName(j.x.label)):nogoOn(p,dt)?"불가":"휴무";
-    if(pr) return `<td class="${j?"":nogoOn(p,dt)?"offc nogo":"offc"}">${lbl}${tm}${nt}</td>`;
+    const nt=night&&j?`<span class="ptm nightm">+ 야간</span>`:"", lbl=j?esc(jobName(j.x.label)):night?"야간 근무":nogoOn(p,dt)?"불가":"휴무";
+    if(pr) return `<td class="${j?"":night?"nt":nogoOn(p,dt)?"offc nogo":"offc"}">${lbl}${tm}${nt}</td>`;
     if(ui.editCell===key){
       const mine=pos.filter(x=>canDo(p,x)), other=[]; // 다른 조 일은 고를 수 없어요
       const opt=x=>{ const me=j&&j.x.id===x.id, nm=esc(jobName(x.label));
         return `<option value="${x.id}" ${me?"selected":""}>${nm}</option>`; };
       return `<td class="editing"><select data-pjob="${key}" aria-label="${esc(pname(p))} ${+dt.slice(5,7)}/${+dt.slice(8)} 맡을 일"><option value="-off" ${j?"":"selected"}>${nogoOn(p,dt)?"불가 (쉬어요)":"휴무"}</option>${mine.map(opt).join("")}<option value="-night" ${night&&!j?"selected":""}>야간 근무</option>${other.length?`<optgroup label="다른 조 일">${other.map(opt).join("")}</optgroup>`:""}</select>${j?tUI(dt,j.x,p):""}<button type="button" class="linkbtn small" data-celldone>닫기</button></td>`; }
-    const cls=!j?(nogoOn(p,dt)?"offc nogo":"offc"):j.c&&(j.c.kind==="swap"||j.c.kind==="auto")?"swp":"";
+    const cls=!j?(night?"nt":nogoOn(p,dt)?"offc nogo":"offc"):j.c&&(j.c.kind==="swap"||j.c.kind==="auto")?"swp":"";
     return `<td class="${cls}"><button class="cellbtn" data-cell="${key}" title="눌러서 맡을 일 고르기">${lbl}</button>${mw}${tm}${nt}</td>`; };
   let body=GKEYS.filter(k=>byG[k]&&byG[k].length).map(k=>{ const L=byG[k].slice().sort(ko), mine=pos.filter(x=>brkGroupOf(x)===(k==="~"?"":k));
     const emptyRow=mine.length?`<tr class="plusrow"><td class="rl"><span class="small muted">↳ 사람 없는 일</span></td>${dates.map((dt,i)=>{ if(!open(dt)||plans[i].closed||plans[i].prep) return open(dt)?`<td></td>`:closed;
