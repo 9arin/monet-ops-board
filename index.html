@@ -1946,7 +1946,10 @@ function nightDrops(pos,extra,crews,res){ // 야간을 해서 40시간이 넘는
   const drops={}, weeks={};
   Object.entries(crews).forEach(([d,cs])=>cs.forEach(p=>{ const w=weekKey(d), m=(weeks[w]=weeks[w]||{}); (m[p.id]=m[p.id]||{p,dates:[]}).dates.push(d); }));
   Object.entries(weeks).forEach(([w,map])=>{ const used={};
-    Object.values(map).forEach(({p,dates})=>{ if(actDays(p)*personNet(p,pos)+NIGHT_H*dates.length<=MAX_H) return;
+    Object.values(map).forEach(({p,dates})=>{ const on=7-(p.off||[]).length; // 자리 없는 날도 '지원'으로 일하니까 일하는 날 전부로 세요
+      if(Math.max(actDays(p),on)*personNet(p,pos)+NIGHT_H*dates.length<=MAX_H) return;
+      const sp=weekDates(w).find(dt=>dt>=OPEN_FROM&&dt<=OPEN_TO&&!dates.includes(dt)&&extra[dowOf(dt)].some(q=>q.id===p.id)); // 지원만 서는 날이 있으면 그날 쉬어요
+      if(sp){ (drops[sp]=drops[sp]||new Set()).add(p.id); return; }
       const sur=dt=>extra[dowOf(dt)].filter(q=>q.id!==p.id).length-(used[dt]||0); // 그날 지원 인원 (다른 층도 가능)
       const pick=weekDates(w).filter(dt=>dt>=OPEN_FROM&&dt<=OPEN_TO&&!dates.includes(dt)&&pos.some(x=>res[x.id][dowOf(dt)].who===p)&&sur(dt)>0) // 자리를 맡은 날 중 대신할 사람이 있는 날
         .sort((a,b)=>sur(b)-sur(a)||a.localeCompare(b))[0];
