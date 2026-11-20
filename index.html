@@ -1490,7 +1490,7 @@ function coverage(){
       gp.forEach(x=>{const w=work.find(p=>!used.has(p.id)&&hasR(p)&&okR(p,x)&&home(p,x)); if(w) fill(x,w);}); // 역할을 고른 사람: 원래 자리가 역할에 맞으면 거기
       gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)&&hasR(p)&&okR(p,x)); if(w) fill(x,w); }); // 아니면 역할이 맞는 다른 자리
       gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)&&!hasR(p)&&home(p,x)); if(w) fill(x,w); }); // 역할을 안 고른 사람은 원래 자리
-      gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)); if(w) fill(x,w); else res[x.id][d]={who:null,kind:"gap"}; });
+      gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)&&canDo(p,x)); if(w) fill(x,w); else res[x.id][d]={who:null,kind:"gap"}; }); // 다른 조 사람은 안 넣어요
       work.filter(p=>!used.has(p.id)).forEach(p=>extra[d].push(p));
     });
     ppl.filter(p=>!ALLG.some(g=>g.id===pgroup(p))&&on(p,d)).forEach(p=>extra[d].push(p));
@@ -1937,6 +1937,7 @@ const brkGroupOf=x=>{ const n=jobName(x.label||""); const g=BRK_GROUPS.find(([, 
 const roleLetter=r=>{ if(BRK_GROUPS.some(g=>g[0]===r)) return r; const g=BRK_GROUPS.find(([, ,re])=>re.test(r||"")); return g?g[0]:""; };
 const rolesOf=p=>[...new Set((p.roles||[]).map(roleLetter).filter(Boolean))].sort();
 const roleFits=(p,x)=>rolesOf(p).includes(brkGroupOf(x));
+const canDo=(p,x)=>!!p&&(!rolesOf(p).length||roleFits(p,x)); // 다른 조(역할) 일은 안 맡아요 (역할 없는 사람만 아무 일이나)
 const brkMates=(x,pos)=>{ const g=brkGroupOf(x); return g?pos.filter(y=>y!==x&&brkGroupOf(y)===g):[]; };
 const posBrk=x=>{ const b=(posCfg()[x.id]||{}).brk||(x.slot&&x.slot.brk)||""; return /\d:\d\d/.test(b)?b.split("~")[0]:""; };
 // 날짜별 주간 근무표: 매주 같은 휴무표를 실제 날짜에 펼치고, 그날만 사람을 바꿀 수 있어요 (cfg-ovr: {날짜:{자리:사람}})
@@ -1982,7 +1983,7 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
     const t=byId(v); if(!t) return;
     const y=ctx.pos.find(z=>z.id!==x.id&&pl.cells[z.id]&&pl.cells[z.id].who===t), back=cur===t?c.base||null:cur; // 원래 이 자리 사람을 그쪽으로
     if(cur===t&&!y) return;
-    if(y) pl.cells[y.id]={who:back,kind:back?"swap":"gap",base:t};
+    if(y) pl.cells[y.id]=back&&canDo(back,y)?{who:back,kind:"swap",base:t}:{who:null,kind:"gap",base:t}; // 다른 조 일이면 맞바꾸지 않고 쉬어요
     else Object.keys(pl.plus).forEach(k=>{ if(pl.plus[k].includes(t)){ pl.plus[k]=pl.plus[k].map(q=>q===t?cur:q).filter(Boolean); if(!pl.plus[k].length) delete pl.plus[k]; } });
     pl.cells[x.id]={who:t,kind:"swap",base:cur}; });
   // '같이 (추가)'는 직접 고친 칸을 다 반영한 뒤에 넣어요 (먼저 넣으면 곧 자리에서 밀려날 사람으로 보고 빠졌어요)
@@ -2007,8 +2008,8 @@ function allHandsPlan(ctx,date){
   const left=[];
   order.forEach(p=>{ const W=wants(p), free=W.find(x=>!cells[x.id]); if(free){ cells[free.id]={who:p,kind:"main"}; return; } if(W.length) (plus[W[0].id]=plus[W[0].id]||[]).push(p); else left.push(p); });
   pos.forEach(x=>{ if(cells[x.id]) return; // 빈 자리: 자리 없는 사람 → 같은 층에서 겹친 사람
-    let i=left.findIndex(p=>pgroup(p)===x.group); if(i<0) i=left.length?0:-1; if(i>=0){ cells[x.id]={who:left.splice(i,1)[0],kind:"cover"}; return; }
-    const cand=[]; Object.keys(plus).forEach(id=>{ if((pos.find(y=>y.id===id)||{}).group===x.group) plus[id].forEach(p=>cand.push({id,p})); });
+    let i=left.findIndex(p=>pgroup(p)===x.group&&canDo(p,x)); if(i<0) i=left.findIndex(p=>canDo(p,x)); if(i>=0){ cells[x.id]={who:left.splice(i,1)[0],kind:"cover"}; return; }
+    const cand=[]; Object.keys(plus).forEach(id=>{ if((pos.find(y=>y.id===id)||{}).group===x.group) plus[id].forEach(p=>{ if(canDo(p,x)) cand.push({id,p}); }); });
     cand.sort((a,b)=>(rolesOf(a.p).length?1:0)-(rolesOf(b.p).length?1:0)); // 역할을 고른 사람은 그 자리에 두고, 역할 없는 사람부터 빈 자리로
     if(cand.length){ const {id,p}=cand[0]; plus[id]=plus[id].filter(q=>q!==p); if(!plus[id].length) delete plus[id]; cells[x.id]={who:p,kind:"cover"}; return; }
     cells[x.id]={who:null,kind:"gap"}; });
@@ -2016,7 +2017,7 @@ function allHandsPlan(ctx,date){
   // 근무표에서 그날 직접 바꾼 칸: 그 사람을 이 자리로, 원래 사람은 그 사람이 있던 자리로 맞바꿔요
   const ov=ovrAll()[date]||{};
   pos.forEach(x=>{ const o=ppl.find(p=>p.id===ov[x.id]); if(!o||!cells[x.id]||cells[x.id].who===o) return; const cur=cells[x.id].who;
-    const y=pos.find(z=>cells[z.id]&&cells[z.id].who===o); if(y) cells[y.id]={who:cur,kind:cur?"swap":"gap"};
+    const y=pos.find(z=>cells[z.id]&&cells[z.id].who===o); if(y){ if(!cur||canDo(cur,y)) cells[y.id]={who:cur,kind:cur?"swap":"gap"}; else { cells[y.id]={who:null,kind:"gap"}; const h=wants(cur)[0]; if(h) (plus[h.id]=plus[h.id]||[]).push(cur); } }
     else { const k=Object.keys(plus).find(id=>plus[id].includes(o)); if(k){ plus[k]=plus[k].map(p=>p===o?cur:p).filter(Boolean); if(!plus[k].length) delete plus[k]; } }
     cells[x.id]={who:o,kind:"swap",base:cur}; });
   return {cells,crew:[],off:[],working:new Set(ppl.map(p=>p.id)),extras:[],spare:[],plus,allHands:true,ot:date<OPEN_FROM};
@@ -2031,7 +2032,7 @@ function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
   if(date>=OPEN_FROM&&date<=FIRST_END){ // 첫 주: 각자 정해진 하루만 쉬고 나머지는 근무
     const w=ALL_HANDS.includes(date)?ppl.slice():ppl.filter(p=>!(ctx.first[p.id]||[]).includes(date)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)), left=new Set(w.map(p=>p.id)), cells={};
     pos.forEach(x=>{ const base=res[x.id][d].who, o=ov[x.id]&&byId(ov[x.id]); let who=o&&left.has(o.id)?o:base&&left.has(base.id)?base:null; if(who){ cells[x.id]={who,kind:o?"swap":"main"}; left.delete(who.id); } });
-    pos.forEach(x=>{ if(cells[x.id]) return; const q=w.find(p=>left.has(p.id)&&pgroup(p)===x.group)||w.find(p=>left.has(p.id)); if(q){ cells[x.id]={who:q,kind:"cover"}; left.delete(q.id); } else cells[x.id]={who:null,kind:"gap"}; });
+    pos.forEach(x=>{ if(cells[x.id]) return; const q=w.find(p=>left.has(p.id)&&pgroup(p)===x.group&&canDo(p,x))||w.find(p=>left.has(p.id)&&canDo(p,x)); if(q){ cells[x.id]={who:q,kind:"cover"}; left.delete(q.id); } else cells[x.id]={who:null,kind:"gap"}; });
     let spare=w.filter(p=>left.has(p.id));
     const plus={}; if(ALL_HANDS.includes(date)){ // 전원 근무일: 남는 사람도 같은 층 자리에 더해서 다 나오게
       const cnt={}; spare.forEach(p=>{ const gp=pos.filter(x=>x.group===pgroup(p)), L=gp.length?gp:pos; const x=L.slice().sort((a,b)=>(cnt[a.id]||0)-(cnt[b.id]||0))[0]; if(!x) return; cnt[x.id]=(cnt[x.id]||0)+1; (plus[x.id]=plus[x.id]||[]).push(p); left.delete(p.id); }); spare=[]; }
@@ -2046,15 +2047,15 @@ function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
   const wkNights=p=>Object.entries(ctx.crews).filter(([dt,cs])=>weekKey(dt)===weekKey(date)&&cs.some(q=>q.id===p.id)).length;
   let extras=ctx.extra[d].filter(p=>!dropped.has(p.id)&&!isMust(p)&&!inCell().has(p.id));
   extras.sort((a,b)=>(post.has(a.id)?1:0)-(post.has(b.id)?1:0)); // 어제 야간한 사람은 대신 서는 데 맨 뒤로
-  const fill=(x,base,why)=>{ const ok=q=>!post.has(q.id); /* 어제 야간한 사람은 되도록 안 불러요 */ let i=extras.findIndex(q=>ok(q)&&pgroup(q)===x.group); if(i<0) i=extras.findIndex(ok); /* 같은 층 먼저, 없으면 다른 층 */
-    if(i<0&&!/야간 다음날/.test(why)) i=extras.findIndex(()=>true); if(i>=0){ cells[x.id]={who:extras[i],kind:"auto",base,why}; extras.splice(i,1); return true; } return false; };
+  const fill=(x,base,why)=>{ const ok=q=>!post.has(q.id); /* 어제 야간한 사람은 되도록 안 불러요 */ let i=extras.findIndex(q=>ok(q)&&canDo(q,x)&&pgroup(q)===x.group); if(i<0) i=extras.findIndex(q=>ok(q)&&canDo(q,x)); /* 같은 층 먼저, 없으면 다른 층 (같은 조 일만) */
+    if(i<0&&!/야간 다음날/.test(why)) i=extras.findIndex(q=>canDo(q,x)); if(i>=0){ cells[x.id]={who:extras[i],kind:"auto",base,why}; extras.splice(i,1); return true; } return false; };
   // 야간 주에 빠지는 사람 → 같은 층 지원 인원이 그 자리로
   pos.forEach(x=>{ const c=cells[x.id]; if(c.kind!=="swap"&&c.who&&dropped.has(c.who.id)) fill(x,c.who,"야간 주 휴무"); });
   // 필수 휴무 날짜인 사람 → 지원 인원 먼저, 없으면 그날 쉬는 사람 (40시간 안 넘는 사람 먼저)
   pos.forEach(x=>{ const c=cells[x.id]; if(!c.who||!isMust(c.who)) return; // 직접 바꾼 칸이라도 빼야 하는 날이면 빼요
     if(fill(x,c.who,"필수 휴무")) return;
     const busy=new Set([...inCell(),...crew.map(p=>p.id),...extras.map(p=>p.id)]);
-    const sub=ppl.filter(p=>!busy.has(p.id)&&!isMust(p)&&dayDays(p)<WORK_DAYS&&!wkNights(p)).sort((a,b)=>(post.has(a.id)?1:0)-(post.has(b.id)?1:0)||(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||(a.order||0)-(b.order||0))[0];
+    const sub=ppl.filter(p=>!busy.has(p.id)&&!isMust(p)&&dayDays(p)<WORK_DAYS&&!wkNights(p)&&canDo(p,x)).sort((a,b)=>(post.has(a.id)?1:0)-(post.has(b.id)?1:0)||(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||(a.order||0)-(b.order||0))[0];
     cells[x.id]=sub?{who:sub,kind:"auto",base:c.who,why:"필수 휴무"}:{who:null,kind:"gap",base:c.who}; });
   // 야간 다음날: 되도록 쉬게 (지원 인원 → 그날 쉬는 주4일 근무자 중 그 주 야간이 없는 사람), 안 되면 같은 일의 오후조로
   if(post.size){
@@ -2062,7 +2063,7 @@ function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
     pos.forEach(x=>{ const c=cells[x.id], q=c.who; if(!q||!post.has(q.id)||c.kind==="swap") return;
       if(fill(x,q,"야간 다음날 휴무")) return;
       const busy=new Set([...inCell(),...crew.map(p=>p.id),...extras.map(p=>p.id)]);
-      const sub=ppl.filter(p=>!busy.has(p.id)&&!post.has(p.id)&&!isMust(p)&&dayDays(p)<WORK_DAYS&&!wkNights(p))
+      const sub=ppl.filter(p=>!busy.has(p.id)&&!post.has(p.id)&&!isMust(p)&&dayDays(p)<WORK_DAYS&&!wkNights(p)&&canDo(p,x))
         .sort((a,b)=>(pgroup(a)===x.group?0:1)-(pgroup(b)===x.group?0:1)||(a.order||0)-(b.order||0))[0];
       if(sub){ cells[x.id]={who:sub,kind:"auto",base:q,why:"야간 다음날 휴무"}; return; }
       const later=pos.filter(y=>y.id!==x.id&&y.group===x.group&&kindOf(y)===kindOf(x)&&startOf(y)>startOf(x)&&cells[y.id].who&&cells[y.id].kind!=="swap"&&!post.has(cells[y.id].who.id))
@@ -2133,12 +2134,12 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
     const nt=night?`<span class="ptm nightm">+ 야간</span>`:"", lbl=j?esc(jobName(j.x.label))+(j.plus?` <span class="small muted">(추가)</span>`:""):nogoOn(p,dt)?"불가":"휴무";
     if(pr) return `<td class="${j?"":nogoOn(p,dt)?"offc nogo":"offc"}">${lbl}${tm}${nt}</td>`;
     if(ui.editCell===key){
-      const mine=pos.filter(x=>brkGroupOf(x)===grp), other=pos.filter(x=>brkGroupOf(x)!==grp);
+      const mine=pos.filter(x=>canDo(p,x)), other=[]; // 다른 조 일은 고를 수 없어요
       const opt=x=>{ const c=pl.cells[x.id], q=c&&c.who, me=j&&j.x.id===x.id, nm=esc(jobName(x.label));
         if(me) return `<option value="${x.id}" selected>${nm}${j.plus?" (추가)":""}</option>`;
         if(!q) return `<option value="${x.id}">${nm} · 사람 없음</option>`;
         const qn=pname(q)||"", wa=(c=>c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?"과":"와")(qn.charCodeAt(qn.length-1)); // 받침 있으면 '과'
-        return `<option value="${x.id}">${nm} · ${esc(qn)}${j&&!j.plus?wa+" 맞바꿈":" 대신"}</option><option value="${x.id}|plus">${nm} · ${esc(qn)}${wa} 같이 (추가)</option>`; };
+        return `<option value="${x.id}">${nm} · ${esc(qn)}${j&&!j.plus&&canDo(q,j.x)?wa+" 맞바꿈":" 대신"}</option><option value="${x.id}|plus">${nm} · ${esc(qn)}${wa} 같이 (추가)</option>`; };
       return `<td class="editing"><select data-pjob="${key}" aria-label="${esc(pname(p))} ${+dt.slice(5,7)}/${+dt.slice(8)} 맡을 일"><option value="-off" ${j?"":"selected"}>${nogoOn(p,dt)?"불가 (쉬어요)":"휴무"}</option>${mine.map(opt).join("")}${other.length?`<optgroup label="다른 조 일">${other.map(opt).join("")}</optgroup>`:""}</select>${j?tUI(dt,j.x,p):""}<button type="button" class="linkbtn small" data-celldone>닫기</button></td>`; }
     const cls=!j?(nogoOn(p,dt)?"offc nogo":"offc"):j.c&&(j.c.kind==="swap"||j.c.kind==="auto")?"swp":"";
     return `<td class="${cls}"><button class="cellbtn" data-cell="${key}" title="눌러서 맡을 일 고르기">${lbl}</button>${mw}${tm}${nt}</td>`; };
