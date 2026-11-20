@@ -1022,7 +1022,7 @@ function syncRoster(){
   const sig="all5|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig+"|"+roleSig;
   const cfg=state.settings.find(x=>x.id==="cfg-roster3");
   // 자리 구성·야간이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 딱 맞지 않으면 다시 짜요
-  const exact=()=>{ const {res}=coverage(); return DAYS.every((_,d)=>pos.every(x=>res[x.id][d].who)); }; // 남는 사람은 지원 근무
+  const exact=()=>{ const {res}=coverage(); return DAYS.every((_,d)=>pos.every(x=>optSeat(x)||res[x.id][d].who)); }; // 남는 사람은 지원 근무
   const recheck=!rosterChecked; rosterChecked=true;
   if(cfg&&cfg.sig===sig&&!(recheck&&!exact())) return;
   const ppl=alba().slice().sort((a,b)=>(a.order||0)-(b.order||0)), changed=new Map();
@@ -1482,15 +1482,17 @@ function coverage(){
   pos.forEach(x=>res[x.id]=DAYS.map(()=>null));
   DAYS.forEach((_,d)=>{
     ALLG.forEach(g=>{
-      const gp=pos.filter(x=>x.group===g.id), used=new Set();
+      const gpAll=pos.filter(x=>x.group===g.id), used=new Set();
       const work=ppl.filter(p=>pgroup(p)===g.id&&on(p,d)).sort((a,b)=>(a.kind==="대타"?1:0)-(b.kind==="대타"?1:0)||(a.order||0)-(b.order||0)); // 고정 먼저
       const fill=(x,w)=>{used.add(w.id); res[x.id][d]={who:w,kind:w.kind==="대타"?"cover":"main"};};
       const hasR=p=>rolesOf(p).length, okR=(p,x)=>!hasR(p)||roleFits(p,x); // 역할(A~E)을 골라 둔 사람은 그 묶음 자리에만 먼저
       const home=(p,x)=>p.pos===x.id||(!p.pos&&p.slot&&x.slot&&p.slot===x.slot.id);
+      [gpAll.filter(x=>!optSeat(x)),gpAll.filter(optSeat)].forEach((gp,opt)=>{ // 꼭 필요한 자리 먼저, 대기 안내는 남는 사람으로
       gp.forEach(x=>{const w=work.find(p=>!used.has(p.id)&&hasR(p)&&okR(p,x)&&home(p,x)); if(w) fill(x,w);}); // 역할을 고른 사람: 원래 자리가 역할에 맞으면 거기
       gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)&&hasR(p)&&okR(p,x)); if(w) fill(x,w); }); // 아니면 역할이 맞는 다른 자리
       gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)&&!hasR(p)&&home(p,x)); if(w) fill(x,w); }); // 역할을 안 고른 사람은 원래 자리
-      gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)&&canDo(p,x)); if(w) fill(x,w); else res[x.id][d]={who:null,kind:"gap"}; }); // 다른 조 사람은 안 넣어요
+      gp.forEach(x=>{ if(res[x.id][d]) return; const w=work.find(p=>!used.has(p.id)&&canDo(p,x)); if(w) fill(x,w); else res[x.id][d]={who:null,kind:opt?"opt":"gap"}; }); // 다른 조 사람은 안 넣어요
+      });
       work.filter(p=>!used.has(p.id)).forEach(p=>extra[d].push(p));
     });
     ppl.filter(p=>!ALLG.some(g=>g.id===pgroup(p))&&on(p,d)).forEach(p=>extra[d].push(p));
@@ -1865,7 +1867,7 @@ function popPos(x,y){ return `left:${x}%;top:${y}%;transform:translate(${x<30?"-
 function mkPop(m,who,cov){
   const t=TYPES[m.type]||{}, q=Number(m.qty)||1;
   const week=cov&&cov[m.id]?`<div class="pweek">${WK.map(i=>[DAYS[i],i]).map(([x,i])=>{ const c=cov[m.id][i], g=!c||c.kind==="gap";
-    return `<span class="${i===ui.staffDay?"on":""} ${g?"gap":""}"><b>${x}</b>${g?"빈자리":esc(pname(c.who))}</span>`; }).join("")}</div>`:"";
+    return `<span class="${i===ui.staffDay?"on":""} ${g?"gap":""}"><b>${x}</b>${g?"빈자리":c.who?esc(pname(c.who)):"–"}</span>`; }).join("")}</div>`:"";
   const its=state.items.filter(i=>i.link===m.type).sort((a,b)=>(!!b.image-!!a.image)||(!!b.chosen-!!a.chosen)).slice(0,3); /* 사진 있는(최종 선택된) 물품 먼저 */
   return `<div class="mkpop" style="${popPos(m.x,m.y)}" role="dialog" aria-label="${esc(m.label||t.name||"")}">
     <button class="x" data-popx aria-label="닫기">×</button>
@@ -1937,6 +1939,7 @@ const brkGroupOf=x=>{ const n=jobName(x.label||""); const g=BRK_GROUPS.find(([, 
 const roleLetter=r=>{ if(BRK_GROUPS.some(g=>g[0]===r)) return r; const g=BRK_GROUPS.find(([, ,re])=>re.test(r||"")); return g?g[0]:""; };
 const rolesOf=p=>[...new Set((p.roles||[]).map(roleLetter).filter(Boolean))].sort();
 const roleFits=(p,x)=>rolesOf(p).includes(brkGroupOf(x));
+const optSeat=x=>!!x&&/대기\s*안내/.test(jobName(x.label||"")); // 대기 안내: 있으면 좋고 없어도 되는 자리 (빈자리로 안 세고, 대신 설 사람도 안 불러요)
 const canDo=(p,x)=>!!p&&(!rolesOf(p).length||roleFits(p,x)); // 다른 조(역할) 일은 안 맡아요 (역할 없는 사람만 아무 일이나)
 const brkMates=(x,pos)=>{ const g=brkGroupOf(x); return g?pos.filter(y=>y!==x&&brkGroupOf(y)===g):[]; };
 const posBrk=x=>{ const b=(posCfg()[x.id]||{}).brk||(x.slot&&x.slot.brk)||""; return /\d:\d\d/.test(b)?b.split("~")[0]:""; };
@@ -2014,7 +2017,7 @@ function allHandsPlan(ctx,date){
     const cand=[]; Object.keys(plus).forEach(id=>{ if((pos.find(y=>y.id===id)||{}).group===x.group) plus[id].forEach(p=>{ if(canDo(p,x)) cand.push({id,p}); }); });
     cand.sort((a,b)=>(rolesOf(a.p).length?1:0)-(rolesOf(b.p).length?1:0)); // 역할을 고른 사람은 그 자리에 두고, 역할 없는 사람부터 빈 자리로
     if(cand.length){ const {id,p}=cand[0]; plus[id]=plus[id].filter(q=>q!==p); if(!plus[id].length) delete plus[id]; cells[x.id]={who:p,kind:"cover"}; return; }
-    cells[x.id]={who:null,kind:"gap"}; });
+    cells[x.id]={who:null,kind:optSeat(x)?"opt":"gap"}; });
   const cnt={}; left.forEach(p=>{ const gp=pos.filter(x=>x.group===pgroup(p)), L=gp.length?gp:pos, x=L.slice().sort((a,b)=>(cnt[a.id]||0)-(cnt[b.id]||0))[0]; if(!x) return; cnt[x.id]=(cnt[x.id]||0)+1; (plus[x.id]=plus[x.id]||[]).push(p); });
   // 근무표에서 그날 직접 바꾼 칸: 그 사람을 이 자리로, 원래 사람은 그 사람이 있던 자리로 맞바꿔요
   const ov=ovrAll()[date]||{};
@@ -2034,7 +2037,7 @@ function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
   if(date>=OPEN_FROM&&date<=FIRST_END){ // 첫 주: 각자 정해진 하루만 쉬고 나머지는 근무
     const w=ALL_HANDS.includes(date)?ppl.slice():ppl.filter(p=>!(ctx.first[p.id]||[]).includes(date)&&!mustDates(p).includes(date)&&!mustDow(p).includes(d)), left=new Set(w.map(p=>p.id)), cells={};
     pos.forEach(x=>{ const base=res[x.id][d].who, o=ov[x.id]&&byId(ov[x.id]); let who=o&&left.has(o.id)?o:base&&left.has(base.id)?base:null; if(who){ cells[x.id]={who,kind:o?"swap":"main"}; left.delete(who.id); } });
-    pos.forEach(x=>{ if(cells[x.id]) return; const q=w.find(p=>left.has(p.id)&&pgroup(p)===x.group&&canDo(p,x))||w.find(p=>left.has(p.id)&&canDo(p,x)); if(q){ cells[x.id]={who:q,kind:"cover"}; left.delete(q.id); } else cells[x.id]={who:null,kind:"gap"}; });
+    pos.forEach(x=>{ if(cells[x.id]) return; const q=w.find(p=>left.has(p.id)&&pgroup(p)===x.group&&canDo(p,x))||w.find(p=>left.has(p.id)&&canDo(p,x)); if(q){ cells[x.id]={who:q,kind:"cover"}; left.delete(q.id); } else cells[x.id]={who:null,kind:optSeat(x)?"opt":"gap"}; });
     let spare=w.filter(p=>left.has(p.id));
     const plus={}; if(ALL_HANDS.includes(date)){ // 전원 근무일: 남는 사람도 같은 층 자리에 더해서 다 나오게
       const cnt={}; spare.forEach(p=>{ const gp=pos.filter(x=>x.group===pgroup(p)), L=gp.length?gp:pos; const x=L.slice().sort((a,b)=>(cnt[a.id]||0)-(cnt[b.id]||0))[0]; if(!x) return; cnt[x.id]=(cnt[x.id]||0)+1; (plus[x.id]=plus[x.id]||[]).push(p); left.delete(p.id); }); spare=[]; }
@@ -2049,7 +2052,7 @@ function dayPlan0(ctx,date){ // 그날 자리별 사람 (바꾼 사람·대체 �
   const wkNights=p=>Object.entries(ctx.crews).filter(([dt,cs])=>weekKey(dt)===weekKey(date)&&cs.some(q=>q.id===p.id)).length;
   let extras=ctx.extra[d].filter(p=>!dropped.has(p.id)&&!isMust(p)&&!inCell().has(p.id));
   extras.sort((a,b)=>(post.has(a.id)?1:0)-(post.has(b.id)?1:0)); // 어제 야간한 사람은 대신 서는 데 맨 뒤로
-  const fill=(x,base,why)=>{ const ok=q=>!post.has(q.id); /* 어제 야간한 사람은 되도록 안 불러요 */ let i=extras.findIndex(q=>ok(q)&&canDo(q,x)&&pgroup(q)===x.group); if(i<0) i=extras.findIndex(q=>ok(q)&&canDo(q,x)); /* 같은 층 먼저, 없으면 다른 층 (같은 조 일만) */
+  const fill=(x,base,why)=>{ if(optSeat(x)){ cells[x.id]={who:null,kind:"opt",base,why}; return true; } const ok=q=>!post.has(q.id); /* 어제 야간한 사람은 되도록 안 불러요 */ let i=extras.findIndex(q=>ok(q)&&canDo(q,x)&&pgroup(q)===x.group); if(i<0) i=extras.findIndex(q=>ok(q)&&canDo(q,x)); /* 같은 층 먼저, 없으면 다른 층 (같은 조 일만) */
     if(i<0&&!/야간 다음날/.test(why)) i=extras.findIndex(q=>canDo(q,x)); if(i>=0){ cells[x.id]={who:extras[i],kind:"auto",base,why}; extras.splice(i,1); return true; } return false; };
   // 야간 주에 빠지는 사람 → 같은 층 지원 인원이 그 자리로
   pos.forEach(x=>{ const c=cells[x.id]; if(c.kind!=="swap"&&c.who&&dropped.has(c.who.id)) fill(x,c.who,"야간 주 휴무"); });
@@ -2144,7 +2147,7 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
     return `<td class="${cls}"><button class="cellbtn" data-cell="${key}" title="눌러서 맡을 일 고르기">${lbl}</button>${mw}${tm}${nt}</td>`; };
   let body=GKEYS.filter(k=>byG[k]&&byG[k].length).map(k=>{ const L=byG[k].slice().sort(ko), mine=pos.filter(x=>brkGroupOf(x)===(k==="~"?"":k));
     const emptyRow=mine.length?`<tr class="plusrow"><td class="rl"><span class="small muted">↳ 사람 없는 일</span></td>${dates.map((dt,i)=>{ if(!open(dt)||plans[i].closed||plans[i].prep) return open(dt)?`<td></td>`:closed;
-      const E=mine.filter(x=>plans[i].cells[x.id]&&!plans[i].cells[x.id].who); return `<td class="small ${E.length?"gapc":"muted"}">${E.map(x=>esc(jobName(x.label))).join("<br>")||"–"}</td>`; }).join("")}</tr>`:"";
+      const E=mine.filter(x=>!optSeat(x)&&plans[i].cells[x.id]&&!plans[i].cells[x.id].who); return `<td class="small ${E.length?"gapc":"muted"}">${E.map(x=>esc(jobName(x.label))).join("<br>")||"–"}</td>`; }).join("")}</tr>`:"";
     return sec(gName(k),`${L.length}명`)+L.map(p=>`<tr data-person="${p.id}"><td class="rl ${over(p)?"overtxt":""}">${esc(pname(p))}<span class="brk num">주 ${+(wk[p.id]||0).toFixed(1)}시간</span></td>${dates.map((dt,i)=>cellOf(p,dt,i,k)).join("")}</tr>`).join("")+emptyRow; }).join("");
   if(plans.some(pl=>pl.prep)) body+=sec("OT · 시뮬레이션","전원 8시간")+`<tr><td class="rl">전원 근무</td>${dates.map((dt,i)=>plans[i].prep?`<td class="nt">${plans[i].prep.length}명</td>`:open(dt)?`<td></td>`:closed).join("")}</tr>`;
   const under=alba().map(p=>({p,h:wk[p.id]||0})).filter(o=>o.h<MAX_H).sort((a,b)=>a.h-b.h||(a.p.order||0)-(b.p.order||0));
@@ -2157,7 +2160,8 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
     if(plans[i].allHands) return `<td class="ok">전원 ${plans[i].working.size}</td>`;
     if(plans[i].closed) return `<td class="closed">휴관</td>`;
     const pn=Object.values(plans[i].plus).reduce((s,L)=>s+L.length,0);
-    return `<td class="${t===DAILY_ALBA?"ok":"bad"}">알바 ${t}${pn?` <span class="small">+${pn}</span>`:""}${nightCfg().dates.includes(dt)?`<br>+야간 ${n}`:""}</td>`; }).join("")}</tr>`;
+    const need=Object.keys(plans[i].cells).filter(id=>!optSeat(pos.find(x=>x.id===id))).length;
+    return `<td class="${t>=need?"ok":"bad"}">알바 ${t}${pn?` <span class="small">+${pn}</span>`:""}${nightCfg().dates.includes(dt)?`<br>+야간 ${n}`:""}</td>`; }).join("")}</tr>`;
   const closedBar0=`<div class="row small noprint" style="gap:6px;margin-bottom:8px"><span class="muted">휴관일</span>${closedDays().slice().sort().map(d=>`<span class="chip mchip">${+d.slice(5,7)}/${+d.slice(8)} (${DAYS[dowOf(d)]})<button class="x" data-closedrm="${d}" aria-label="휴관 취소">×</button></span>`).join("")}<input type="date" id="closedAdd" min="${OPEN_FROM}" max="${OPEN_TO}" style="font-size:12px"></div>`;
   if(pr) return `<table class="rota">${head}${body}</table>`;
   const hrs=alba().slice().sort((a,b)=>String(pname(a)||"").localeCompare(String(pname(b)||""),"ko",{numeric:true}));
@@ -2313,7 +2317,7 @@ function staffMap(res,extra){
     let who="", gap=false, faded=false; const c=res[m.id]&&res[m.id][d];
     if(!res[m.id]) faded=true;
     else if(!c||c.kind==="gap") gap=true;
-    else who=pname(c.who);
+    else who=c.who?pname(c.who):"";
     return {id:m.id,x:m.x,y:m.y,color:gap?"var(--bad)":tcolor("staff"),text:gap?"!":"●",label:jobName(m.label)+(who?` · ${who}`:""),gap,faded};
   });
   const dayseg=`<div class="seg daypick" role="group" aria-label="요일">${WK.map(i=>`<button data-day="${i}" aria-pressed="${d===i}">${DAYS[i]}</button>`).join("")}</div>`;
