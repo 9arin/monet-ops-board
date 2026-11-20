@@ -1019,7 +1019,7 @@ function syncRoster(){
   const ns=nightStats(), nightSig=`night:${nightBase()}+${nightExtra()}`;
   const mustSig="must:"+alba().map(p=>mustDow(p).length?p.id+mustDow(p).join(""):"").filter(Boolean).sort().join(",");
   const roleSig="role:"+alba().map(p=>p.id+(rolesOf(p).join("")||"-")).sort().join(","); // 사람을 더하거나 역할(A~E)을 바꾸면 다시 짜요
-  const sig="all5|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig+"|"+roleSig;
+  const sig="all5o|"+Object.entries(need).map(([g,n])=>g+":"+n).sort().join("|")+"|"+mustSig+"|"+nightSig+"|"+roleSig;
   const cfg=state.settings.find(x=>x.id==="cfg-roster3");
   // 자리 구성·야간이 바뀌었거나, (페이지를 열 때 한 번) 어느 요일이라도 딱 맞지 않으면 다시 짜요
   const exact=()=>{ const {res}=coverage(); return DAYS.every((_,d)=>pos.every(x=>optSeat(x)||res[x.id][d].who)); }; // 남는 사람은 지원 근무
@@ -1072,12 +1072,12 @@ function syncRoster(){
     return m.every(p=>(p.off||[]).length>=7-D&&fits(p,p.off||[]))&&DAYS.every((_,d)=>m.filter(p=>!(p.off||[]).includes(d)).length>=P)
       &&(!sz||m.map(p=>(p.off||[]).length).sort().join()===sz.slice().sort().join()); }); // 계획한 근무일 구성인지
   const missed=new Set();
-  if(!allOk||!cfg||!String(cfg.sig).endsWith(mustSig+"|"+nightSig+"|"+roleSig)){ // 필수 휴무·야간 날짜·사람·역할 구성이 바뀌어도 다시 짜요
+  if(!allOk||!cfg||!String(cfg.sig).startsWith("all5o|")||!String(cfg.sig).endsWith(mustSig+"|"+nightSig+"|"+roleSig)){ // 필수 휴무·야간 날짜·사람·역할 구성이 바뀌어도 다시 짜요
     zones.forEach(g=>{ const P=need[g.id], m=mem[g.id], D=poolDays(g.id,pos);
       const w=ns.byDow.some(x=>x)?ns.byDow:DAYS.map((_,i)=>i===4?1:0);
       const score=r=>-blocks(m.length,P,r,D,g.id).flat().filter(d=>d>=4).length; // 금·토·일에 쉬는 사람이 적게 (지원 인원이 주말에)
       // 역할(A~E) 맞추기: 날마다 그 역할 자리를 그 역할 사람이 최대한 채우도록 쉬는 요일을 사람끼리 바꿔 봐요
-      const gpos=pos.filter(x=>x.group===g.id), seatN={}; gpos.forEach(x=>{ const k=brkGroupOf(x); seatN[k]=(seatN[k]||0)+1; });
+      const gpos=pos.filter(x=>x.group===g.id&&!optSeat(x)), seatN={}; gpos.forEach(x=>{ const k=brkGroupOf(x); seatN[k]=(seatN[k]||0)+1; }); // 대기 안내는 빼고 꼭 필요한 자리만
       const cost=O=>{ let c=0; for(let d=0;d<7;d++){ const need={...seatN}; let free=0;
           m.map((p,i)=>[p,i]).filter(([p,i])=>!O[i].includes(d)).sort((a,b)=>rolesOf(a[0]).length-rolesOf(b[0]).length).forEach(([p])=>{ const R=rolesOf(p); if(!R.length){ free++; return; } const k=R.find(k=>need[k]>0); if(k) need[k]--; });
           c+=Math.max(0,Object.values(need).reduce((s,v)=>s+v,0)-free); } return c; };
