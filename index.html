@@ -842,6 +842,7 @@ const loaded = {markers:false,items:false,staff:false,tasks:false,quotes:false,f
 const ui = {tab:"plan",floor:"4F",hidden:new Set(),addType:null,sel:null,labels:true,taskFilter:"open",confirmDel:null,
   mapOpen:true,staffDay:(new Date().getDay()+6)%7,itemFocus:null,placingTask:null,taskSel:null,quoteFilter:null,openItem:null,slotEdit:false,planEdit:false,unlockKey:null,gSel:null,gAdd:null,gStart:null,kindFilter:null,hiPos:null,hiItem:null,rotaWeek:null,editCell:null,mustOpen:null,mustMon:null,editPos:null,staffSub:"rota",personOpen:null,zoneOpen:null,zDraw:null,gOpen:new Set(),quotesOpen:false};
 ui.vView=(()=>{ try{ return localStorage.getItem("mb-vview")||"box"; }catch(e){ return "box"; } })();
+try{ const rl=JSON.parse(sessionStorage.getItem("mb-reload")||"null"); sessionStorage.removeItem("mb-reload"); if(rl){ if(rl.rotaWeek) ui.rotaWeek=rl.rotaWeek; if(rl.staffSub) ui.staffSub=rl.staffSub; if(rl.y) setTimeout(()=>scrollTo(0,rl.y),1500); } }catch(e){}
 try{const t=localStorage.getItem("mb-tab"); if(t) ui.tab=t; const f=localStorage.getItem("mb-floor"); if(f) ui.floor=f; if(localStorage.getItem("mb-map")==="0") ui.mapOpen=false; const ss=localStorage.getItem("mb-staffsub"); if(ss) ui.staffSub=ss;}catch(e){}
 let db=null, mode="loading";
 
@@ -1174,21 +1175,24 @@ async function onSession(session){
   authClient.auth.onAuthStateChange((_ev,session)=>{ const k=session?session.user.id:null; if(k===last) return; last=k; onSession(session); });
   const {data:{session}}=await authClient.auth.getSession(); if((session?session.user.id:null)!==last){ last=session?session.user.id:null; onSession(session); }
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&mode==="db") loadAll(); if(!document.hidden) checkUpdate(); });
-  setInterval(checkUpdate,60000); setTimeout(checkUpdate,5000);
+  setInterval(checkUpdate,30000); setTimeout(checkUpdate,5000);
 })();
 
 // 새 버전이 올라오면 오래 열어 둔 화면(현장 모니터 등)도 알아서 새로고침 → 옛 버전이 데이터를 건드리지 않게
 let pageSig=null, updateWaiting=false;
 let lastInteract=Date.now(); ["pointerdown","keydown","input"].forEach(ev=>document.addEventListener(ev,()=>{ lastInteract=Date.now(); },true));
 // 새 버전을 찾아도 쓰는 중엔 절대 새로고침하지 않아요 (안내도 안 띄워요). 다른 탭에 갔다 돌아올 때나, 10분 동안 아무것도 안 만졌을 때만 조용히 새로고침
-const quietReload=()=>{ if(updateWaiting&&!typing()&&!busy()&&!ui.planEdit&&!ui.addType) location.reload(); };
+const quietReload=()=>{ if(updateWaiting&&!typing()&&!busy()&&!ui.planEdit&&!ui.addType&&!ui.editCell&&!pointerIsDown){ // 보던 주·화면 위치는 그대로
+    try{ sessionStorage.setItem("mb-reload",JSON.stringify({rotaWeek:ui.rotaWeek,staffSub:ui.staffSub,y:scrollY})); }catch(e){} location.reload(); } };
+// 고친 게 올라오면 손을 20초 놓았을 때 바로 새 버전으로 (예전 버전으로 계속 고치면 고친 게 안 먹어요)
+setInterval(()=>{ if(updateWaiting&&Date.now()-lastInteract>20000) quietReload(); },5000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&updateWaiting) quietReload(); });
 async function checkUpdate(){
   try{ if(!updateWaiting){ const t=await (await fetch(location.pathname+"?u="+Date.now(),{cache:"no-store"})).text();
       let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0;
       if(pageSig===null){ pageSig=h; return; }
       if(h!==pageSig) updateWaiting=true; }
-    if(updateWaiting&&Date.now()-lastInteract>10*60*1000) quietReload();
+    if(updateWaiting&&Date.now()-lastInteract>20000) quietReload();
   }catch(e){}
 }
 
