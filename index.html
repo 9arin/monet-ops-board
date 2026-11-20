@@ -1989,7 +1989,9 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
   // '같이 (추가)'는 직접 고친 칸을 다 반영한 뒤에 넣어요 (먼저 넣으면 곧 자리에서 밀려날 사람으로 보고 빠졌어요)
   ctx.pos.forEach(x=>{ const ids=ov[x.id+"+"]; if(!Array.isArray(ids)) return;
     const inCell=id=>Object.values(pl.cells).some(c=>c.who&&c.who.id===id)||Object.values(pl.plus).some(L=>L.some(q=>q.id===id)); // '남는 사람'은 근무 중이 아니에요 (예전엔 이걸 근무로 봐서 추가가 빠졌어요)
-    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!inCell(p.id)&&!crew.some(c=>c.id===p.id)); // 직접 넣은 사람은 근무 불가 날이어도 넣어요 (넣을 때 확인 팝업)
+    const inSeat=id=>Object.values(pl.cells).some(c=>c.who&&c.who.id===id);
+    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!inSeat(p.id)&&!crew.some(c=>c.id===p.id)); // 직접 넣은 사람은 근무 불가 날이어도 넣어요 (넣을 때 확인 팝업)
+    L.forEach(p=>Object.keys(pl.plus).forEach(k=>{ pl.plus[k]=pl.plus[k].filter(q=>q.id!==p.id); if(!pl.plus[k].length) delete pl.plus[k]; })); // 전원 근무일 등에 자동으로 다른 일에 붙어 있던 건 빼요 (튜브물감 추가가 안 되던 문제)
     if(L.length){ pl.plus[x.id]=(pl.plus[x.id]||[]).concat(L); L.forEach(p=>pl.working.add(p.id)); } });
   if(!pl.allHands){ const W=new Set(); Object.values(pl.cells).forEach(c=>c.who&&W.add(c.who.id)); Object.values(pl.plus).forEach(L=>L.forEach(q=>W.add(q.id))); pl.working=W; pl.off=ppl.filter(p=>!W.has(p.id)&&!crew.some(c=>c.id===p.id)); }
   else pl.off=pl.off.filter(p=>!pl.working.has(p.id));
@@ -2131,15 +2133,12 @@ function rotaHTML(pos,res,pr,actions){ // pr: 인쇄용 (버튼·편집 없이)
     const j=jobAt(pl,p), key=`${dt}|p|${p.id}`, night=pl.crew.some(q=>q.id===p.id);
     const tm=j&&pTimeSet(dt,j.x,p.id)?`<span class="ptm num">${esc(pTime(dt,j.x,p.id).replace(/,/g," · "))}</span>`:"";
     const mw=(j||night)&&nogoOn(p,dt)?`<span class="ptm mustw" title="역할 부여에서 근무 불가로 고른 날이에요">⚠ 근무 불가 날</span>`:"";
-    const nt=night?`<span class="ptm nightm">+ 야간</span>`:"", lbl=j?esc(jobName(j.x.label))+(j.plus?` <span class="small muted">(추가)</span>`:""):nogoOn(p,dt)?"불가":"휴무";
+    const nt=night?`<span class="ptm nightm">+ 야간</span>`:"", lbl=j?esc(jobName(j.x.label)):nogoOn(p,dt)?"불가":"휴무";
     if(pr) return `<td class="${j?"":nogoOn(p,dt)?"offc nogo":"offc"}">${lbl}${tm}${nt}</td>`;
     if(ui.editCell===key){
       const mine=pos.filter(x=>canDo(p,x)), other=[]; // 다른 조 일은 고를 수 없어요
-      const opt=x=>{ const c=pl.cells[x.id], q=c&&c.who, me=j&&j.x.id===x.id, nm=esc(jobName(x.label));
-        if(me) return `<option value="${x.id}" selected>${nm}${j.plus?" (추가)":""}</option>`;
-        if(!q) return `<option value="${x.id}">${nm} · 사람 없음</option>`;
-        const qn=pname(q)||"", wa=(c=>c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28?"과":"와")(qn.charCodeAt(qn.length-1)); // 받침 있으면 '과'
-        return `<option value="${x.id}">${nm} · ${esc(qn)}${j&&!j.plus&&canDo(q,j.x)?wa+" 맞바꿈":" 대신"}</option><option value="${x.id}|plus">${nm} · ${esc(qn)}${wa} 같이 (추가)</option>`; };
+      const opt=x=>{ const me=j&&j.x.id===x.id, nm=esc(jobName(x.label));
+        return `<option value="${x.id}" ${me?"selected":""}>${nm}</option>`; };
       return `<td class="editing"><select data-pjob="${key}" aria-label="${esc(pname(p))} ${+dt.slice(5,7)}/${+dt.slice(8)} 맡을 일"><option value="-off" ${j?"":"selected"}>${nogoOn(p,dt)?"불가 (쉬어요)":"휴무"}</option>${mine.map(opt).join("")}${other.length?`<optgroup label="다른 조 일">${other.map(opt).join("")}</optgroup>`:""}</select>${j?tUI(dt,j.x,p):""}<button type="button" class="linkbtn small" data-celldone>닫기</button></td>`; }
     const cls=!j?(nogoOn(p,dt)?"offc nogo":"offc"):j.c&&(j.c.kind==="swap"||j.c.kind==="auto")?"swp":"";
     return `<td class="${cls}"><button class="cellbtn" data-cell="${key}" title="눌러서 맡을 일 고르기">${lbl}</button>${mw}${tm}${nt}</td>`; };
@@ -2268,7 +2267,8 @@ function bindRota(){
   document.querySelectorAll("[data-pjob]").forEach(sel=>{ sel.onchange=()=>{ const [dt,,pid]=sel.dataset.pjob.split("|"), v=sel.value, p=alba().find(q=>q.id===pid); if(!p) return;
       if(v!=="-off"&&!mustOK(dt,pid)){ render(); return; }
       const pl=dayPlan(planCtx(),dt), x0=positions().find(y=>pl.cells[y.id]&&pl.cells[y.id].who&&pl.cells[y.id].who.id===pid), k0=!x0&&Object.keys(pl.plus||{}).find(id=>pl.plus[id].some(q=>q.id===pid));
-      const [xid,mode]=v.split("|");
+      const xid=v, mode=v!=="-off"&&pl.cells[xid]&&pl.cells[xid].who&&pl.cells[xid].who.id!==pid?"plus":""; // 고른 일: 비어 있으면 그 자리에, 사람이 있으면 같이 (아무도 밀려나지 않아요)
+      if(v!=="-off"&&(x0&&x0.id===xid||k0===xid)){ ui.editCell=null; render(); return; }
       ovPut(dt,day=>{
         if(k0){ const L=(day[k0+"+"]||[]).filter(i=>i!==pid); if(L.length) day[k0+"+"]=L; else delete day[k0+"+"]; } // 추가로 들어가 있던 데서 빼요
         if(x0&&(v==="-off"||mode==="plus")) day[x0.id]="-"; // 원래 맡던 일은 비워요
