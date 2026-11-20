@@ -1959,10 +1959,6 @@ function nightDrops(pos,extra,crews,res){ // 야간을 해서 40시간이 넘는
 function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 것 (cfg-ovr days[날짜]["자리id+"] = [사람])
   const pl=dayPlan0(ctx,date); pl.plus=pl.plus||{}; if(pl.closed||pl.prep) return pl;
   const ov=ovrAll()[date]||{}, d=dowOf(date), ppl=alba(), crew=pl.crew||[];
-  ctx.pos.forEach(x=>{ const ids=ov[x.id+"+"]; if(!Array.isArray(ids)) return;
-    const inCell=id=>Object.values(pl.cells).some(c=>c.who&&c.who.id===id)||Object.values(pl.plus).some(L=>L.some(q=>q.id===id)); // '남는 사람'은 근무 중이 아니에요 (예전엔 이걸 근무로 봐서 추가가 빠졌어요)
-    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!inCell(p.id)&&!crew.some(c=>c.id===p.id)); // 직접 넣은 사람은 근무 불가 날이어도 넣어요 (넣을 때 확인 팝업)
-    if(L.length){ pl.plus[x.id]=(pl.plus[x.id]||[]).concat(L); L.forEach(p=>pl.working.add(p.id)); } });
   // 근무표에서 직접 고친 칸을 마지막에 꼭 반영해요: '-'는 빈자리, 다른 자리에 선 사람을 고르면 두 사람이 자리를 맞바꿔요
   const byId=id=>ppl.find(p=>p.id===id);
   ctx.pos.forEach(x=>{ const v=ov[x.id], c=pl.cells[x.id]; if(!v||!c) return; const cur=c.who;
@@ -1973,6 +1969,11 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
     if(y) pl.cells[y.id]={who:back,kind:back?"swap":"gap",base:t};
     else Object.keys(pl.plus).forEach(k=>{ if(pl.plus[k].includes(t)){ pl.plus[k]=pl.plus[k].map(q=>q===t?cur:q).filter(Boolean); if(!pl.plus[k].length) delete pl.plus[k]; } });
     pl.cells[x.id]={who:t,kind:"swap",base:cur}; });
+  // '같이 (추가)'는 직접 고친 칸을 다 반영한 뒤에 넣어요 (먼저 넣으면 곧 자리에서 밀려날 사람으로 보고 빠졌어요)
+  ctx.pos.forEach(x=>{ const ids=ov[x.id+"+"]; if(!Array.isArray(ids)) return;
+    const inCell=id=>Object.values(pl.cells).some(c=>c.who&&c.who.id===id)||Object.values(pl.plus).some(L=>L.some(q=>q.id===id)); // '남는 사람'은 근무 중이 아니에요 (예전엔 이걸 근무로 봐서 추가가 빠졌어요)
+    const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!inCell(p.id)&&!crew.some(c=>c.id===p.id)); // 직접 넣은 사람은 근무 불가 날이어도 넣어요 (넣을 때 확인 팝업)
+    if(L.length){ pl.plus[x.id]=(pl.plus[x.id]||[]).concat(L); L.forEach(p=>pl.working.add(p.id)); } });
   if(!pl.allHands){ const W=new Set(); Object.values(pl.cells).forEach(c=>c.who&&W.add(c.who.id)); Object.values(pl.plus).forEach(L=>L.forEach(q=>W.add(q.id))); pl.working=W; pl.off=ppl.filter(p=>!W.has(p.id)&&!crew.some(c=>c.id===p.id)); }
   else pl.off=pl.off.filter(p=>!pl.working.has(p.id));
   return pl;
