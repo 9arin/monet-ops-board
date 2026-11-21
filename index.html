@@ -914,13 +914,46 @@ function applyRow(row){ if(!row||!COLS.includes(row.col)||String(row.id).include
   const o=c==="files"?{id:row.id,...((row.data||{}).meta||{})}:{id:row.id,...row.data}; // 파일 본문(b64)은 필요할 때만 받아요
   const i=state[c].findIndex(x=>x.id===row.id); if(i>=0) state[c][i]=o; else state[c].push(o); }
 let lastLoadSig=null;
+// 전송량 아끼기: 처음 한 번만 전부 받고, 그다음엔 '바뀐 게 있나'만 아주 작게 물어봐요.
+// 바뀐 줄(updated_at이 달라진 줄)만 다시 받고, 지워진 줄은 목록에서 빼요. (예전엔 10초마다 사진까지 전부 받아서 무료 전송량을 다 썼어요)
+let rowCache=null, lastProbe=null, lastListAt=0;
+const rkey=r=>r.col+"|"+r.id;
+async function fetchFull(ids){ // ids 없으면 전부
+  const q1=db.from(TABLE).select("col,id,data,updated_at").not("id","like","f-%").not("id","like","%~%");
+  const q2=db.from(TABLE).select("col,id,updated_at,meta:data->meta").eq("col","items").like("id","f-%").not("id","like","%~%");
+  if(!ids){ const [a,b]=await Promise.all([q1.limit(5000),q2.limit(2000)]); return {error:a.error,rows:a.data||[],files:b.error?(console.error(b.error),[]):(b.data||[])}; }
+  const nf=ids.filter(i=>!i.startsWith("f-")), fs=ids.filter(i=>i.startsWith("f-")), rows=[], files=[]; let error=null;
+  for(let i=0;i<nf.length;i+=80){ const r=await db.from(TABLE).select("col,id,data,updated_at").in("id",nf.slice(i,i+80)); if(r.error) error=r.error; else rows.push(...r.data); }
+  for(let i=0;i<fs.length;i+=80){ const r=await db.from(TABLE).select("col,id,updated_at,meta:data->meta").eq("col","items").in("id",fs.slice(i,i+80)); if(r.error) error=r.error; else files.push(...r.data); }
+  return {error,rows,files}; }
+async function syncRows(){
+  if(!rowCache){ const f=await fetchFull(); if(f.error) return {error:f.error};
+    rowCache=new Map(); f.rows.forEach(r=>rowCache.set(rkey(r),r)); f.files.forEach(r=>rowCache.set(rkey(r),{...r,file:true})); lastListAt=Date.now(); lastProbe=null; }
+  else {
+    // 1) 아주 작은 확인: 가장 최근 저장 시각 + 줄 수
+    const [m,c]=await Promise.all([db.from(TABLE).select("updated_at").not("id","like","%~%").order("updated_at",{ascending:false}).limit(1),
+      db.from(TABLE).select("id",{count:"exact",head:true}).not("id","like","%~%")]);
+    if(m.error||c.error) return {error:m.error||c.error};
+    const probe=((m.data||[])[0]||{}).updated_at+"|"+c.count;
+    // 2) 뭔가 바뀌었거나 2분이 지났으면 줄 목록(이름·시각만)을 받아 비교
+    if(probe!==lastProbe||Date.now()-lastListAt>120000){
+      const L=await db.from(TABLE).select("col,id,updated_at").not("id","like","%~%").limit(8000); if(L.error) return {error:L.error};
+      lastListAt=Date.now(); const seen=new Set(), need=[];
+      L.data.forEach(r=>{ const k=rkey(r); seen.add(k); const o=rowCache.get(k); if(!o||o.updated_at!==r.updated_at) need.push(r.id); });
+      [...rowCache.keys()].forEach(k=>{ if(!seen.has(k)) rowCache.delete(k); });
+      if(need.length){ const f=await fetchFull([...new Set(need)]); if(f.error) return {error:f.error};
+        f.rows.forEach(r=>{ if(seen.has(rkey(r))) rowCache.set(rkey(r),r); }); f.files.forEach(r=>{ if(seen.has(rkey(r))) rowCache.set(rkey(r),{...r,file:true}); }); }
+    }
+    lastProbe=probe; }
+  const all=[...rowCache.values()];
+  return {r1:{data:all.filter(r=>!r.file).map(({col,id,data})=>({col,id,data}))},r2:{data:all.filter(r=>r.file).map(({col,id,meta})=>({col,id,meta}))}};
+}
 async function loadAll(){
   const t0=Date.now();
-  const [r1,r2]=await Promise.all([
-    db.from(TABLE).select("col,id,data").not("id","like","f-%").limit(5000),
-    db.from(TABLE).select("col,id,meta:data->meta").eq("col","items").like("id","f-%").not("id","like","%~%").limit(2000)]);
-  if(r2.error) console.error(r2.error); // 파일 목록이 안 와도 보드는 열리게
-  const error=r1.error;
+  const sr=await syncRows();
+  if(sr.error){ setNotice(isDown(sr.error)?DOWN_MSG:"데이터를 불러오지 못했어요. 새로고침해 주세요."); console.error(sr.error); return; }
+  const {r1,r2}=sr;
+  const error=null;
   if(error){ setNotice("데이터를 불러오지 못했어요. 새로고침해 주세요."); console.error(error); return; }
   // 10초마다 받아 와도 바뀐 게 없으면 화면을 다시 그리지 않아요 (위치 편집 중 화면이 계속 새로 그려지던 문제)
   { const rows=r1.data.slice().sort((x,y)=>(x.col+x.id<y.col+y.id?-1:1)); const t=JSON.stringify(rows)+"|"+JSON.stringify(r2.data||[]); let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))|0; const sig=h+":"+t.length;
@@ -1124,8 +1157,12 @@ function makeClient(key,hdr){
     key?{global:{headers:{[hdr||"x-board-key"]:key}},auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:"mb-key-client"}}:{});
 }
 async function sha256hex(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
-async function checkKey(key){ const c=makeClient(key); const {data,error}=await c.rpc("can_board"); return (!error&&data===true)?c:null; }
-async function checkGuest(key){ const c=makeClient(key,"x-guest-key"); const {data,error}=await c.rpc("has_guest_key"); return (!error&&data===true)?c:null; }
+// 서버가 막혔거나 연결이 안 되면(비밀번호 문제가 아님) serverDown = true → 저장된 로그인을 지우지 않고 그렇게 알려요
+let serverDown=false;
+const isDown=e=>!!e&&(/egress|restricted|quota|fetch|network/i.test(String(e.message||e))||[402,500,502,503,504].includes(Number(e.code||e.status)));
+async function checkKey(key){ const c=makeClient(key); const {data,error}=await c.rpc("can_board"); if(error) serverDown=isDown(error)||serverDown; return (!error&&data===true)?c:null; }
+async function checkGuest(key){ const c=makeClient(key,"x-guest-key"); const {data,error}=await c.rpc("has_guest_key"); if(error) serverDown=isDown(error)||serverDown; return (!error&&data===true)?c:null; }
+const DOWN_MSG="데이터 서버가 이번 달 무료 사용량을 넘어서 잠시 막혀 있어요. 비밀번호 문제가 아니에요.";
 function startGuestMode(c){
   db=c; mode="db"; setGuest(true); ui.tab="gfx"; ui.planEdit=false; render(); showLogin(false); /* 탭을 먼저 그래픽만으로 다시 그린 뒤 보여 줘요 */
   $("#whoEmail").textContent="그래픽 보기 전용"; $("#who").hidden=false;
@@ -1138,7 +1175,7 @@ function startKeyMode(c){
   loadAll(); clearInterval(pollTimer);
   pollTimer=setInterval(()=>{ if(!document.hidden) loadAll(); },10000); // 팀 비밀번호 모드는 10초마다 새로고침
 }
-function stopAll(){ clearInterval(pollTimer); pollTimer=null; if(channel&&db){db.removeChannel(channel);} channel=null; }
+function stopAll(){ clearInterval(pollTimer); pollTimer=null; rowCache=null; lastLoadSig=null; if(channel&&db){db.removeChannel(channel);} channel=null; }
 function subscribe(){
   if(channel) db.removeChannel(channel);
   channel=db.channel("board").on("postgres_changes",{event:"*",schema:"public",table:TABLE},p=>{
@@ -1152,10 +1189,11 @@ async function onSession(session){
   if(!session){
     if(mode==="db"&&db!==authClient) return; // 팀 비밀번호 모드 유지
     stopAll(); db=authClient;
-    const key=lsGet(KEY_LS);
-    if(key){ const c=await checkKey(key); if(c){ setGuest(false); startKeyMode(c); return; } lsSet(KEY_LS,null); }
+    const key=lsGet(KEY_LS); serverDown=false;
+    if(key){ const c=await checkKey(key); if(c){ setGuest(false); startKeyMode(c); return; } if(!serverDown) lsSet(KEY_LS,null); }
     const gk=lsGet(GKEY_LS);
-    if(gk){ const c=await checkGuest(gk); if(c){ startGuestMode(c); return; } lsSet(GKEY_LS,null); }
+    if(gk&&!serverDown){ const c=await checkGuest(gk); if(c){ startGuestMode(c); return; } if(!serverDown) lsSet(GKEY_LS,null); }
+    if(serverDown){ setNotice(DOWN_MSG); $("#keyMsg").textContent=DOWN_MSG; }
     setGuest(false);
     mode="login"; $("#who").hidden=true; showLogin(true); return; }
   stopAll(); db=authClient; setGuest(false); showLogin(false); mode="db";
@@ -1173,7 +1211,8 @@ async function onSession(session){
   ["#tabs","#view","#stats"].forEach(k=>$(k).hidden=true); /* 누구로 들어오는지 정해질 때까지 탭을 숨겨요 (팀/손님/로그인 화면에서 다시 보임) */
   $("#keyForm").addEventListener("submit",async e=>{ e.preventDefault();
     const key=await sha256hex($("#keyInput").value); $("#keyMsg").textContent="확인 중…"; // 비밀번호 원문 대신 해시만 보내고 저장
-    const c=await checkKey(key);
+    serverDown=false; const c=await checkKey(key);
+    if(!c&&serverDown){ $("#keyMsg").textContent=DOWN_MSG; return; }
     if(!c){ const g=await checkGuest(key);
       if(g){ lsSet(GKEY_LS,key); $("#keyInput").value=""; $("#keyMsg").textContent=""; stopAll(); startGuestMode(g); return; }
       $("#keyMsg").textContent="비밀번호가 맞지 않아요."; return; }
