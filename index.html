@@ -43,7 +43,7 @@
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.5;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px}
-.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.wrap{max-width:1680px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
@@ -272,6 +272,8 @@ table.itbl tr.rowsel td.acts{background:linear-gradient(var(--warnbg),var(--warn
 table.itbl .actw{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 @media (max-width:1180px){table.itbl .actw{width:150px}}
 .vtog button{padding:3px 5px}
+table.itbl .kindc{width:130px;max-width:150px} table.itbl .kindc select{width:100%;max-width:140px;text-overflow:ellipsis} /* 업체 이름이 길어도 칸이 늘어나지 않게 */
+table.itbl .vtog{display:flex;flex-wrap:wrap;max-width:96px;gap:2px} /* 버전 버튼은 두 줄로 */
 .jobtag{margin-bottom:3px;white-space:nowrap;color:var(--ink);display:flex;align-items:center;gap:4px}
 .jobtag{flex-wrap:wrap;white-space:normal}
 .rolebtn{font:inherit;font-size:12px;font-weight:600;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:6px;padding:2px 6px;cursor:pointer;display:inline-flex;flex-wrap:wrap;gap:3px;align-items:center;text-align:left}
@@ -2704,7 +2706,7 @@ function itemsHTML(){
   const rowHTML=i=>{const auto=i.link?(counts[i.link]||0):null; const q=qtyOfItem(i,counts); const qq=qOf(i); const open=ui.openItem===i.id;
       return `<tr data-id="${i.id}" data-link="${esc(i.link||"")}" class="${i.link&&ui.hiItem===i.link?"rowsel":""}"><td class="noprint ck"><input type="checkbox" data-isel aria-label="선택" ${ui.isel.has(i.id)?"checked":""}></td><td class="thumbcell"><div class="drop thumb" data-thumb title="사진을 끌어다 놓거나 눌러서 올리기 (여러 장 가능)">${i.image?`<img src="${esc(i.image)}" alt="" referrerpolicy="no-referrer">`:`<span class="addph muted">+<br>사진</span>`}${(i.photos||[]).length?`<span class="phcnt num">${i.photos.length}</span>`:""}</div></td>
       <td style="min-width:150px"><input data-f="name" value="${esc(i.name)}">${i.url?`<a class="small" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer">상품 링크</a>`:""}</td>
-      <td style="min-width:110px"><select data-f="kind">${kindsOf([i]).map(k=>`<option ${i.kind===k?"selected":""}>${k}</option>`).join("")}</select><div class="kvend">${i.kind===SSG?`<span class="shoptag" title="신세계에서 빌려 쓰는 비품 (비용 없음)">신세계 비품</span>`:shopOf(i)?`<span class="shoptag" title="구매 링크로 정해져요">${esc(shopOf(i))}</span>`:vendorSel(i,qq)}</div></td>
+      <td class="kindc"><select data-f="kind">${kindsOf([i]).map(k=>`<option ${i.kind===k?"selected":""}>${k}</option>`).join("")}</select><div class="kvend">${i.kind===SSG?`<span class="shoptag" title="신세계에서 빌려 쓰는 비품 (비용 없음)">신세계 비품</span>`:shopOf(i)?`<span class="shoptag" title="구매 링크로 정해져요">${esc(shopOf(i))}</span>`:vendorSel(i,qq)}</div></td>
       <td><div class="vtog" role="group" aria-label="쓰이는 버전">${VER4.map(([k,n])=>`<button type="button" data-ivt="${k}" aria-pressed="${itemVers(i).includes(k)}" title="${n}">${k==="night"?"나이트":n}</button>`).join("")}</div></td>
       <td class="r" style="min-width:60px;width:60px"><input class="num" data-f="qty" type="number" min="0" value="${esc(i.qty||"")}" placeholder="${auto??""}" style="text-align:right"></td>
       ${noCost(i.kind)?`<td class="r muted">–</td><td class="r muted">–</td><td class="r muted">–</td>`:`<td class="r" style="min-width:90px;width:90px"><input class="num" data-f="price" type="number" min="0" value="${esc(i.price||"")}" style="text-align:right"></td>
