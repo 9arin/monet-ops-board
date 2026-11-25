@@ -999,8 +999,8 @@ const isClosed=d=>closedDays().includes(d);
 const WORK_FROM="2026-12-01"; // 알바 근무 시작 (12/1~2 전원 OT·시뮬레이션)
 const FIRST_END="2026-12-06"; // 첫 주(월~일) 끝
 // 전원 근무일의 근무 시간 (자리 시간 대신 이 시간으로 서요)
-const DAY_TIME={"2026-12-01":"11:00~20:00","2026-12-02":"11:00~20:00","2026-12-03":"09:30~18:30","2026-12-04":"14:00~20:00"};
-const ALL_HANDS=["2026-12-01","2026-12-02","2026-12-03","2026-12-04"]; // 12/1·2 OT·시뮬레이션, 12/3 프레스 데이, 12/4 VIP 데이 · allHandsPlan: 역할 부여대로 자리 배치 // 프레스 데이·VIP 데이: 휴무 예외 · 알바 전원 필수 근무 (필수 휴무도 이날은 적용 안 함, 주 40시간 계산에서도 빼요) // 첫 주 (12/3~6): 앞의 이틀을 더해 주 5일이 되게 각자 하루씩 쉬어요
+const DAY_TIME={"2026-12-01":"11:00~20:00","2026-12-02":"11:00~20:00","2026-12-04":"14:00~20:00"};
+const ALL_HANDS=["2026-12-01","2026-12-02","2026-12-04"]; // 12/1·2 OT·시뮬레이션, 12/4 VIP 데이 (12/3 프레스 데이는 이제 전원 근무 아님) · allHandsPlan: 역할 부여대로 자리 배치 // 프레스 데이·VIP 데이: 휴무 예외 · 알바 전원 필수 근무 (필수 휴무도 이날은 적용 안 함, 주 40시간 계산에서도 빼요) // 첫 주 (12/3~6): 앞의 이틀을 더해 주 5일이 되게 각자 하루씩 쉬어요
 const weekKey=date=>{ const d=new Date(date+"T00:00"); d.setDate(d.getDate()-((d.getDay()+6)%7)); return ymd(d); }; // 그 주 월요일
 const nightBase=()=>{ const nc=nightCfg(), ns=nightStats(); return `${nc.alba}x${ns.perWeek}:${ns.byDow.join(",")}`; };
 const nightExtra=()=>{ const nc=nightCfg(); return nc.extraFor==="v2:"+nightBase()?(+nc.extra||0):0; }; // 예전 계산으로 늘린 인원은 무시
@@ -2041,6 +2041,11 @@ function dayPlan(ctx,date){ // + 근무표에서 칸마다 사람을 더 넣은 
     const L=ids.map(id=>ppl.find(p=>p.id===id)).filter(p=>p&&!inSeat(p.id)&&!crew.some(c=>c.id===p.id)); // 직접 넣은 사람은 근무 불가 날이어도 넣어요 (넣을 때 확인 팝업)
     L.forEach(p=>Object.keys(pl.plus).forEach(k=>{ pl.plus[k]=pl.plus[k].filter(q=>q.id!==p.id); if(!pl.plus[k].length) delete pl.plus[k]; })); // 전원 근무일 등에 자동으로 다른 일에 붙어 있던 건 빼요 (튜브물감 추가가 안 되던 문제)
     if(L.length){ pl.plus[x.id]=(pl.plus[x.id]||[]).concat(L); L.forEach(p=>pl.working.add(p.id)); } });
+  // 근무표에서 '휴무'로 고른 사람 (cfg-ovr days[날짜]["-off"] = [사람]): 전원 근무일이든 여러 자리에 들어가 있든 그날은 무조건 쉬어요
+  const offL=Array.isArray(ov["-off"])?ov["-off"]:[];
+  if(offL.length){ Object.keys(pl.cells).forEach(id=>{ const c=pl.cells[id]; if(c.who&&offL.includes(c.who.id)) pl.cells[id]={who:null,kind:"gap",base:c.who,manual:true}; });
+    Object.keys(pl.plus).forEach(k=>{ pl.plus[k]=pl.plus[k].filter(q=>!offL.includes(q.id)); if(!pl.plus[k].length) delete pl.plus[k]; });
+    if(pl.allHands){ offL.forEach(id=>pl.working.delete(id)); pl.off=ppl.filter(p=>!pl.working.has(p.id)); } }
   if(!pl.allHands){ const W=new Set(); Object.values(pl.cells).forEach(c=>c.who&&W.add(c.who.id)); Object.values(pl.plus).forEach(L=>L.forEach(q=>W.add(q.id))); pl.working=W; pl.off=ppl.filter(p=>!W.has(p.id)&&!crew.some(c=>c.id===p.id)); }
   else pl.off=pl.off.filter(p=>!pl.working.has(p.id));
   return pl;
@@ -2329,6 +2334,9 @@ function bindRota(){
       if(v!=="-off"&&(x0&&x0.id===xid||k0===xid)){ ui.editCell=null; render(); return; }
       ovPut(dt,day=>{
         if(k0){ const L=(day[k0+"+"]||[]).filter(i=>i!==pid); if(L.length) day[k0+"+"]=L; else delete day[k0+"+"]; } // 추가로 들어가 있던 데서 빼요
+        const offL=(Array.isArray(day["-off"])?day["-off"]:[]).filter(i=>i!==pid); // 휴무 목록: 일을 고르면 빼고, 휴무를 고르면 넣어요
+        if(v==="-off"){ offL.push(pid); Object.keys(day).forEach(k=>{ if(k.endsWith("+")&&Array.isArray(day[k])){ const L=day[k].filter(i=>i!==pid); if(L.length) day[k]=L; else delete day[k]; } else if(day[k]===pid) day[k]="-"; }); } // 여러 자리에 들어가 있어도 다 빼요
+        if(offL.length) day["-off"]=offL; else delete day["-off"];
         if(x0&&(v==="-off"||mode==="plus")) day[x0.id]="-"; // 원래 맡던 일은 비워요
         if(v==="-off") return;
         if(mode==="plus"){ const L=Array.isArray(day[xid+"+"])?day[xid+"+"]:[]; if(!L.includes(pid)) day[xid+"+"]=[...L,pid]; }
