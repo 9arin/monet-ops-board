@@ -153,6 +153,8 @@ details.fold #mapToggle{display:none}
 .mk.faded{opacity:.22}
 .mk.gap{box-shadow:0 0 0 3px var(--bad)}
 .daypick button{min-width:34px}
+.atttbl td.attc{padding:0;vertical-align:top}.atttbl td.attc .cellbtn{width:100%;text-align:left;padding:6px;line-height:1.35}.atttbl td.attc.sel{outline:2px solid var(--accent);outline-offset:-2px}
+.attf{display:inline-block;font-size:11px;border-radius:4px;padding:0 5px;margin:2px 2px 0 0;background:var(--soft);color:var(--muted)}.attf.bad{background:var(--badbg);color:var(--bad)}.attf.warn{background:var(--warnbg);color:var(--warn)}.attf.ok{background:var(--okbg);color:var(--ok)}
 .linkbtn{background:none;border:0;color:var(--accent);cursor:pointer;font:inherit;text-decoration:underline;text-underline-offset:2px;padding:0}
 .task.done .t-title{color:var(--muted);text-decoration:line-through}
 .task input[type=text],.task input[type=date]{border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 6px;width:100%}
@@ -2405,7 +2407,7 @@ const person=id=>state.people.find(h=>h.id===id);
 const personOf=p=>p&&p.profile?person(p.profile):null;
 const assignedTo=h=>alba().find(p=>p.profile===h.id);
 const avatar=(h,cls)=>`<span class="pfav ${cls||""}">${h&&h.photo?`<img src="${esc(h.photo)}" alt="">`:esc(((h&&h.name)||"?").trim().slice(0,1)||"?")}</span>`;
-const STAFF_SUBS=[["rota","근무표"],["assign","역할 부여"],["people","인원 명단"]];
+const STAFF_SUBS=[["rota","근무표"],["assign","역할 부여"],["people","인원 명단"],["att","출퇴근"]];
 // 예전에 역할 줄에 바로 적던 이름·신분증·통장 → 인원 명단으로 한 번 옮겨요
 function migratePeople(){
   if(!loaded.staff||!loaded.people||!loaded.settings||state.settings.some(x=>x.id==="cfg-people-mig")) return;
@@ -2519,13 +2521,14 @@ function staffHTML(){
     <div class="plist">${people.length?people.map(pcard).join(""):`<p class="small muted">아직 아무도 없어요. '+ 사람 추가'를 눌러 주세요.</p>`}</div></div>`;
 
   if(printing) return rotaPart()+`<div style="margin-top:16px">${assignPart()}</div>`; // PDF: 근무표 + 역할 (개인정보 명단은 빼요)
-  return subNav+(sub==="rota"?rotaPart():sub==="assign"?assignPart():peoplePart());
+  return subNav+(sub==="rota"?rotaPart():sub==="assign"?assignPart():sub==="att"?attHTML():peoplePart());
 }
 function bindStaff(){
   document.querySelectorAll("[data-ssub]").forEach(b=>b.onclick=()=>{ ui.staffSub=b.dataset.ssub; ui.confirmDel=null; try{localStorage.setItem("mb-staffsub",ui.staffSub);}catch(e){} render(); });
   const sub=ui.staffSub;
   if(sub==="people") return bindPeople();
   if(sub==="assign") return bindAssign();
+  if(sub==="att") return bindAtt();
   bindMapCard(id=>{ // 도면의 알바생 점 → 그 자리 줄로
     const m=state.markers.find(x=>x.id===id); if(!m) return;
     if(!positions().some(x=>x.id===id)){ toast("이 점은 매일 자리에 들어가지 않아요."); return; }
@@ -2541,6 +2544,88 @@ function bindStaff(){
   document.querySelectorAll("tr[data-slot]").forEach(tr=>tr.querySelectorAll("[data-sk]").forEach(el=>el.onchange=()=>{
     const cfg=state.settings.find(x=>x.id==="cfg-slots")||{id:"cfg-slots",slots:{}}; const id=tr.dataset.slot, k=el.dataset.sk;
     save("settings",{...cfg,slots:{...cfg.slots,[id]:{...(cfg.slots||{})[id],[k]:el.value.trim()}}}); }));
+}
+/* --- 출퇴근 관리 (관리자 비밀번호로만 열려요). 현장 태블릿: attend.html --- */
+const ATT_LS="mb-attadm-h";
+const attUrl=()=>new URL("attend.html",location.href.split("?")[0].split("#")[0]).href;
+const attWeek=()=>{ const lo=weekKey(WORK_FROM), hi=weekKey(OPEN_TO), t=weekKey(ymd(new Date())); const w=ui.attWeek||(t<lo?lo:t>hi?hi:t); return w<lo?lo:w>hi?hi:w; };
+const hmOf=iso=>{ const d=new Date(iso); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+const kstISO=(dt,t)=>new Date(`${dt}T${t}:00+09:00`).toISOString();
+async function attCall(fn,args){ const {data,error}=await db.rpc(fn,args); if(error) return {error:isDown(error)?"down":"server"}; return data||{}; }
+async function attLoad(force){ const k=lsGet(ATT_LS); if(!k) return; const wk=attWeek(); if(!force&&ui.att&&ui.att.wk===wk&&!ui.att.err) return;
+  ui.att={wk,loading:true,data:(ui.att&&ui.att.wk===wk)?ui.att.data:null}; if(ui.tab==="staff"&&ui.staffSub==="att") render();
+  const r=await attCall("att_admin_data",{k,d1:wk,d2:addDay(wk,6)});
+  if(r.error==="admin"||r.error==="locked"){ lsSet(ATT_LS,null); ui.att={err:r.error==="locked"?"여러 번 틀려서 10분 동안 잠겼어요.":"관리자 비밀번호가 바뀌었어요. 다시 넣어 주세요."}; }
+  else if(r.error) ui.att={wk,err:"출퇴근 기록을 불러오지 못했어요. 잠시 뒤 다시 해 주세요."};
+  else ui.att={wk,data:r};
+  if(ui.tab==="staff"&&ui.staffSub==="att") render(); }
+function attPlanned(pl,p,dt){ // 근무표의 그날 예정 시간
+  if(!pl||pl.closed) return null; const out=[];
+  if(pl.prep){ if(pl.prep.some(q=>q.id===p.id)) out.push(DAY_TIME[dt]||"OT·시뮬"); }
+  else if(SHIFT_DAYS[dt]&&pl.working){ if(pl.working.has(p.id)) out.push(shiftOf(dt,p.id)[2]); }
+  else { const pos=positions(); const x=pos.find(y=>pl.cells[y.id]&&pl.cells[y.id].who&&pl.cells[y.id].who.id===p.id)||pos.find(y=>(pl.plus&&pl.plus[y.id]||[]).some(q=>q.id===p.id));
+    if(x) out.push(pTime(dt,x,p.id)); else if(pl.allHands&&pl.working&&pl.working.has(p.id)) out.push(DAY_TIME[dt]||""); }
+  if((pl.crew||[]).some(q=>q.id===p.id)) out.push("야간 "+NIGHT_TIME);
+  return out.filter(Boolean).join(", ")||null; }
+function attSpan(L){ let m=0,s=null; L.forEach(l=>{ if(l.kind==="in") s=l.at; else if(s){ m+=Math.max(0,(new Date(l.at)-new Date(s))/60000); s=null; } }); return {mins:Math.round(m),open:!!s}; }
+function attHTML(){
+  const k=lsGet(ATT_LS), link=`<p class="small muted" style="margin:0">현장 태블릿 주소: <a href="${esc(attUrl())}" target="_blank" rel="noopener">${esc(attUrl())}</a> <span class="muted">(태블릿에서 처음 한 번 관리자 비밀번호로 등록)</span></p>`;
+  if(!k) return `<div class="panel"><h3 style="margin:0 0 6px">출퇴근 관리</h3><p class="small muted" style="margin:0 0 10px">출퇴근 기록은 관리자 비밀번호로만 볼 수 있어요.</p>
+    <form id="attLock" class="row" style="gap:8px" autocomplete="off"><input id="attPw" type="password" placeholder="관리자 비밀번호" aria-label="관리자 비밀번호" style="max-width:240px"><button class="btn primary" type="submit">열기</button></form>
+    <div class="small" id="attMsg" style="color:var(--bad);margin-top:6px">${ui.att&&ui.att.err?esc(ui.att.err):""}</div><div style="margin-top:10px">${link}</div></div>`;
+  const wk=attWeek(), dates=weekDates(wk), A=ui.att;
+  if(!A||A.wk!==wk||(!A.data&&!A.err)){ setTimeout(()=>attLoad(),0); return `<div class="panel"><p class="muted">불러오는 중…</p></div>`; }
+  if(A.err&&!A.data) return `<div class="panel"><p style="color:var(--bad)">${esc(A.err)}</p><button class="btn small" id="attRe" type="button">다시 불러오기</button></div>`;
+  const D=A.data, logs=D.logs||[], ppl=alba().slice(), ctx=planCtx(), plans=dates.map(dt=>dt>=WORK_FROM&&dt<=OPEN_TO?dayPlan(ctx,dt):null), today=ymd(new Date());
+  const grp=p=>rolesOf(p)[0]||"~"; ppl.sort((a,b)=>grp(a).localeCompare(grp(b))||String(pname(a)).localeCompare(String(pname(b)),"ko",{numeric:true}));
+  const pinOf=id=>((D.people||[]).find(q=>q.id===id)||{}).pin;
+  const lg=(pid,dt)=>logs.filter(l=>l.person_id===pid&&ymd(new Date(l.at))===dt);
+  const total={};
+  const cell=(p,dt,i)=>{ const plan=attPlanned(plans[i],p,dt), L=lg(p.id,dt), key=`${p.id}|${dt}`, sp=attSpan(L); total[p.id]=(total[p.id]||0)+sp.mins;
+    const ins=L.filter(l=>l.kind==="in"), outs=L.filter(l=>l.kind==="out"), st=plan&&toMin(plan.replace(/^야간 /,"")), first=ins[0]&&toMin(hmOf(ins[0].at));
+    const late=st!=null&&first!=null&&first>st+5, miss=plan&&!L.length&&dt<today, open=sp.open&&dt<today;
+    const act=L.length?`<b class="num">${ins.length?hmOf(ins[0].at):"?"}~${outs.length?hmOf(outs[outs.length-1].at):""}</b>`:miss?`<b style="color:var(--bad)">기록 없음</b>`:`<span class="muted">-</span>`;
+    const flags=[late?`<span class="attf bad">늦음</span>`:"",open?`<span class="attf warn">퇴근 없음</span>`:"",L.some(l=>l.src==="admin")?`<span class="attf">고침</span>`:""].join("");
+    return `<td class="attc ${ui.attEdit===key?"sel":""}"><button type="button" class="cellbtn" data-attc="${key}" title="눌러서 기록 보기 · 고치기"><span class="small muted num">${plan?esc(plan):"휴무"}</span><br>${act}${flags?`<br>${flags}`:""}</button></td>`; };
+  const rows=ppl.map(p=>`<tr><td class="rl"><b>${esc(pname(p))}</b>${grp(p)!=="~"?` <span class="small muted">${grp(p)}조</span>`:""}${pinOf(p.id)?"":`<br><span class="attf warn">비밀번호 없음</span>`}</td>${dates.map((dt,i)=>cell(p,dt,i)).join("")}<td class="r num">${total[p.id]?`${Math.floor(total[p.id]/60)}:${String(total[p.id]%60).padStart(2,"0")}`:"-"}</td></tr>`).join("");
+  const head=`<tr><th class="rl">이름</th>${dates.map(dt=>`<th class="${dt===today?"today":""}">${DAYS[dowOf(dt)]}<br><span class="small num">${+dt.slice(5,7)}/${+dt.slice(8)}</span></th>`).join("")}<th class="r">머문 시간</th></tr>`;
+  let edit=""; if(ui.attEdit){ const [pid,dt]=ui.attEdit.split("|"), p=ppl.find(q=>q.id===pid); if(p&&dates.includes(dt)){ const L=lg(pid,dt);
+    edit=`<div class="panel attedit" style="margin-top:12px"><div class="row" style="justify-content:space-between"><h3 style="margin:0">${esc(pname(p))} · ${+dt.slice(5,7)}/${+dt.slice(8)} (${DAYS[dowOf(dt)]})</h3><button type="button" class="linkbtn small" id="attEditX">닫기</button></div>
+      <p class="small muted" style="margin:4px 0 8px">예정: ${esc(attPlanned(plans[dates.indexOf(dt)],p,dt)||"휴무")}</p>
+      ${L.map(l=>`<div class="row attrow" data-attrow="${l.id}" style="gap:6px;margin-bottom:6px"><select data-ak aria-label="종류"><option value="in" ${l.kind==="in"?"selected":""}>출근</option><option value="out" ${l.kind==="out"?"selected":""}>퇴근</option></select><input type="time" data-at value="${hmOf(l.at)}" aria-label="시각"><input data-an value="${esc(l.note||"")}" placeholder="메모 (고친 이유 등)" aria-label="메모" style="flex:1;min-width:120px"><span class="small muted">${l.src==="admin"?"관리자":"태블릿"}</span><button type="button" class="btn small" data-asave>저장</button><button type="button" class="x" data-adel aria-label="이 기록 지우기">×</button></div>`).join("")||`<p class="small muted">기록이 없어요.</p>`}
+      <div class="row" style="gap:6px;margin-top:8px"><select id="attNk" aria-label="새 기록 종류"><option value="in">출근</option><option value="out">퇴근</option></select><input type="time" id="attNt" aria-label="새 기록 시각"><input id="attNn" placeholder="메모" aria-label="새 기록 메모" style="flex:1;min-width:120px"><button type="button" class="btn small primary" id="attAdd">+ 기록 넣기</button></div></div>`; } }
+  const pins=`<details class="more" style="margin-top:12px"><summary class="btn small">개인 비밀번호 (숫자 4자리)</summary><div class="tbl-wrap" style="margin-top:8px"><table><tbody>${ppl.map(p=>`<tr data-apin="${p.id}"><td>${esc(pname(p))}</td><td>${pinOf(p.id)?`<span class="attf ok">있음</span>`:`<span class="attf warn">없음</span>`}</td><td><input inputmode="numeric" maxlength="4" pattern="\\d{4}" placeholder="새 4자리" aria-label="${esc(pname(p))} 새 비밀번호" style="width:90px" autocomplete="off"> <button type="button" class="btn small" data-pinsave>${pinOf(p.id)?"바꾸기":"정하기"}</button>${pinOf(p.id)?` <button type="button" class="linkbtn small" data-pindel>지우기</button>`:""}</td></tr>`).join("")}</tbody></table></div></details>`;
+  const kiosks=`<details class="more" style="margin-top:8px"><summary class="btn small">등록된 태블릿 ${(D.kiosks||[]).length}대</summary><div style="margin-top:8px">${(D.kiosks||[]).map(t=>`<div class="row" style="gap:8px;margin-bottom:4px"><b>${esc(t.label||"태블릿")}</b><span class="small muted">등록 ${esc(ymd(new Date(t.created_at)))}${t.last_seen?` · 마지막 사용 ${esc(ymd(new Date(t.last_seen)))} ${hmOf(t.last_seen)}`:""}</span><button type="button" class="linkbtn small" data-kdel="${esc(t.id)}">등록 풀기</button></div>`).join("")||`<p class="small muted">아직 없어요. 태블릿에서 위 주소를 열고 관리자 비밀번호로 등록해 주세요.</p>`}</div></details>`;
+  const lo=weekKey(WORK_FROM), hi=weekKey(OPEN_TO);
+  return `<div class="panel"><div class="rotabar"><h3>출퇴근 관리</h3><div class="wknav"><button class="btn small" data-awk="-7" ${wk<=lo?"disabled":""} aria-label="지난주">‹</button><b>${+dates[0].slice(5,7)}/${+dates[0].slice(8)} ~ ${+dates[6].slice(5,7)}/${+dates[6].slice(8)}</b><button class="btn small" data-awk="7" ${wk>=hi?"disabled":""} aria-label="다음주">›</button></div>
+    <div class="row" style="gap:6px"><button class="btn small" id="attRe" type="button">${A.loading?"불러오는 중…":"새로고침"}</button><button class="btn small" id="attCsv" type="button">엑셀용 파일</button><button class="btn small" id="attOut" type="button">잠그기</button></div></div>
+    <p class="small muted" style="margin:0 0 8px">칸 위: 근무표 예정 시간 · 아래: 실제 출근~퇴근. 예정보다 5분 넘게 늦으면 '늦음'. 칸을 누르면 기록을 고치거나 넣을 수 있어요.</p>
+    <div class="tbl-wrap"><table class="rota atttbl"><thead>${head}</thead><tbody>${rows}</tbody></table></div>${edit}${pins}${kiosks}<div style="margin-top:12px">${link}</div></div>`;
+}
+function bindAtt(){
+  const f=$("#attLock"); if(f) f.onsubmit=async e=>{ e.preventDefault(); const pw=$("#attPw").value; if(!pw) return; $("#attMsg").textContent="확인 중…";
+    const h=await sha256hex(pw); $("#attPw").value=""; const r=await attCall("att_admin_check",{k:h});
+    if(r.ok){ lsSet(ATT_LS,h); ui.att=null; render(); } else $("#attMsg").textContent=r.error==="locked"?"여러 번 틀려서 10분 동안 잠겼어요.":r.error==="down"?"서버에 연결할 수 없어요.":"비밀번호가 맞지 않아요."; };
+  const re=$("#attRe"); if(re) re.onclick=()=>attLoad(true);
+  const out=$("#attOut"); if(out) out.onclick=()=>{ lsSet(ATT_LS,null); ui.att=null; ui.attEdit=null; render(); };
+  document.querySelectorAll("[data-awk]").forEach(b=>b.onclick=()=>{ ui.attWeek=addDay(attWeek(),+b.dataset.awk); ui.attEdit=null; render(); });
+  document.querySelectorAll("[data-attc]").forEach(b=>b.onclick=()=>{ ui.attEdit=ui.attEdit===b.dataset.attc?null:b.dataset.attc; render(); const el=$(".attedit"); if(el) el.scrollIntoView({block:"nearest",behavior:"smooth"}); });
+  const x=$("#attEditX"); if(x) x.onclick=()=>{ ui.attEdit=null; render(); };
+  const k=()=>lsGet(ATT_LS), after=r=>{ if(r.ok){ toast("저장했어요"); attLoad(true); } else { toast(r.error==="admin"?"관리자 비밀번호가 바뀌었어요":"저장하지 못했어요"); if(r.error==="admin"){ lsSet(ATT_LS,null); ui.att=null; render(); } } };
+  const [epid,edt]=(ui.attEdit||"|").split("|");
+  document.querySelectorAll("[data-attrow]").forEach(row=>{ const id=+row.dataset.attrow;
+    row.querySelector("[data-asave]").onclick=async()=>{ const t=row.querySelector("[data-at]").value; if(!t){ toast("시각을 넣어 주세요"); return; }
+      after(await attCall("att_admin_put",{k:k(),rid:id,pid:epid,kind:row.querySelector("[data-ak]").value,at:kstISO(edt,t),note:row.querySelector("[data-an]").value.trim()})); };
+    row.querySelector("[data-adel]").onclick=async()=>{ if(!confirm("이 기록을 지울까요?")) return; after(await attCall("att_admin_del",{k:k(),rid:id})); }; });
+  const add=$("#attAdd"); if(add) add.onclick=async()=>{ const t=$("#attNt").value; if(!t){ toast("시각을 넣어 주세요"); return; }
+    after(await attCall("att_admin_put",{k:k(),rid:null,pid:epid,kind:$("#attNk").value,at:kstISO(edt,t),note:$("#attNn").value.trim()||"관리자가 넣음"})); };
+  document.querySelectorAll("[data-apin]").forEach(tr=>{ const pid=tr.dataset.apin, inp=tr.querySelector("input");
+    tr.querySelector("[data-pinsave]").onclick=async()=>{ const v=inp.value.trim(); if(!/^\d{4}$/.test(v)){ toast("숫자 4자리로 넣어 주세요"); return; } after(await attCall("att_admin_pin",{k:k(),pid,pin:v})); };
+    const d=tr.querySelector("[data-pindel]"); if(d) d.onclick=async()=>{ if(!confirm("이 사람의 출퇴근 비밀번호를 지울까요?")) return; after(await attCall("att_admin_pin",{k:k(),pid,pin:""})); }; });
+  document.querySelectorAll("[data-kdel]").forEach(b=>b.onclick=async()=>{ if(!confirm("이 태블릿의 등록을 풀까요? 그 태블릿에선 다시 등록해야 찍을 수 있어요.")) return; after(await attCall("att_admin_kiosk_del",{k:k(),tid:b.dataset.kdel})); });
+  const csv=$("#attCsv"); if(csv) csv.onclick=()=>{ const D=ui.att&&ui.att.data; if(!D) return; const nm=id=>pname(alba().find(p=>p.id===id))||id;
+    const lines=[["이름","날짜","종류","시각","메모","입력"].join(",")].concat((D.logs||[]).map(l=>[nm(l.person_id),ymd(new Date(l.at)),l.kind==="in"?"출근":"퇴근",hmOf(l.at),l.note||"",l.src==="admin"?"관리자":"태블릿"].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")));
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob(["﻿"+lines.join("\n")],{type:"text/csv"})); a.download=`출퇴근_${ui.att.wk}.csv`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); };
 }
 function newPerson(link){ // link: 이 역할 줄에 바로 이어 줘요
   const id=uid("h"); save("people",{id,name:"",docs:[],at:ymd(new Date())},true);

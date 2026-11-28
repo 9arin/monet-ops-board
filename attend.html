@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>MONET 100 출퇴근</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 현장 태블릿 한 대로 찍는 출퇴근: 이름 → 개인 비밀번호 4자리 → 출근 / 퇴근 */
+:root{
+  --bg:#f3f4f2; --panel:#ffffff; --ink:#1f2b29; --muted:#5f6b69; --line:#d9dedc; --soft:#e9ecea;
+  --accent:#b85440; --accent-ink:#ffffff; --brand:#2c3a38;
+  --ok:#2f7d4f; --warn:#b7791f; --bad:#c0392b; --okbg:#e3f1e8; --warnbg:#fbf0dc; --badbg:#f9e3e0;
+  --scrim:rgba(20,26,25,.6); --shadow:rgba(20,30,28,.18);
+  --f-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141a19; --panel:#1c2423; --ink:#e7ecea; --muted:#9aa6a3; --line:#2f3a38; --soft:#242e2c;
+  --accent:#e07a62; --accent-ink:#1a0f0b; --brand:#cfe0db;
+  --ok:#6cc48d; --warn:#e3b55a; --bad:#ef7a6c; --okbg:#1d3326; --warnbg:#3a2f18; --badbg:#3d1f1b;
+  --scrim:rgba(0,0,0,.7); --shadow:rgba(0,0,0,.55); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a19; --panel:#1c2423; --ink:#e7ecea; --muted:#9aa6a3; --line:#2f3a38; --soft:#242e2c;
+  --accent:#e07a62; --accent-ink:#1a0f0b; --brand:#cfe0db;
+  --ok:#6cc48d; --warn:#e3b55a; --bad:#ef7a6c; --okbg:#1d3326; --warnbg:#3a2f18; --badbg:#3d1f1b;
+  --scrim:rgba(0,0,0,.7); --shadow:rgba(0,0,0,.55); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:16px;line-height:1.45;
+  padding:16px max(16px,env(safe-area-inset-right)) 32px max(16px,env(safe-area-inset-left));
+  -webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.wrap{max-width:1100px;margin:0 auto}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.eyebrow{font-size:13px;letter-spacing:.08em;color:var(--muted)}
+h1{margin:2px 0 0;font-size:26px;font-weight:700;color:var(--brand)}
+.clock{text-align:right}
+.clock b{display:block;font-family:var(--f-num);font-size:44px;line-height:1;font-weight:500}
+.clock span{color:var(--muted);font-size:15px}
+.msg{padding:12px 14px;border-radius:10px;background:var(--warnbg);color:var(--ink);margin-bottom:14px}
+.grp{margin:0 0 18px}
+.grp h2{font-size:14px;font-weight:600;color:var(--muted);margin:0 0 8px}
+.grp h2 .gl{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--brand);color:var(--bg);font-size:13px;margin-right:6px}
+.names{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.nm{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 14px;text-align:left;min-height:84px;
+  display:flex;flex-direction:column;justify-content:space-between;gap:6px;box-shadow:0 1px 2px var(--shadow)}
+.nm b{font-size:19px;font-weight:600}
+.st{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.st i{width:9px;height:9px;border-radius:50%;background:var(--line);flex:none}
+.nm.in{border-color:var(--ok);background:var(--okbg)}
+.nm.in .st{color:var(--ok)} .nm.in .st i{background:var(--ok)}
+.nm.out .st i{background:var(--muted)}
+.scrim{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;padding:16px;z-index:10}
+.card{background:var(--panel);border-radius:18px;padding:22px;width:min(440px,100%);max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 10px 40px var(--shadow)}
+.card h3{margin:0;font-size:24px}
+.card .sub{color:var(--muted);font-size:14px;margin:2px 0 14px}
+.dots{display:flex;justify-content:center;gap:14px;margin:8px 0 14px}
+.dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--muted)}
+.dots i.on{background:var(--ink);border-color:var(--ink)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pad button{height:62px;border-radius:12px;border:1px solid var(--line);background:var(--soft);font-size:24px;font-family:var(--f-num)}
+.pad button.fn{font-family:var(--f-ui);font-size:15px;color:var(--muted)}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.big{height:64px;border-radius:14px;border:0;font-size:20px;font-weight:700;background:var(--soft)}
+.big.pri{background:var(--accent);color:var(--accent-ink)}
+.big:disabled{opacity:.45;cursor:default}
+.err{color:var(--bad);font-size:15px;min-height:22px;text-align:center;margin-top:10px}
+.row2{display:flex;justify-content:space-between;gap:10px;margin-top:12px}
+.link{background:none;border:0;color:var(--accent);font-size:15px;padding:8px 4px;text-decoration:underline;text-underline-offset:3px}
+.done{text-align:center;padding:10px 0}
+.done .ck{width:76px;height:76px;border-radius:50%;background:var(--okbg);color:var(--ok);display:grid;place-items:center;margin:0 auto 12px}
+.done .ck.o{background:var(--soft);color:var(--ink)}
+.done h3{font-size:26px}
+.done .t{font-family:var(--f-num);font-size:40px;margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+th{font-size:13px;color:var(--muted);font-weight:500}
+td.r,th.r{text-align:right}
+.reg{background:var(--panel);border-radius:16px;padding:22px;max-width:460px;margin:30px auto;border:1px solid var(--line)}
+.reg h2{margin:0 0 6px;font-size:21px}
+.reg p{color:var(--muted);margin:0 0 14px;font-size:15px}
+.reg label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
+.reg input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:17px;-webkit-user-select:text;user-select:text}
+.reg .big{width:100%;margin-top:16px}
+footer{margin-top:24px;text-align:center}
+footer button{background:none;border:0;color:var(--muted);font-size:13px;text-decoration:underline}
+@media (max-width:520px){ .clock b{font-size:34px} h1{font-size:22px} .names{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><div class="eyebrow">MONET 100</div><h1>출퇴근</h1></div>
+    <div class="clock"><b id="clk" class="num">--:--</b><span id="dte"></span></div>
+  </header>
+  <div id="msg" class="msg" hidden></div>
+  <section id="reg" class="reg" hidden>
+    <h2>이 태블릿 등록</h2>
+    <p>등록한 기기에서만 출퇴근을 찍을 수 있어요. 관리자가 한 번만 해 주세요.</p>
+    <form id="regForm" autocomplete="off">
+      <label for="regName">기기 이름</label>
+      <input id="regName" value="현장 태블릿" maxlength="40">
+      <label for="regPw">관리자 비밀번호</label>
+      <input id="regPw" type="password" autocomplete="off">
+      <button class="big pri" type="submit">등록하기</button>
+      <div id="regErr" class="err"></div>
+    </form>
+  </section>
+  <main id="main" hidden></main>
+  <footer id="foot" hidden><button type="button" id="reload">새로고침</button></footer>
+</div>
+<div id="pop" class="scrim" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+const cfg=window.BOARD_CONFIG||{}, $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}}, lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
+const TOK="att-kiosk"; // 이 기기의 등록 값 (서버에는 암호화한 값만)
+const db=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+async function sha256hex(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+const GROUPS={A:"리셉션 · 대기 안내",B:"살롱~산업혁명 · 튜브물감~모네작품",C:"미디어 갤러리 안전 안내 · 출구 안내",D:"제2전시장 티켓관리 · 굿즈샵",E:"제2전시장 순회"};
+const hm=d=>{ d=new Date(d); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+const DAYS=["일","월","화","수","목","금","토"];
+const ymd=d=>{ d=new Date(d); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+let people=[], idle=null;
+
+function tick(){ const d=new Date(); $("#clk").textContent=hm(d); $("#dte").textContent=`${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS[d.getDay()]})`; }
+setInterval(tick,1000); tick();
+function note(t){ const m=$("#msg"); m.hidden=!t; m.textContent=t||""; }
+const isDown=e=>!!e&&/fetch|network|egress|quota|restricted/i.test(String(e.message||e));
+const ERR={pin:"비밀번호가 맞지 않아요.",nopin:"아직 개인 비밀번호가 없어요. 관리자에게 말해 주세요.",locked:"여러 번 틀려서 10분 동안 잠겼어요. 관리자에게 말해 주세요.",
+  already_in:"이미 출근했어요.",not_in:"출근 기록이 없어요. 먼저 출근을 눌러 주세요.",kiosk:"이 태블릿 등록이 풀렸어요. 관리자가 다시 등록해 주세요.",admin:"관리자 비밀번호가 맞지 않아요."};
+
+async function call(fn,args){ const {data,error}=await db.rpc(fn,args); if(error) return {error:isDown(error)?"down":"server",detail:error.message}; return data||{}; }
+
+async function load(){
+  const t=lsGet(TOK); if(!t){ showReg(); return; }
+  const r=await call("att_board",{token:t});
+  if(r.error==="kiosk"){ lsSet(TOK,null); showReg(); return; }
+  if(r.error){ note(r.error==="down"?"서버에 연결할 수 없어요. 인터넷을 확인하고 잠시 뒤 새로고침해 주세요.":"불러오지 못했어요. 새로고침해 주세요."); return; }
+  note(""); people=r.people||[]; drawMain();
+}
+function showReg(){ $("#reg").hidden=false; $("#main").hidden=true; $("#foot").hidden=true; }
+$("#regForm").onsubmit=async e=>{ e.preventDefault(); const pw=$("#regPw").value; if(!pw){ $("#regErr").textContent="관리자 비밀번호를 넣어 주세요."; return; }
+  $("#regErr").textContent="확인 중…";
+  const a=new Uint8Array(32); crypto.getRandomValues(a); const token=[...a].map(x=>x.toString(16).padStart(2,"0")).join("");
+  const r=await call("att_kiosk_register",{k:await sha256hex(pw),token,label:$("#regName").value.trim()||"현장 태블릿"});
+  $("#regPw").value="";
+  if(!r.ok){ $("#regErr").textContent=r.error==="admin"?"관리자 비밀번호가 맞지 않아요. (여러 번 틀리면 10분 잠겨요)":r.error==="down"?"서버에 연결할 수 없어요.":"등록하지 못했어요."; return; }
+  lsSet(TOK,token); $("#reg").hidden=true; $("#regErr").textContent=""; load(); };
+
+function stateOf(p){ const s=p.state||{}; if(!s.kind) return {cls:"",txt:"오늘 기록 없음"}; return s.kind==="in"?{cls:"in",txt:`출근 ${hm(s.at)}`}:{cls:"out",txt:`퇴근 ${hm(s.at)}`}; }
+function drawMain(){
+  $("#main").hidden=false; $("#foot").hidden=false;
+  const by={}; people.forEach(p=>{ const g=(p.roles||[])[0]; const k=GROUPS[g]?g:"~"; (by[k]=by[k]||[]).push(p); });
+  const ko=(a,b)=>String(a.name).localeCompare(String(b.name),"ko",{numeric:true});
+  const keys=[...Object.keys(GROUPS),"~"].filter(k=>by[k]);
+  $("#main").innerHTML=people.length?keys.map(k=>`<section class="grp"><h2>${k==="~"?"조 없음":`<span class="gl">${k}</span>${esc(GROUPS[k])}`}</h2><div class="names">${by[k].sort(ko).map(p=>{ const s=stateOf(p);
+    return `<button type="button" class="nm ${s.cls}" data-p="${esc(p.id)}"><b>${esc(p.name)}</b><span class="st"><i></i>${s.txt}</span></button>`; }).join("")}</div></section>`).join("")
+    :`<p class="msg">명단이 비어 있어요. 운영 보드의 인력 › 역할 부여에서 사람을 넣어 주세요.</p>`;
+  document.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>openPerson(people.find(p=>p.id===b.dataset.p)));
+}
+
+function closePop(){ window.onkeydown=null; $("#pop").hidden=true; $("#pop").innerHTML=""; clearTimeout(idle); }
+function armIdle(ms){ clearTimeout(idle); idle=setTimeout(()=>{ closePop(); load(); },ms||30000); }
+$("#pop").onclick=e=>{ if(e.target.id==="pop") closePop(); };
+
+function openPerson(p){ if(!p) return; let pin="", busy=false; const s=p.state||{}, suggest=s.kind==="in"?"out":"in";
+  const draw=(err)=>{ $("#pop").hidden=false; $("#pop").innerHTML=`<div class="card" role="dialog" aria-modal="true" aria-label="${esc(p.name)} 출퇴근">
+    <h3>${esc(p.name)}</h3><div class="sub">${stateOf(p).txt}${p.pin?"":" · 개인 비밀번호 없음"}</div>
+    <div class="dots" aria-label="입력한 자리수 ${pin.length}">${[0,1,2,3].map(i=>`<i class="${i<pin.length?"on":""}"></i>`).join("")}</div>
+    <div class="pad">${[1,2,3,4,5,6,7,8,9].map(n=>`<button type="button" data-k="${n}">${n}</button>`).join("")}<button type="button" class="fn" data-k="c">지우기</button><button type="button" data-k="0">0</button><button type="button" class="fn" data-k="b">←</button></div>
+    <div class="acts"><button type="button" class="big ${suggest==="in"?"pri":""}" data-act="in" ${pin.length<4||busy?"disabled":""}>출근</button><button type="button" class="big ${suggest==="out"?"pri":""}" data-act="out" ${pin.length<4||busy?"disabled":""}>퇴근</button></div>
+    <div class="err" role="alert">${err?esc(err):""}</div>
+    <div class="row2"><button type="button" class="link" data-act="mine" ${pin.length<4||busy?"disabled":""}>내 기록 보기</button><button type="button" class="link" data-act="x">닫기</button></div></div>`;
+    $("#pop").querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{ const k=b.dataset.k; if(k==="c") pin=""; else if(k==="b") pin=pin.slice(0,-1); else if(pin.length<4) pin+=k; draw(); });
+    $("#pop").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>act(b.dataset.act));
+    armIdle(); };
+  const act=async a=>{ if(a==="x"){ closePop(); return; } if(pin.length<4||busy) return; busy=true; draw();
+    if(a==="mine"){ const r=await call("att_mine",{token:lsGet(TOK),pid:p.id,pin}); busy=false; if(r.error){ pin=""; draw(ERR[r.error]||"잠시 뒤 다시 해 주세요."); return; } showMine(p,r.logs||[]); return; }
+    const r=await call("att_punch",{token:lsGet(TOK),pid:p.id,pin,kind:a}); busy=false;
+    if(!r.ok){ if(r.error==="pin") pin=""; draw((ERR[r.error]||"잠시 뒤 다시 해 주세요.")+(r.error==="already_in"&&r.at?` (${hm(r.at)})`:"")); return; }
+    showDone(p,r); };
+  draw();
+  window.onkeydown=e=>{ if($("#pop").hidden||!$("#pop .pad")) return; if(/^\d$/.test(e.key)&&pin.length<4){ pin+=e.key; draw(); } else if(e.key==="Backspace"){ pin=pin.slice(0,-1); draw(); } else if(e.key==="Escape") closePop(); };
+}
+function dur(a,b){ const m=Math.round((new Date(b)-new Date(a))/60000); return m>0?`${Math.floor(m/60)}시간${m%60?` ${m%60}분`:""}`:""; }
+function showDone(p,r){ const isIn=r.kind==="in";
+  $("#pop").innerHTML=`<div class="card done" role="status"><div class="ck ${isIn?"":"o"}"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+    <h3>${esc(p.name)}님 ${isIn?"출근":"퇴근"}</h3><div class="t">${hm(r.at)}</div><div class="sub">${isIn?"오늘도 잘 부탁해요.":r.since?`출근 ${hm(r.since)}부터 ${dur(r.since,r.at)} · 수고했어요.`:"수고했어요."}</div>
+    <button type="button" class="big pri" style="width:100%;margin-top:14px" data-act="x">확인</button></div>`;
+  $("#pop").querySelector("[data-act]").onclick=()=>{ closePop(); load(); };
+  armIdle(4000); }
+function showMine(p,logs){ // 날짜별로 출근 · 퇴근 묶기
+  const days={}; logs.forEach(l=>{ const d=ymd(l.at); (days[d]=days[d]||[]).push(l); });
+  const rows=Object.keys(days).sort().reverse().map(d=>{ const L=days[d], ins=L.filter(l=>l.kind==="in"), outs=L.filter(l=>l.kind==="out"); let mins=0, s=null;
+    L.forEach(l=>{ if(l.kind==="in") s=l.at; else if(s){ mins+=Math.round((new Date(l.at)-new Date(s))/60000); s=null; } });
+    const dt=new Date(d+"T00:00");
+    return `<tr><td>${dt.getMonth()+1}/${dt.getDate()} (${DAYS[dt.getDay()]})</td><td class="num">${ins.map(l=>hm(l.at)).join("<br>")||"-"}</td><td class="num">${outs.map(l=>hm(l.at)).join("<br>")||"-"}</td><td class="r num">${mins?`${Math.floor(mins/60)}:${String(mins%60).padStart(2,"0")}`:"-"}</td></tr>`; }).join("");
+  $("#pop").innerHTML=`<div class="card" role="dialog" aria-modal="true" aria-label="${esc(p.name)} 출퇴근 기록"><h3>${esc(p.name)}</h3><div class="sub">최근 두 달 출퇴근 기록</div>
+    ${rows?`<table><thead><tr><th>날짜</th><th>출근</th><th>퇴근</th><th class="r">머문 시간</th></tr></thead><tbody>${rows}</tbody></table>`:`<p class="sub">아직 기록이 없어요.</p>`}
+    <p class="sub" style="margin-top:10px">기록이 틀렸으면 관리자에게 말해 주세요.</p>
+    <button type="button" class="big pri" style="width:100%;margin-top:6px" data-act="x">닫기</button></div>`;
+  $("#pop").querySelector("[data-act]").onclick=closePop;
+  armIdle(60000); }
+
+$("#reload").onclick=()=>location.reload();
+load(); setInterval(()=>{ if($("#pop").hidden&&lsGet(TOK)) load(); },60000); // 1분마다 출근 상태만 새로
+</script>
+</body>
+</html>
